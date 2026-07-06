@@ -158,23 +158,35 @@ class AdaptiveShell extends StatelessWidget {
 
     if (!wide) {
       return Scaffold(
+        // Scaffold auto-adds the hamburger when a drawer is present.
+        appBar: AppBar(
+          title: Text(
+            'ARIA',
+            style: TextStyle(fontSize: 16, letterSpacing: 4.8, color: c.fg),
+          ),
+        ),
+        // Drawer lists the narrow-layout destination set (the Library hub
+        // fronts the per-section pages there, same as the old bottom bar).
+        drawer: NavigationDrawer(
+          selectedIndex: selected,
+          onDestinationSelected: (i) {
+            Navigator.pop(context);
+            select(i);
+          },
+          children: [
+            for (final d in visible)
+              NavigationDrawerDestination(
+                icon: Icon(d.icon),
+                selectedIcon: Icon(d.selectedIcon ?? d.icon),
+                label: Text(d.label),
+              ),
+          ],
+        ),
         body: Column(
           children: [
             Expanded(child: shell),
             const SelectionBar(),
             const now_playing.TransportBar(),
-          ],
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: selected ?? 0,
-          onDestinationSelected: select,
-          destinations: [
-            for (final d in visible)
-              NavigationDestination(
-                icon: Icon(d.icon),
-                selectedIcon: Icon(d.selectedIcon ?? d.icon),
-                label: d.label,
-              ),
           ],
         ),
       );
