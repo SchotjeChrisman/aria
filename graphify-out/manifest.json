@@ -240,8 +240,8 @@
     "hash": "7db32082c428ee9e7b05f1ebb00192a8"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/features/now_playing/transport_bar.dart": {
-    "mtime": 1783359067.1757782,
-    "hash": "06905dae53f4cc19e610a58e7c791ff7"
+    "mtime": 1783359703.056137,
+    "hash": "c5eda1f9cd3dbf3b58a574e537a1935d"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/features/playlists/multi_select.dart": {
     "mtime": 1783358676.2386303,
@@ -452,7 +452,7 @@
     "hash": "6bb1bcaa0eeca5c5c5250bce5b3f1ac3"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift": {
-    "mtime": 1783359080.7366579,
+    "mtime": 1783359750.0537202,
     "hash": "61d013e6c93b3d917c4f6178b9f6c9cb"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Sources/FlutterGeneratedPluginSwiftPackage/FlutterGeneratedPluginSwiftPackage.swift": {
@@ -588,8 +588,8 @@
     "hash": "bfcabeed78ab2d62145335521fdaee53"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/test/transport_bar_responsive_test.dart": {
-    "mtime": 1783358956.6327586,
-    "hash": "70c4772aea424f2d11491886ca57a3c9"
+    "mtime": 1783359736.3828416,
+    "hash": "687c9cb101dcd9db1fc9c35b8111ea03"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/server/cmd/aria/main.go": {
     "mtime": 1783358676.664458,

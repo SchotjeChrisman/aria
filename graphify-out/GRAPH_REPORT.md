@@ -1,7 +1,7 @@
 # Graph Report - transport-bar-responsive  (2026-07-06)
 
 ## Corpus Check
-- 195 files · ~98,842 words
+- 195 files · ~98,947 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -69,14 +69,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `mk()` --calls--> `api()`  [INFERRED]
   server/test.js → app/ui/app.js
-- `renderHome()` --calls--> `tile`  [INFERRED]
-  app/ui/app.js → /home/chris/Repositories/roon/app_flutter/lib/features/home/home_screen.dart
-- `evalRule()` --calls--> `one`  [INFERRED]
-  server/server.js → /home/chris/Repositories/roon/app_flutter/lib/features/library/track_filters.dart
-- `buildListening()` --calls--> `dayKey`  [INFERRED]
-  app/ui/app.js → /home/chris/Repositories/roon/app_flutter/lib/features/stats/stats_page.dart
-- `buildFilterRows()` --calls--> `Row`  [INFERRED]
-  app/ui/app.js → /home/chris/Repositories/roon/app_flutter/lib/widgets/filter_bar.dart
+- `tile` --calls--> `renderHome()`  [INFERRED]
+  /home/chris/Repositories/roon/app_flutter/lib/features/home/home_screen.dart → app/ui/app.js
+- `one` --calls--> `evalRule()`  [INFERRED]
+  /home/chris/Repositories/roon/app_flutter/lib/features/library/track_filters.dart → server/server.js
+- `dayKey` --calls--> `buildListening()`  [INFERRED]
+  /home/chris/Repositories/roon/app_flutter/lib/features/stats/stats_page.dart → app/ui/app.js
+- `Row` --calls--> `buildFilterRows()`  [INFERRED]
+  /home/chris/Repositories/roon/app_flutter/lib/widgets/filter_bar.dart → app/ui/app.js
 
 ## Communities
 
@@ -253,7 +253,7 @@ Cohesion: 0.67
 Nodes (1): asBool
 
 ## Knowledge Gaps
-- **102 isolated node(s):** `TransportBar`, `_TransportBarState`, `build`, `Column`, `Row` (+97 more)
+- **102 isolated node(s):** `TransportBar`, `_TransportBarState`, `build`, `Column`, `SizedBox` (+97 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 33`** (6 nodes): `AppDelegate.swift`, `FlutterAppDelegate`, `AppDelegate.swift`, `AppDelegate`, `.applicationShouldTerminateAfterLastWindowClosed()`, `.applicationSupportsSecureRestorableState()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
