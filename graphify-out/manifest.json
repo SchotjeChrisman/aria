@@ -1,28 +1,4 @@
 {
-  "/home/chris/Repositories/roon/server/store.js": {
-    "mtime": 1783185232.0195189,
-    "hash": "c3c007fe7b694d9e6ebf1c8b2aa05a6b"
-  },
-  "/home/chris/Repositories/roon/server/scanner.js": {
-    "mtime": 1783185244.0104105,
-    "hash": "20e64819e3952df5a59cd9f21b6b29ce"
-  },
-  "/home/chris/Repositories/roon/server/genres.js": {
-    "mtime": 1783198371.7213721,
-    "hash": "5b22cbeea60b846f32b15ef852834ff4"
-  },
-  "/home/chris/Repositories/roon/server/test.js": {
-    "mtime": 1783329214.2969482,
-    "hash": "2b319973866ef8a46f31fb9c580bf6b4"
-  },
-  "/home/chris/Repositories/roon/server/enrich.js": {
-    "mtime": 1783326744.5595756,
-    "hash": "2524f136bcba5858e6708917fef39032"
-  },
-  "/home/chris/Repositories/roon/server/server.js": {
-    "mtime": 1783329070.182743,
-    "hash": "eb348612b8357f1708cccf20f531494f"
-  },
   "/home/chris/Repositories/roon/server/internal/config/config.go": {
     "mtime": 1783342448.2791252,
     "hash": "f5f943a792520cb92e999e30ed663bf0"
@@ -192,8 +168,8 @@
     "hash": "56b84972cefc8c8c2a79856b008b0988"
   },
   "/home/chris/Repositories/roon/server/internal/enrich/enrich.go": {
-    "mtime": 1783344813.4399576,
-    "hash": "87deca74d5734215a16a8f1374ea22ac"
+    "mtime": 1783360961.1600971,
+    "hash": "39b62ee0141b78ff388c2416b9fc00a1"
   },
   "/home/chris/Repositories/roon/server/internal/scanner/scanner.go": {
     "mtime": 1783343098.1734188,
@@ -210,26 +186,6 @@
   "/home/chris/Repositories/roon/server/cmd/migrate-json/main.go": {
     "mtime": 1783344859.1765206,
     "hash": "6b8346d76c384951c6d041f4127e8450"
-  },
-  "/home/chris/Repositories/roon/app/test-player.js": {
-    "mtime": 1783177543.2817836,
-    "hash": "b444230560b89201dd1c4c2e1ffbe56a"
-  },
-  "/home/chris/Repositories/roon/app/player.js": {
-    "mtime": 1783178150.451033,
-    "hash": "964521709e2d922786778e3dd6010020"
-  },
-  "/home/chris/Repositories/roon/app/main.js": {
-    "mtime": 1783330749.2035065,
-    "hash": "8757d6615ee716e2606f8bca84427b6b"
-  },
-  "/home/chris/Repositories/roon/app/preload.js": {
-    "mtime": 1783330750.1264975,
-    "hash": "7200a57323abaaa5f805012f2ac9fad5"
-  },
-  "/home/chris/Repositories/roon/app/ui/app.js": {
-    "mtime": 1783331523.7610703,
-    "hash": "3d95416176a2668f07a4c5d88cf03f9b"
   },
   "/home/chris/Repositories/roon/app_flutter/android/build.gradle.kts": {
     "mtime": 1783342275.9291222,
@@ -256,24 +212,12 @@
     "hash": "b910ff28d5fd0e4b423b178ea4d52005"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/main.dart": {
-    "mtime": 1783342769.0894358,
-    "hash": "567b9a70d1ba3f1c7e6c56a33d0d30d9"
+    "mtime": 1783354271.4257283,
+    "hash": "d5decc1e680591fe9a947947d145b60d"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/core/formats.dart": {
     "mtime": 1783342913.9001083,
     "hash": "2764f07858262326693874eaa1a07a7b"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/core/connection.dart": {
-    "mtime": 1783344265.6633017,
-    "hash": "fc84443ee5499abd0f6b45c24dff5f6e"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/core/theme.dart": {
-    "mtime": 1783344303.873926,
-    "hash": "3490d891726e8540eb54436ab5d1b87e"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/core/profiles_providers.dart": {
-    "mtime": 1783347662.680959,
-    "hash": "b8aeab9d3fec8f0780bbb87c3e799082"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/core/tag_tree.dart": {
     "mtime": 1783346049.5135577,
@@ -295,13 +239,25 @@
     "mtime": 1783346188.063254,
     "hash": "fcf2deccb14caa0615c9c34c69424eed"
   },
-  "/home/chris/Repositories/roon/app_flutter/lib/core/router.dart": {
-    "mtime": 1783346725.120541,
-    "hash": "b8b5aaeddc04dd9c1081d932c76f6179"
-  },
   "/home/chris/Repositories/roon/app_flutter/lib/core/library_providers.dart": {
     "mtime": 1783347142.627766,
     "hash": "fb1e241a5c6cd2c0bbe470c018e42a8e"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/core/router.dart": {
+    "mtime": 1783354727.4377575,
+    "hash": "5a74cd6486388f2271d05deb80192077"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/core/connection.dart": {
+    "mtime": 1783354728.726746,
+    "hash": "0890fdf05b1e9e171ea10b6ec9a91fe4"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/core/profiles_providers.dart": {
+    "mtime": 1783355581.3513243,
+    "hash": "b29ee01b3c1eea7c695ae7cafe95c2dd"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/core/theme.dart": {
+    "mtime": 1783356351.9136515,
+    "hash": "fb884a4c3613515dfc1a409e1ac1db21"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/widgets/format_badge.dart": {
     "mtime": 1783342787.2492695,
@@ -318,10 +274,6 @@
   "/home/chris/Repositories/roon/app_flutter/lib/widgets/context_menu.dart": {
     "mtime": 1783342913.9661076,
     "hash": "b7bd329208245b1a1c4f6303d2a0bc6c"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/widgets/filter_bar.dart": {
-    "mtime": 1783342913.9721076,
-    "hash": "18664cf2d135ccbd67db0fe593655a9f"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/widgets/empty_state.dart": {
     "mtime": 1783342913.9681077,
@@ -359,6 +311,10 @@
     "mtime": 1783346613.8783422,
     "hash": "34ceb75886a8ba9a2ee7509cc5acf60f"
   },
+  "/home/chris/Repositories/roon/app_flutter/lib/widgets/filter_bar.dart": {
+    "mtime": 1783356361.5695677,
+    "hash": "7e17a656f17190e6fcc35b87da4ca5ae"
+  },
   "/home/chris/Repositories/roon/app_flutter/lib/features/profiles/profiles_section.dart": {
     "mtime": 1783343322.8730903,
     "hash": "137536feab3090a02415ff69c94abeee"
@@ -379,13 +335,13 @@
     "mtime": 1783347025.2918603,
     "hash": "1fe10c2b750a2886cd0bcf5915cae7cb"
   },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/search/search_page.dart": {
-    "mtime": 1783347059.4725416,
-    "hash": "32de33689d12754215cb106738661ff1"
-  },
   "/home/chris/Repositories/roon/app_flutter/lib/features/search/library_lookup.dart": {
     "mtime": 1783347144.7137463,
     "hash": "3880e3652a116c37d6607dc0c9a6fdd0"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/search/search_page.dart": {
+    "mtime": 1783359566.7473464,
+    "hash": "7b4228461acc6a9e03e680d8afd811d3"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/now_playing/lrc.dart": {
     "mtime": 1783343380.3224201,
@@ -404,24 +360,20 @@
     "hash": "1b34c81c55c32a4a27342ae4acdd0e46"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/now_playing/providers.dart": {
-    "mtime": 1783346429.3029842,
-    "hash": "944e97b626e881d799e878105032ccc2"
+    "mtime": 1783358419.2775264,
+    "hash": "5d92c91f29187d75ccdcdd7aea92b4ca"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/now_playing/queue_screen.dart": {
     "mtime": 1783346769.023225,
     "hash": "e44caed14104441803ce2337b67cac51"
   },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/now_playing/transport_bar.dart": {
-    "mtime": 1783346822.2887542,
-    "hash": "e83e23fcc0865332677b714c800ddf5d"
-  },
   "/home/chris/Repositories/roon/app_flutter/lib/features/now_playing/signal_path.dart": {
     "mtime": 1783346840.1455877,
     "hash": "7db32082c428ee9e7b05f1ebb00192a8"
   },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/stats/charts.dart": {
-    "mtime": 1783343403.6361482,
-    "hash": "6a4cef82089b63a56b67069d4ade3fae"
+  "/home/chris/Repositories/roon/app_flutter/lib/features/now_playing/transport_bar.dart": {
+    "mtime": 1783358401.510684,
+    "hash": "a7bd0789cb391c730a35eacddf014faa"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/stats/routes.dart": {
     "mtime": 1783344389.6430385,
@@ -434,6 +386,10 @@
   "/home/chris/Repositories/roon/app_flutter/lib/features/stats/stats_page.dart": {
     "mtime": 1783347167.9245298,
     "hash": "c638e4042cb1c2d5114a66d6e36d9aef"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/stats/charts.dart": {
+    "mtime": 1783354750.51037,
+    "hash": "53e1257c87c4b8012e3894ec5953513f"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/playlists/smart_filter.dart": {
     "mtime": 1783343694.5228167,
@@ -464,8 +420,8 @@
     "hash": "64f0bebcf1c367c177d056632e8c24a8"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/playlists/playlists_screen.dart": {
-    "mtime": 1783347656.3390124,
-    "hash": "cc11ee29afda2e7d2103a29ba534b569"
+    "mtime": 1783354750.5187435,
+    "hash": "c2d7396407b0f2207785091f640e91d8"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/album/routes.dart": {
     "mtime": 1783343850.6633382,
@@ -492,12 +448,8 @@
     "hash": "1eaba6a470948f68bef2e75802975505"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/album/album_page.dart": {
-    "mtime": 1783346878.0842338,
-    "hash": "2798ba2b870536f219027e4728281ddd"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/radio/radio_page.dart": {
-    "mtime": 1783343620.0253313,
-    "hash": "2b259e20c6b7e43d75838cad369c6857"
+    "mtime": 1783354750.5251424,
+    "hash": "bc24995d54a81472f8b7220ec7383019"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/radio/routes.dart": {
     "mtime": 1783344389.6440117,
@@ -506,6 +458,10 @@
   "/home/chris/Repositories/roon/app_flutter/lib/features/radio/radio_providers.dart": {
     "mtime": 1783346447.5518126,
     "hash": "b0eef9beaa3f38209c349d898df5f75f"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/radio/radio_page.dart": {
+    "mtime": 1783354750.514194,
+    "hash": "8a237de1b76d9de8588ab27b78ea8191"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/library/album_filters.dart": {
     "mtime": 1783343742.3603637,
@@ -522,14 +478,6 @@
   "/home/chris/Repositories/roon/app_flutter/lib/features/library/genres_section.dart": {
     "mtime": 1783343692.1258378,
     "hash": "1b327c4da5ca8d36d9abd220983fdf8d"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/library/genre_card.dart": {
-    "mtime": 1783343780.6653376,
-    "hash": "08b8ad763ea0cbb7e773c212564c4473"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/library/routes.dart": {
-    "mtime": 1783343780.668162,
-    "hash": "0326c6c72090c1bc3ed1130a0c84ef7c"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/library/library_providers.dart": {
     "mtime": 1783346328.0779366,
@@ -555,13 +503,21 @@
     "mtime": 1783347663.143955,
     "hash": "f13160ac136c7c1db55dec8b0822971d"
   },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/library/library_screen.dart": {
-    "mtime": 1783347307.0302322,
-    "hash": "5d8921ee7b61d0acd61f71d7fe901361"
-  },
   "/home/chris/Repositories/roon/app_flutter/lib/features/library/genre_screen.dart": {
     "mtime": 1783347465.589753,
     "hash": "c5413783761aa5da61b8ab00006f12a2"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/library/library_screen.dart": {
+    "mtime": 1783352892.171848,
+    "hash": "609815f495b52613f6b0dbd66febc28a"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/library/routes.dart": {
+    "mtime": 1783352897.028805,
+    "hash": "4469890796f2bfb2dde5799ccef8020e"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/library/genre_card.dart": {
+    "mtime": 1783360897.335217,
+    "hash": "4c3931752b0c0accac745bbffb72a045"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/settings/routes.dart": {
     "mtime": 1783344523.617765,
@@ -627,14 +583,6 @@
     "mtime": 1783343832.301512,
     "hash": "48ad886b4b751aaceb0cc1282ab25b68"
   },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/artist/artist_info_tab.dart": {
-    "mtime": 1783343971.2001848,
-    "hash": "4dd205566f84df9f559be28f44661c7c"
-  },
-  "/home/chris/Repositories/roon/app_flutter/lib/features/artist/composer_page.dart": {
-    "mtime": 1783343971.2891839,
-    "hash": "bce32e44cc156931d08756a7d92e0e7f"
-  },
   "/home/chris/Repositories/roon/app_flutter/lib/features/artist/providers.dart": {
     "mtime": 1783346362.7126107,
     "hash": "371f846d2aa4d4c4b34313e8b50e9f34"
@@ -651,6 +599,14 @@
     "mtime": 1783347535.7610981,
     "hash": "9fca7c39584ef65417306876945c8300"
   },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/artist/artist_info_tab.dart": {
+    "mtime": 1783354750.5235565,
+    "hash": "9c6ff7fb8e42d4d89da806079885f742"
+  },
+  "/home/chris/Repositories/roon/app_flutter/lib/features/artist/composer_page.dart": {
+    "mtime": 1783354750.5261266,
+    "hash": "9f375937615a8467a3d671a2fac2971f"
+  },
   "/home/chris/Repositories/roon/app_flutter/lib/features/home/home_providers.dart": {
     "mtime": 1783346640.8041482,
     "hash": "7ec2b9451830553eb42d24eed9816e7b"
@@ -660,8 +616,8 @@
     "hash": "f347e6de564610b7cb5a48c2f08bf56e"
   },
   "/home/chris/Repositories/roon/app_flutter/lib/features/home/home_screen.dart": {
-    "mtime": 1783347662.9689565,
-    "hash": "b318b2a36739df589434babfcac84f7e"
+    "mtime": 1783354732.756711,
+    "hash": "63f058bec5c7f7d867796454264f23c5"
   },
   "/home/chris/Repositories/roon/app_flutter/linux/flutter/generated_plugin_registrant.h": {
     "mtime": 1783343569.6327634,
@@ -792,7 +748,7 @@
     "hash": "6bb1bcaa0eeca5c5c5250bce5b3f1ac3"
   },
   "/home/chris/Repositories/roon/app_flutter/macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift": {
-    "mtime": 1783347771.104045,
+    "mtime": 1783359605.0660064,
     "hash": "61d013e6c93b3d917c4f6178b9f6c9cb"
   },
   "/home/chris/Repositories/roon/app_flutter/macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Sources/FlutterGeneratedPluginSwiftPackage/FlutterGeneratedPluginSwiftPackage.swift": {
@@ -811,25 +767,25 @@
     "mtime": 1783342276.0031211,
     "hash": "97d3a20fd20a063c192e886d1822b4a8"
   },
-  "/home/chris/Repositories/roon/app_flutter/test/format_badge_test.dart": {
-    "mtime": 1783342883.827384,
-    "hash": "f5dfae52c12dceda5a831a8ff18ab11f"
-  },
   "/home/chris/Repositories/roon/app_flutter/test/artist_avatar_test.dart": {
     "mtime": 1783342913.9891074,
     "hash": "5bdacf3b5ff07dc937a32e599028f316"
   },
-  "/home/chris/Repositories/roon/app_flutter/test/widget_test.dart": {
-    "mtime": 1783342913.9951074,
-    "hash": "bfcabeed78ab2d62145335521fdaee53"
-  },
   "/home/chris/Repositories/roon/app_flutter/test/queue_gapless_test.dart": {
-    "mtime": 1783347663.5669515,
-    "hash": "11d4aef5cf2a64071c4fe6267d3cd62a"
+    "mtime": 1783358539.2794616,
+    "hash": "cef58b7f05b5f2c61b4445712e8ea6d5"
   },
   "/home/chris/Repositories/roon/app_flutter/test/track_filters_test.dart": {
     "mtime": 1783347599.1235073,
     "hash": "29ff21179127fc93a1d28ff874646aca"
+  },
+  "/home/chris/Repositories/roon/app_flutter/test/format_badge_test.dart": {
+    "mtime": 1783354303.3494503,
+    "hash": "2b44d2d35cc74d4fc949b1af40e93601"
+  },
+  "/home/chris/Repositories/roon/app_flutter/test/widget_test.dart": {
+    "mtime": 1783354303.3510525,
+    "hash": "9700ea636595195c5bd7fc4aad151431"
   },
   "/home/chris/Repositories/roon/app_flutter/packages/aria_api/lib/aria_api.dart": {
     "mtime": 1783342722.1388664,
@@ -907,45 +863,41 @@
     "mtime": 1783342831.0938675,
     "hash": "da14f9a14d8ed0a0142a2c1b52466d3b"
   },
-  "/home/chris/Repositories/roon/app_flutter/packages/aria_player/lib/src/mpv_constants.dart": {
-    "mtime": 1783342732.1647744,
-    "hash": "2a942680ee10c0632d54c81db2a84a15"
-  },
   "/home/chris/Repositories/roon/app_flutter/packages/aria_player/lib/src/mpv_raw.dart": {
-    "mtime": 1783342740.7766955,
-    "hash": "c389e9b658b5b93a877d0eb4731c4194"
+    "mtime": 1783358337.1852548,
+    "hash": "0efe03496dd529b85d8fa1d5fdad0cf3"
+  },
+  "/home/chris/Repositories/roon/app_flutter/packages/aria_player/lib/src/mpv_constants.dart": {
+    "mtime": 1783358328.1803348,
+    "hash": "e914f8f968726a4ebbcec2c8fbaa9fff"
   },
   "/home/chris/Repositories/roon/app_flutter/packages/aria_player/lib/src/mpv_ffi.dart": {
-    "mtime": 1783342934.1179228,
-    "hash": "a15f00b6c40b58472a3ecce350d92584"
+    "mtime": 1783358361.3540404,
+    "hash": "dc72666ffd632358f0eea90c8779c87f"
   },
   "/home/chris/Repositories/roon/app_flutter/packages/aria_player/lib/src/player.dart": {
-    "mtime": 1783346227.8768795,
-    "hash": "c8ed7e6bacd2f4e1bc31e968d9dc3829"
+    "mtime": 1783358389.2917924,
+    "hash": "4abc348cf46d896033c1e0d34875de8b"
   },
   "/home/chris/Repositories/roon/app_flutter/packages/aria_player/test/aria_player_test.dart": {
-    "mtime": 1783346246.5547037,
-    "hash": "6bca8386a677f8c80db029d7d7b6d711"
+    "mtime": 1783358449.9162545,
+    "hash": "4d68bab568db9cf9df7e9b3fa2b58b67"
   },
   "/home/chris/Repositories/roon/PLAN.md": {
     "mtime": 1783333139.075691,
     "hash": "7b1137cbdbb601c7b5fe36874ff0295a"
   },
-  "/home/chris/Repositories/roon/compose.yaml": {
-    "mtime": 1783343068.6396897,
-    "hash": "92292d3f96a5866e558a42e7d0722dc4"
-  },
   "/home/chris/Repositories/roon/README.md": {
-    "mtime": 1783348252.9790123,
-    "hash": "e07457690c2707a36304aacb18514783"
+    "mtime": 1783350690.0184324,
+    "hash": "526f11014215f44ebc3e2ae5209e6dad"
+  },
+  "/home/chris/Repositories/roon/compose.yaml": {
+    "mtime": 1783351400.332085,
+    "hash": "8c4a080aedf5f52dab80eba3fc4c95bf"
   },
   "/home/chris/Repositories/roon/server/openapi.yaml": {
     "mtime": 1783342558.8443422,
     "hash": "133a873a4f675f2dbca077dd462b539f"
-  },
-  "/home/chris/Repositories/roon/app/ui/index.html": {
-    "mtime": 1783330756.0134408,
-    "hash": "50e48b2b799d0d0507966b02fcff411d"
   },
   "/home/chris/Repositories/roon/app_flutter/README.md": {
     "mtime": 1783342275.9181223,
