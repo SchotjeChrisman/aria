@@ -5,8 +5,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # :z labels required — SELinux-enforcing host (Fedora)
-      - /home/chris/Music:/music:ro,z
+      # NFS can't be SELinux-relabeled (no :z) — virt_use_nfs boolean grants access instead
+      - /mnt/nfs/share/media/music:/music:ro
       - aria-data:/data:z
     healthcheck:
       # distroless has no shell/curl; the binary probes its own /healthz
