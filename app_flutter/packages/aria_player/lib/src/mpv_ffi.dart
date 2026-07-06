@@ -107,8 +107,13 @@ DynamicLibrary loadLibmpvLibrary() {
     }
   }
   throw PlayerUnavailableException(
-    'libmpv could not be loaded; playback is disabled. '
-    'Tried: ${candidates.join(', ')}',
+    Platform.isLinux
+        // Bundled on macOS/Android; Linux gets it from the distro (README).
+        ? 'libmpv not found — install it to enable playback '
+            '(Fedora: sudo dnf install mpv-libs · Debian/Ubuntu: '
+            'sudo apt install libmpv2), then restart Aria.'
+        : 'libmpv could not be loaded; playback is disabled. '
+            'Tried: ${candidates.join(', ')}',
   );
 }
 

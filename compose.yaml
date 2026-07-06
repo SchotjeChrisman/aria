@@ -1,11 +1,12 @@
 services:
   aria:
     build: .
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
       # :z labels required — SELinux-enforcing host (Fedora)
-      - ./music:/music:ro,z
+      - /home/chris/Music:/music:ro,z
       - aria-data:/data:z
     healthcheck:
       # distroless has no shell/curl; the binary probes its own /healthz

@@ -34,7 +34,16 @@ flutter build linux --release
 ```
 
 Point it at your server URL on first launch (default `http://localhost:3000`).
-Playback is a direct FFI binding to libmpv (bundled per platform): gapless,
+
+Playback engine: libmpv is bundled inside the app on **macOS and Android**.
+On **Linux**, bundle it into the build output with
+`linux/bundle_libmpv.sh` (rootless — extracts distro RPMs into `bundle/lib`;
+re-run after each `flutter build linux`; needs `patchelf`, or point
+`PATCHELF=` at one). Alternatively install system libmpv
+(`dnf install mpv-libs` / `apt install libmpv2`). Without either, the app
+runs and says so, but won't play. For distributable Linux packaging, use
+Flatpak rather than shipping the ffmpeg stack yourself.
+Playback is a direct FFI binding to libmpv: gapless,
 optional exclusive-mode output on desktop, and a format badge showing the
 actual stream (e.g. FLAC 24/96). Android decodes losslessly but final output
 is OS-managed; true bit-perfect there needs a USB DAC (Android 14+).

@@ -5,6 +5,7 @@
 app_flutter/build/
 app_flutter/.dart_tool/
 app_flutter/packages/*/.dart_tool/
+app_flutter/packages/*/build/
 app_flutter/*.iml
 server/aria
 
