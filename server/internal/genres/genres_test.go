@@ -18,7 +18,11 @@ func TestSplit(t *testing.T) {
 		{"Soul/R&B", []string{"Soul/R&B"}},  // splits then re-canonicalizes both halves
 		{"Rock; Pop, Jazz/Blues", []string{"Rock", "Pop", "Jazz", "Blues"}}, // all separators
 		{"folk blues pop rock", []string{"Folk", "Blues", "Pop", "Rock"}},   // space-mashed alias
-		{"Shoegaze", []string{"Shoegaze"}},                                  // unknown kept verbatim
+		{"Texas Blues", []string{"Blues"}},                                  // unknown sub-genre folds into head word
+		{"Math Rock;Krautrock", []string{"Rock"}},                           // inferred + dedup ("Krautrock" is one word, no match -> dropped)
+		{"Alternative-Rock", []string{"Alternative Rock"}},                  // hyphen/space normalized
+		{"Vocale muziek (wereldlijk en religieus)", []string{"Choral"}},     // Dutch alias
+		{"Zydeco", []string{}},                                              // no recognizable word: dropped, never a new top-level
 		{"Rock;Rock", []string{"Rock"}},                                     // dedup
 		{" ; , ", []string{}},
 	}
@@ -41,7 +45,8 @@ func TestMatches(t *testing.T) {
 		{"Rock", "Pop", false},
 		{"soul", "Soul/R&B", true}, // alias on the track side
 		{"Blues Rock", "soul", false},
-		{"Shoegaze", "Shoegaze", true}, // ad-hoc genre self-match
+		{"Louisiana Blues", "Blues", true}, // inferred sub-genre matches its parent
+		{"Symphonic Metal", "Metal", true},
 		{"", "Rock", false},
 	}
 	for _, tt := range tests {
