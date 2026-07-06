@@ -96,6 +96,7 @@ type ArtistEntry struct {
 	Discography   *[]DiscographyItem `json:"discography,omitempty"`
 	DiscographyAt string             `json:"discographyAt,omitempty"`
 	ImgCheckedAt  string             `json:"imgCheckedAt,omitempty"` // face upgrade tried once ever
+	BioCheckedAt  string             `json:"bioCheckedAt,omitempty"` // "no wiki page" is settled; empty bio without this retries
 }
 
 type ComposerEntry struct {
@@ -620,6 +621,53 @@ func (e *Enricher) backfillBandRels(ctx context.Context, name string, ent *Artis
 	e.artistPut(ctx, name, ent)
 }
 
+// lazy backfill for entries cached without a bio: a transient wiki failure
+// (rate limit, timeout) during enrichArtist must not freeze a bio-less entry
+// forever. Stamps BioCheckedAt only on an answer (bio found, or the artist
+// verifiably has no wikipedia rel); network failures stay unstamped and retry.
+func (e *Enricher) backfillBio(ctx context.Context, name string, ent *ArtistEntry) {
+	mbid := e.mb.searchArtistMBID(ctx, name)
+	if mbid == "" {
+		return // MB unreachable or unknown: retry on a later read
+	}
+	ar := e.mb.artist(ctx, mbid, "url-rels")
+	if ar == nil {
+		return
+	}
+	title := e.wikiTitle(ctx, ar.Relations)
+	if title == "" {
+		// wikiTitle can't distinguish "no enwiki page" from a failed
+		// Wikidata sitelink fetch — only a missing rel is a settled miss.
+		if hasWikiRel(ar.Relations) {
+			return // rel exists, resolution failed: retry on a later read
+		}
+		ent.BioCheckedAt = nowISO()
+		e.artistPut(ctx, name, ent)
+		return
+	}
+	s := e.summary(ctx, title)
+	if s == nil {
+		return // wiki fetch failed: retry on a later read
+	}
+	if s.Extract != "" {
+		ent.Bio, ent.URL = s.Extract, s.PageURL
+	}
+	if img := s.Image(); img != "" && ent.ImgSrc != "wikipedia" {
+		ent.Image, ent.ImgSrc = img, "wikipedia"
+	}
+	ent.BioCheckedAt = nowISO()
+	e.artistPut(ctx, name, ent)
+}
+
+func hasWikiRel(rels []mbRelation) bool {
+	for _, r := range rels {
+		if r.Type == "wikipedia" || r.Type == "wikidata" {
+			return true
+		}
+	}
+	return false
+}
+
 // summary is the soft-failure wrapper: network errors read as "no page".
 func (e *Enricher) summary(ctx context.Context, title string) *Summary {
 	s, err := e.wiki.Summary(ctx, title)
@@ -709,6 +757,9 @@ func (e *Enricher) Person(ctx context.Context, name string) (json.RawMessage, er
 	}
 	if ent.Members == nil { // cached before band rels existed
 		e.backfillBandRels(ctx, name, ent)
+	}
+	if ent.Bio == "" && ent.BioCheckedAt == "" { // wiki step failed when cached
+		e.backfillBio(ctx, name, ent)
 	}
 	return json.Marshal(ent)
 }
