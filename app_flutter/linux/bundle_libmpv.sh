@@ -10,6 +10,9 @@ BUNDLE=${1:-"$(dirname "$0")/../build/linux/x64/release/bundle"}
 LIB="$BUNDLE/lib"
 PATCHELF=${PATCHELF:-patchelf}
 [ -d "$LIB" ] || { echo "no bundle at $BUNDLE — run flutter build linux first" >&2; exit 1; }
+# Fail up front: the per-file patchelf loop below tolerates errors, so a
+# missing binary would otherwise pass silently and leave rpaths unset.
+command -v "$PATCHELF" >/dev/null || { echo "patchelf not found — dnf install patchelf or set PATCHELF=" >&2; exit 1; }
 
 work=$(mktemp -d); trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT
 echo "downloading mpv-libs + dependency RPMs..."
@@ -20,7 +23,12 @@ echo "downloading mpv-libs + dependency RPMs..."
 # stacks often lack; safe to ship (never loaded by the Flutter/GTK shell).
 dnf download --resolve --arch x86_64 --arch noarch --destdir "$work" \
   mpv-libs libXScrnSaver libXpresent 2>&1 | tail -2
-(cd "$work" && for r in *.rpm; do rpm2cpio "$r" | cpio -idmu --quiet; done)
+# No pipe: rpm2cpio dies of SIGPIPE (141) under pipefail when cpio finishes
+# reading before rpm2cpio finishes writing trailing padding.
+(cd "$work" && for r in *.rpm; do
+  rpm2cpio "$r" > payload.cpio
+  cpio -idmu --quiet < payload.cpio
+done && rm -f payload.cpio)
 shopt -s nullglob
 
 # Never ship base-system or desktop-stack libs: glibc family must come from
