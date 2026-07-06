@@ -37,7 +37,7 @@ class GenreCard extends ConsumerWidget {
     }
 
     return GestureDetector(
-      onTap: () => context.push('/library/genre/${Uri.encodeComponent(genre)}'),
+      onTap: () => context.push('/library/genres/${Uri.encodeComponent(genre)}'),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: Column(
@@ -114,7 +114,7 @@ class GenrePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     return GestureDetector(
-      onTap: () => context.push('/library/genre/${Uri.encodeComponent(genre)}'),
+      onTap: () => context.push('/library/genres/${Uri.encodeComponent(genre)}'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(

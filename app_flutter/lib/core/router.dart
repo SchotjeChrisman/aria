@@ -42,12 +42,19 @@ class AppDestination {
     required this.label,
     required this.icon,
     this.selectedIcon,
+    this.inRail = true,
+    this.inBar = true,
   });
 
   final String path;
   final String label;
   final IconData icon;
   final IconData? selectedIcon;
+
+  /// Show on wide layouts (NavigationRail) / narrow layouts (NavigationBar).
+  /// Every destination still gets a shell branch regardless.
+  final bool inRail;
+  final bool inBar;
 }
 
 class FeatureEntry {
@@ -61,7 +68,7 @@ class FeatureEntry {
 /// entries (detail + overlay pages) are pushed above the shell.
 final List<FeatureEntry> featureEntries = [
   home.homeFeatureEntry,
-  library_.featureEntry,
+  ...library_.featureEntries,
   search.searchFeatureEntry,
   playlists.featureEntry,
   tags.featureEntry,
@@ -115,15 +122,39 @@ class AdaptiveShell extends StatelessWidget {
   final StatefulNavigationShell shell;
 
   static const _railBreakpoint = 700.0;
+  static const _extendedBreakpoint = 1100.0;
+
+  /// Branch index == position in this unfiltered list.
+  static final _all = <AppDestination>[
+    for (final e in featureEntries)
+      if (e.destination != null) e.destination!,
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final destinations = [
-      for (final e in featureEntries)
-        if (e.destination != null) e.destination!,
-    ];
-    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= _railBreakpoint;
     final c = AriaColors.of(context);
+
+    final visible = [
+      for (final d in _all)
+        if (wide ? d.inRail : d.inBar) d,
+    ];
+    // Highlight the item whose path owns the current branch — '/library'
+    // fronts '/library/albums' etc. on narrow layouts.
+    final currentPath = _all[shell.currentIndex].path;
+    int? selected;
+    for (var i = 0; i < visible.length; i++) {
+      final p = visible[i].path;
+      if (currentPath == p || currentPath.startsWith('$p/')) {
+        selected = i;
+        break;
+      }
+    }
+    void select(int i) {
+      final branch = _all.indexOf(visible[i]);
+      shell.goBranch(branch, initialLocation: branch == shell.currentIndex);
+    }
 
     if (!wide) {
       return Scaffold(
@@ -135,10 +166,10 @@ class AdaptiveShell extends StatelessWidget {
           ],
         ),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: shell.currentIndex,
-          onDestinationSelected: _select,
+          selectedIndex: selected ?? 0,
+          onDestinationSelected: select,
           destinations: [
-            for (final d in destinations)
+            for (final d in visible)
               NavigationDestination(
                 icon: Icon(d.icon),
                 selectedIcon: Icon(d.selectedIcon ?? d.icon),
@@ -149,36 +180,53 @@ class AdaptiveShell extends StatelessWidget {
       );
     }
 
+    // Sidebar tracks window width: compact icon rail from 700px, expanding
+    // to icons+labels past 1100px, with the extended width scaling with the
+    // window.
+    final extended = width >= _extendedBreakpoint;
+    final rail = NavigationRail(
+      selectedIndex: selected,
+      onDestinationSelected: select,
+      extended: extended,
+      labelType: extended
+          ? NavigationRailLabelType.none
+          : NavigationRailLabelType.all,
+      minExtendedWidth: (width * 0.18).clamp(180.0, 240.0),
+      leading: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AriaSpace.s6),
+        // Legacy .brand: letterspaced uppercase wordmark.
+        child: Text(
+          'ARIA',
+          style: TextStyle(fontSize: 16, letterSpacing: 4.8, color: c.fg),
+        ),
+      ),
+      destinations: [
+        for (final d in visible)
+          NavigationRailDestination(
+            icon: Icon(d.icon),
+            selectedIcon: Icon(d.selectedIcon ?? d.icon),
+            label: Text(d.label),
+          ),
+      ],
+    );
+
     return Scaffold(
       body: Column(
         children: [
           Expanded(
             child: Row(
               children: [
-                NavigationRail(
-                  selectedIndex: shell.currentIndex,
-                  onDestinationSelected: _select,
-                  labelType: NavigationRailLabelType.all,
-                  leading: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AriaSpace.s6),
-                    // Legacy .brand: letterspaced uppercase wordmark in accent.
-                    child: Text(
-                      'ARIA',
-                      style: TextStyle(
-                        fontSize: 16,
-                        letterSpacing: 4.8,
-                        color: c.accent,
+                // Rail doesn't scroll natively; with the library split into
+                // five entries it can overflow short windows.
+                LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
                       ),
+                      child: IntrinsicHeight(child: rail),
                     ),
                   ),
-                  destinations: [
-                    for (final d in destinations)
-                      NavigationRailDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selectedIcon ?? d.icon),
-                        label: Text(d.label),
-                      ),
-                  ],
                 ),
                 VerticalDivider(width: 1, color: c.line),
                 Expanded(child: shell),
@@ -191,7 +239,4 @@ class AdaptiveShell extends StatelessWidget {
       ),
     );
   }
-
-  void _select(int i) =>
-      shell.goBranch(i, initialLocation: i == shell.currentIndex);
 }

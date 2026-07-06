@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/filter_bar.dart';
 import 'albums_section.dart';
 import 'artists_section.dart';
 import 'composers_section.dart';
@@ -11,33 +11,58 @@ import 'genres_section.dart';
 import 'library_providers.dart';
 import 'tracks_section.dart';
 
-/// Legacy nav split Albums/Artists/Tracks/Genres/Composers into separate
-/// sidebar views; here they are sections of the one Library tab.
+/// Each section is its own page/route (like the legacy sidebar).
+/// [LibraryHubScreen] fronts them on narrow layouts.
 enum LibrarySection {
-  albums('Albums'),
-  artists('Artists'),
-  tracks('Tracks'),
-  genres('Genres'),
-  composers('Composers');
+  albums('Albums', Icons.album_outlined, Icons.album),
+  artists('Artists', Icons.person_outline, Icons.person),
+  tracks('Tracks', Icons.music_note_outlined, Icons.music_note),
+  genres('Genres', Icons.category_outlined, Icons.category),
+  composers('Composers', Icons.piano_outlined, Icons.piano);
 
-  const LibrarySection(this.label);
+  const LibrarySection(this.label, this.icon, this.selectedIcon);
   final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+
+  String get path => '/library/$name';
 }
 
-class LibrarySectionNotifier extends Notifier<LibrarySection> {
+/// Mobile front page linking to the per-section library pages.
+class LibraryHubScreen extends StatelessWidget {
+  const LibraryHubScreen({super.key});
+
   @override
-  LibrarySection build() => LibrarySection.albums;
-
-  void set(LibrarySection s) => state = s;
-}
-
-final librarySectionProvider =
-    NotifierProvider<LibrarySectionNotifier, LibrarySection>(
-      LibrarySectionNotifier.new,
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AriaSpace.s6),
+              child: Text(
+                'Library',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            for (final s in LibrarySection.values)
+              ListTile(
+                leading: Icon(s.icon),
+                title: Text(s.label),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.go(s.path),
+              ),
+          ],
+        ),
+      ),
     );
+  }
+}
 
 class LibraryScreen extends ConsumerWidget {
-  const LibraryScreen({super.key});
+  const LibraryScreen({super.key, required this.section});
+
+  final LibrarySection section;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -66,7 +91,7 @@ class LibraryScreen extends ConsumerWidget {
                 ),
               );
             }
-            return const _LibraryBody();
+            return _LibraryBody(section: section);
           },
         ),
       ),
@@ -75,12 +100,13 @@ class LibraryScreen extends ConsumerWidget {
 }
 
 class _LibraryBody extends ConsumerWidget {
-  const _LibraryBody();
+  const _LibraryBody({required this.section});
+
+  final LibrarySection section;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
-    final section = ref.watch(librarySectionProvider);
     final trackCount = ref.watch(loadedTracksProvider).length;
 
     return Column(
@@ -93,40 +119,24 @@ class _LibraryBody extends ConsumerWidget {
             AriaSpace.s6,
             0,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    section.label,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(width: AriaSpace.s3),
-                  // legacy #lib-count
-                  Text(
-                    '$trackCount tracks',
-                    style: TextStyle(fontSize: 12.5, color: c.fgDim),
-                  ),
-                ],
+              Text(
+                section.label,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: AriaSpace.s4),
-              FilterBar(
-                children: [
-                  for (final s in LibrarySection.values)
-                    FilterPill(
-                      label: s.label,
-                      selected: s == section,
-                      onTap: () =>
-                          ref.read(librarySectionProvider.notifier).set(s),
-                    ),
-                ],
+              const SizedBox(width: AriaSpace.s3),
+              // legacy #lib-count
+              Text(
+                '$trackCount tracks',
+                style: TextStyle(fontSize: 12.5, color: c.fgDim),
               ),
             ],
           ),
         ),
+        const SizedBox(height: AriaSpace.s4),
         Expanded(
           child: switch (section) {
             LibrarySection.albums => const AlbumsSection(),
