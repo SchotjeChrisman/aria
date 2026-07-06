@@ -9,6 +9,24 @@ defaults:
     working-directory: app_flutter
 
 jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push image
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker build -t "$IMAGE:$GITHUB_REF_NAME" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$GITHUB_REF_NAME"
+          docker push "$IMAGE:latest"
+
   linux:
     runs-on: ubuntu-latest
     permissions:
