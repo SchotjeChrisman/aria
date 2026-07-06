@@ -44,7 +44,8 @@ var Tree = map[string]*string{
 
 	"Jazz": nil, "Vocal Jazz": of("Jazz"), "Swing": of("Jazz"), "Big Band": of("Jazz"),
 	"Dixieland": of("Jazz"), "Cool Jazz": of("Jazz"), "Hard Bop": of("Jazz"),
-	"Post-Bop": of("Jazz"), "Smooth Jazz": of("Jazz"), "Soul Jazz": of("Jazz"),
+	"Post-Bop": of("Jazz"), "Bebop": of("Jazz"), "Jazz Fusion": of("Jazz"),
+	"Smooth Jazz": of("Jazz"), "Soul Jazz": of("Jazz"),
 	"Jazz-Funk": of("Jazz"), "Jazz Pop": of("Jazz"), "Third Stream": of("Jazz"),
 	"Bossa Nova": of("Jazz"), "Contemporary Jazz": of("Jazz"),
 
@@ -55,7 +56,7 @@ var Tree = map[string]*string{
 
 	"Country": nil, "Contemporary Country": of("Country"), "Honky Tonk": of("Country"),
 	"Country Pop": of("Country"), "Bro-Country": of("Country"),
-	"Neo-Traditional Country": of("Country"),
+	"Neo-Traditional Country": of("Country"), "Bluegrass": of("Country"),
 
 	"Folk": nil, "Singer-Songwriter": of("Folk"), "Chamber Folk": of("Folk"), "Celtic": of("Folk"),
 
@@ -68,9 +69,9 @@ var Tree = map[string]*string{
 	"Electronic": nil,
 	"Hip-Hop":    nil,
 	"Reggae":     nil,
-	"Latin":      nil,
-	"World":      nil,
-	"New Age":    nil,
+	"Latin":      nil, "Tango": of("Latin"),
+	"World":   nil,
+	"New Age": nil,
 
 	"Easy Listening": nil,
 	"Stage & Screen": nil, "Musical": of("Stage & Screen"), "Soundtrack": of("Stage & Screen"),
@@ -91,6 +92,7 @@ var aliases = map[string][]string{
 	"rock n roll":                             {"Rock & Roll"},
 	"rock 'n' roll":                           {"Rock & Roll"},
 	"psychedelic":                             {"Psychedelic Rock"},
+	"fusion":                                  {"Jazz Fusion"},
 	"soundtracks":                             {"Soundtrack"},
 	"film score":                              {"Soundtrack"},
 	"folk blues pop rock":                     {"Folk", "Blues", "Pop", "Rock"}, // space-mashed multi-tag
