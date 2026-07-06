@@ -1,0 +1,8 @@
+.git
+*.log
+app/
+app_flutter/
+graphify-out/
+music/
+test-music/
+**/node_modules

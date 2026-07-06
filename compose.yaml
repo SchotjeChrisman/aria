@@ -1,0 +1,19 @@
+services:
+  aria:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # :z labels required — SELinux-enforcing host (Fedora)
+      - ./music:/music:ro,z
+      - aria-data:/data:z
+    healthcheck:
+      # distroless has no shell/curl; the binary probes its own /healthz
+      test: ["CMD", "/aria", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  aria-data:

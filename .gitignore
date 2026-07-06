@@ -1,0 +1,12 @@
+# user's music library (mounted into the container)
+/music/
+
+# build outputs
+app_flutter/build/
+app_flutter/.dart_tool/
+app_flutter/packages/*/.dart_tool/
+app_flutter/*.iml
+server/aria
+
+# local env
+.env

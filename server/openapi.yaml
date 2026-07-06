@@ -1,0 +1,1519 @@
+openapi: 3.1.0
+info:
+  title: Aria API
+  version: 2.0.0
+  description: |
+    Aria v2 music-server API. Paths and JSON shapes are byte-compatible with the
+    legacy Node server; v2 adds GET /healthz, GET /api/events (SSE), and optional
+    limit/offset pagination on GET /api/tracks.
+
+    ID scheme: track `id` = sha1 hex of the file path relative to MUSIC_DIR;
+    `albumId` = sha1 hex of lowercase(albumArtist + "\0" + album).
+
+    Error convention: validation failures are 400 with `{"error": "<reason>"}`;
+    not-found is a bare 404 (text/plain body "Not Found", no JSON);
+    upstream MusicBrainz failures are 502 with `{"error": "..."}`.
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: system
+  - name: library
+  - name: streaming
+  - name: enrichment
+  - name: edits
+  - name: tags
+  - name: playlists
+  - name: profiles
+  - name: plays
+  - name: radio
+  - name: settings
+
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      summary: Liveness probe (v2 addition)
+      operationId: healthz
+      responses:
+        '200':
+          description: Server is up.
+          content:
+            text/plain:
+              schema: { type: string, const: ok }
+
+  /api/events:
+    get:
+      tags: [system]
+      summary: Server-sent events for scan and enrichment progress (v2 addition)
+      description: |
+        `text/event-stream`. Named events:
+        - `event: scan` — data is `{"scanning": bool, "done": int, "total": int, "tracks": int}`;
+          emitted on scan start, periodically during, and on completion.
+        - `event: enrich` — data is an EnrichStatus JSON object, emitted whenever
+          the enrichment phase or counters change.
+      operationId: events
+      responses:
+        '200':
+          description: Event stream; stays open until the client disconnects.
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /api/status:
+    get:
+      tags: [system]
+      summary: Server status
+      operationId: getStatus
+      responses:
+        '200':
+          description: Track count, configured music directory (absolute path), server version.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tracks, musicDir, version]
+                properties:
+                  tracks: { type: integer }
+                  musicDir: { type: string }
+                  version: { type: string }
+
+  /api/scan:
+    post:
+      tags: [library]
+      summary: Rescan the music library
+      description: Synchronous in v1; v2 may stream progress via /api/events. Kicks a background enrichment pass on success.
+      operationId: scan
+      responses:
+        '200':
+          description: New track count.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tracks]
+                properties:
+                  tracks: { type: integer }
+        '500':
+          description: Scan failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/tracks:
+    get:
+      tags: [library]
+      summary: All tracks
+      description: |
+        Full track objects: file tags merged with enrichment credits, then DB edits
+        overlaid (edits beat both file tags and enrichment). `path` is never exposed.
+        Each track carries a derived `releaseType`, canonical `genres`, and user `tags`
+        (direct, via album, or via artist/albumArtist; parent-tag names included).
+        Without pagination params the entire library is returned (legacy behavior).
+      operationId: listTracks
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: v2 addition. Max tracks to return; omitted = everything.
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: v2 addition. Number of tracks to skip.
+      responses:
+        '200':
+          description: Array of tracks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Track' }
+
+  /api/tracks/{id}:
+    patch:
+      tags: [edits]
+      summary: Edit track metadata (DB override)
+      description: |
+        Overrides beat file tags and enrichment. Setting a field to `null` clears
+        that single override. Returns the surviving override map for the track —
+        NOT the updated track object; may be `{}` if the patch cleared everything.
+      operationId: patchTrack
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackEdits' }
+      responses:
+        '200':
+          description: Current override map for this track.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackEdits' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/genres:
+    get:
+      tags: [library]
+      summary: Canonical genre taxonomy
+      operationId: getGenres
+      responses:
+        '200':
+          description: Two-level genre tree.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tree]
+                properties:
+                  tree:
+                    type: object
+                    description: 'Map of canonical genre name -> parent genre name, or null for top-level (e.g. {"Blues Rock": "Blues", "Rock": null}).'
+                    additionalProperties:
+                      type: [string, 'null']
+
+  /api/stream/{id}:
+    get:
+      tags: [streaming]
+      summary: Stream the original audio file
+      description: Raw untouched bytes, never transcoded. HTTP Range supported. Content-Type derives from the file.
+      operationId: streamTrack
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+        - name: Range
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Whole file.
+          content:
+            audio/*:
+              schema: { type: string, format: binary }
+        '206':
+          description: Partial content for a Range request.
+          content:
+            audio/*:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/art/{albumId}:
+    get:
+      tags: [streaming]
+      summary: Album cover art
+      description: |
+        Cached cover file (embedded art extracted at scan, or fetched by enrichment).
+        Always served from `<albumId>.jpg` but the bytes may actually be PNG —
+        clients should sniff. Non-40-hex albumId yields 404.
+      operationId: getArt
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: Image bytes.
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- enrichment ------------------------------------------------------------
+
+  /api/enrich:
+    post:
+      tags: [enrichment]
+      summary: Kick a background enrichment pass
+      description: No-op if a pass is already running. Returns current status immediately.
+      operationId: startEnrich
+      responses:
+        '200':
+          description: Current enrichment status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichStatus' }
+
+  /api/enrich/status:
+    get:
+      tags: [enrichment]
+      summary: Enrichment progress
+      operationId: enrichStatus
+      responses:
+        '200':
+          description: Phase + counters.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichStatus' }
+
+  /api/enrich/people:
+    post:
+      tags: [enrichment]
+      summary: Warm faces/bios for visible names
+      description: Fire-and-forget enrichment of up to 50 names (each < 200 chars); non-string or too-long entries are silently dropped.
+      operationId: warmPeople
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                names:
+                  type: array
+                  maxItems: 50
+                  items: { type: string, maxLength: 199 }
+      responses:
+        '200':
+          description: How many names were newly queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [queued]
+                properties:
+                  queued: { type: integer }
+
+  /api/people:
+    get:
+      tags: [enrichment]
+      summary: Bulk name-to-portrait map
+      description: Every enriched person/composer with an image; edited artist portraits win over enrichment.
+      operationId: getPeople
+      responses:
+        '200':
+          description: Map of name -> image URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: string }
+
+  /api/artist/{name}:
+    get:
+      tags: [enrichment]
+      summary: Artist bio, photo, dates, similar artists, discography
+      description: |
+        Enriches unknown names on demand (first call can take 3-6 s). DB edits are
+        overlaid and beat enrichment — an edited name is served even if MusicBrainz
+        never heard of it. 404 when nothing meaningful is known (empty arrays like
+        similar/members/bands do not count as content).
+      operationId: getArtist
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Artist entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/composer/{name}:
+    get:
+      tags: [enrichment]
+      summary: Classical composer portrait, epoch, dates, bio
+      description: Cache-only (populated by the enrichment pass); no on-demand fetch.
+      operationId: getComposer
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Composer entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Composer' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/lyrics/{id}:
+    get:
+      tags: [enrichment]
+      summary: Lyrics from LRCLIB
+      description: Fetched on demand, cached forever including misses. Synced timings more than 5 s off the track duration are refused in favor of plain lyrics.
+      operationId: getLyrics
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: Lyrics; at least one of synced/plain is non-null.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lyrics' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/album/{albumId}/info:
+    get:
+      tags: [enrichment]
+      summary: Album label, date, country, release-group type, Wikipedia blurb
+      description: On-demand MusicBrainz + Wikipedia lookup, cached. Album edits for label/date/country/blurb are overlaid. 404 when the album is unknown or nothing was found.
+      operationId: getAlbumInfo
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: Album info.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumInfo' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- re-identify -----------------------------------------------------------
+
+  /api/identify/artist/{name}:
+    get:
+      tags: [enrichment]
+      summary: MusicBrainz artist candidates
+      operationId: identifyArtist
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Up to 8 candidates.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArtistCandidate' }
+        '502': { $ref: '#/components/responses/Upstream' }
+
+  /api/artist/{name}/reidentify:
+    post:
+      tags: [enrichment]
+      summary: Re-enrich an artist, optionally pinned to a chosen MBID
+      description: Drops the cached entry and re-enriches. Returns the fresh Artist entry, or `{}` when re-enrichment produced nothing.
+      operationId: reidentifyArtist
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mbid:
+                  oneOf:
+                    - { $ref: '#/components/schemas/Mbid' }
+                    - { type: 'null' }
+      responses:
+        '200':
+          description: Fresh artist entry, or empty object.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/Artist' }
+                  - { type: object, additionalProperties: false }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/Upstream' }
+
+  /api/identify/album/{albumId}:
+    get:
+      tags: [enrichment]
+      summary: MusicBrainz release candidates for an album
+      operationId: identifyAlbum
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: Up to 8 candidates.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AlbumCandidate' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/Upstream' }
+
+  /api/album/{albumId}/reidentify:
+    post:
+      tags: [enrichment]
+      summary: Re-enrich an album, optionally pinned to a chosen MBID
+      description: |
+        Clears cached per-track credits and album info, re-pulls from MusicBrainz.
+        Existing cover-art file is kept. Returns the repopulated AlbumInfo, or `{}`
+        when nothing was found.
+      operationId: reidentifyAlbum
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mbid:
+                  oneOf:
+                    - { $ref: '#/components/schemas/Mbid' }
+                    - { type: 'null' }
+      responses:
+        '200':
+          description: Fresh album info, or empty object.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/AlbumInfo' }
+                  - { type: object, additionalProperties: false }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/Upstream' }
+
+  # ---- edits -----------------------------------------------------------------
+
+  /api/albums/{albumId}:
+    patch:
+      tags: [edits]
+      summary: Edit album metadata (DB override)
+      description: |
+        `album`, `albumArtist`, `genre`, `year` fan out onto the album's tracks in
+        /api/tracks; `releaseType`, `label`, `date`, `country`, `blurb` stay
+        album-level (served via /info and /edits). `null` clears one field.
+        Returns the surviving override map, not the album.
+      operationId: patchAlbum
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumEdits' }
+      responses:
+        '200':
+          description: Current override map for this album.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumEdits' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/artists/{name}:
+    patch:
+      tags: [edits]
+      summary: Edit artist/person metadata (DB override)
+      description: Any name is allowed (max 200 chars), including names not in the library — edits make MB-unknown names browsable. Returns the surviving override map.
+      operationId: patchArtist
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string, maxLength: 200 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtistEdits' }
+      responses:
+        '200':
+          description: Current override map for this artist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtistEdits' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/edits/{kind}/{key}:
+    get:
+      tags: [edits]
+      summary: Editor support — original values and current overrides
+      description: |
+        `original` comes from file tags + enrichment only, never from edits; every
+        editable field is present, null when unset. `overrides` is the raw stored
+        override map (may be `{}`). Field sets per kind:
+        track: title, artist, album, albumArtist, genre, year, trackNo, discNo,
+        composer, work, movement, conductor, orchestra.
+        album: album, albumArtist, genre, year, releaseType, label, date, country, blurb.
+        artist: type, area, born, died, image, bio (cache-only, never hits the network).
+      operationId: getEdits
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [track, album, artist] }
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+          description: Track id, albumId, or artist name.
+      responses:
+        '200':
+          description: Original values + overrides.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [original, overrides]
+                properties:
+                  original: { type: object }
+                  overrides: { type: object }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- tags ------------------------------------------------------------------
+
+  /api/tags:
+    get:
+      tags: [tags]
+      summary: All user tags
+      operationId: listTags
+      responses:
+        '200':
+          description: Tags with their items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Tag' }
+    post:
+      tags: [tags]
+      summary: Create a tag
+      description: Name is trimmed; duplicates (case-insensitive) rejected.
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 60 }
+                parent:
+                  type: [string, 'null']
+                  description: Parent tag id, or null for top-level (default).
+      responses:
+        '200':
+          description: Created tag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tag' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/tags/{id}:
+    patch:
+      tags: [tags]
+      summary: Rename or reparent a tag
+      description: 'At least one of name/parent required. Reparenting rejects unknown ids, self, and cycles. A null parent moves the tag to top level.'
+      operationId: patchTag
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 60 }
+                parent: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Updated tag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tag' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [tags]
+      summary: Delete a tag
+      description: Children are promoted to the deleted tag's parent.
+      operationId: deleteTag
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/tags/{id}/items:
+    put:
+      tags: [tags]
+      summary: Add an item to a tag
+      description: |
+        Idempotent — adding an existing item is a no-op returning the tag.
+        `key` is a track id (must exist), albumId (must exist), or a free-form
+        artist name (any name allowed, in library or not; max 300 chars).
+      operationId: addTagItem
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagItem' }
+      responses:
+        '200':
+          description: Updated tag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tag' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [tags]
+      summary: Remove an item from a tag
+      description: NOTE — this DELETE carries a JSON request body (legacy-compatible). Removing a non-member is a no-op.
+      operationId: removeTagItem
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagItem' }
+      responses:
+        '200':
+          description: Updated tag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tag' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- profiles ----------------------------------------------------------------
+
+  /api/profiles:
+    get:
+      tags: [profiles]
+      summary: All profiles
+      description: A default profile ("Listener") is created on first boot; at least one profile always exists.
+      operationId: listProfiles
+      responses:
+        '200':
+          description: Profiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Profile' }
+    post:
+      tags: [profiles]
+      summary: Create a profile
+      operationId: createProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name: { type: string, maxLength: 60 }
+                color: { $ref: '#/components/schemas/HexColor' }
+      responses:
+        '200':
+          description: Created profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/profiles/{id}:
+    patch:
+      tags: [profiles]
+      summary: Rename or recolor a profile
+      operationId: patchProfile
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 60 }
+                color: { $ref: '#/components/schemas/HexColor' }
+      responses:
+        '200':
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [profiles]
+      summary: Delete a profile
+      description: Cascades — the profile's playlists and plays are deleted too. Deleting the last remaining profile is a 400.
+      operationId: deleteProfile
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- settings ----------------------------------------------------------------
+
+  /api/settings:
+    get:
+      tags: [settings]
+      summary: Server settings
+      operationId: getSettings
+      responses:
+        '200':
+          description: Settings; token is empty string when unset.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listenbrainzToken]
+                properties:
+                  listenbrainzToken: { type: string }
+    post:
+      tags: [settings]
+      summary: Update settings
+      description: Trimmed empty `listenbrainzToken` deletes the stored token. Omitted fields are untouched.
+      operationId: postSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                listenbrainzToken: { type: string, maxLength: 200 }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ---- plays & stats -------------------------------------------------------------
+
+  /api/plays:
+    post:
+      tags: [plays]
+      summary: Record a play
+      description: Also fires a ListenBrainz scrobble when a token is configured (fire-and-forget, edits/enrichment overlaid). The play log keeps the most recent 20000 entries.
+      operationId: recordPlay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trackId, profileId]
+              properties:
+                trackId: { $ref: '#/components/schemas/Sha1' }
+                profileId: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/stats:
+    get:
+      tags: [plays]
+      summary: Listening stats
+      description: |
+        Scoped to a profile via `profileId`, or all plays when omitted. Plays whose
+        trackId no longer exists in the library still count in `totalPlays` but are
+        excluded everywhere else. `playCounts` appears only when `counts=1`.
+      operationId: getStats
+      parameters:
+        - name: profileId
+          in: query
+          required: false
+          schema: { type: string }
+        - name: counts
+          in: query
+          required: false
+          schema: { type: string, enum: ['1'] }
+          description: When "1", include full per-track play counts.
+      responses:
+        '200':
+          description: Aggregated stats.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/newreleases:
+    get:
+      tags: [library]
+      summary: Recent releases by library artists not yet in the library
+      description: |
+        Cache-only (Deezer discographies fetched by enrichment; no network here).
+        Last 180 days, future-dated items dropped, titles deduped globally
+        (edition-tolerant normalization), max 3 per artist, max 60 total,
+        newest first. Cold cache yields [].
+      operationId: getNewReleases
+      responses:
+        '200':
+          description: New releases.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 60
+                items: { $ref: '#/components/schemas/NewRelease' }
+
+  # ---- playlists ------------------------------------------------------------------
+
+  /api/playlists:
+    get:
+      tags: [playlists]
+      summary: All playlists
+      operationId: listPlaylists
+      parameters:
+        - name: profileId
+          in: query
+          required: false
+          schema: { type: string }
+          description: Filter to one profile's playlists; omitted returns everyone's.
+      responses:
+        '200':
+          description: Playlists.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Playlist' }
+    post:
+      tags: [playlists]
+      summary: Create a playlist
+      description: Manual playlists start with empty `trackIds`; smart playlists require valid `rules`.
+      operationId: createPlaylist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileId, name]
+              properties:
+                profileId: { type: string }
+                name: { type: string, maxLength: 200 }
+                type: { type: string, enum: [manual, smart], default: manual }
+                rules: { $ref: '#/components/schemas/SmartRules' }
+      responses:
+        '200':
+          description: Created playlist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/playlists/{id}:
+    patch:
+      tags: [playlists]
+      summary: Rename a playlist / update smart rules
+      description: '`rules` is only valid on smart playlists. Bumps `updatedAt` even for empty patches.'
+      operationId: patchPlaylist
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 200 }
+                rules: { $ref: '#/components/schemas/SmartRules' }
+      responses:
+        '200':
+          description: Updated playlist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [playlists]
+      summary: Delete a playlist
+      operationId: deletePlaylist
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/playlists/{id}/tracks:
+    get:
+      tags: [playlists]
+      summary: Resolve a playlist to full track objects
+      description: |
+        Manual: tracks in stored order, ids no longer in the library silently
+        skipped, duplicates preserved. Smart: rules evaluated on demand against the
+        current library + plays; result sorted by artist/album/discNo/trackNo and
+        capped at 500. Empty rule list yields [].
+      operationId: getPlaylistTracks
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Tracks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Track' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [playlists]
+      summary: Append a track to a manual playlist
+      description: Duplicates are allowed. 400 on smart playlists or unknown tracks.
+      operationId: addPlaylistTrack
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trackId]
+              properties:
+                trackId: { $ref: '#/components/schemas/Sha1' }
+      responses:
+        '200':
+          description: Updated playlist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/playlists/{id}/tracks/{trackId}:
+    delete:
+      tags: [playlists]
+      summary: Remove a track from a manual playlist
+      description: Removes ALL occurrences of the track id. 400 on smart playlists.
+      operationId: removePlaylistTrack
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: trackId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: Updated playlist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- radio ------------------------------------------------------------------------
+
+  /api/radio:
+    get:
+      tags: [radio]
+      summary: All radio stations
+      description: Built-in stations (curated FLAC/AAC/MP3 streams) first, then user stations.
+      operationId: listStations
+      responses:
+        '200':
+          description: Stations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Station' }
+    post:
+      tags: [radio]
+      summary: Add a user station
+      operationId: createStation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url]
+              properties:
+                name: { type: string, maxLength: 200 }
+                url: { type: string, pattern: '^https?://' }
+                genre:
+                  type: [string, 'null']
+                  maxLength: 40
+      responses:
+        '200':
+          description: Created station.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Station' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/radio/{id}:
+    delete:
+      tags: [radio]
+      summary: Delete a user station
+      description: Built-in stations cannot be deleted (400 {"error":"builtin"}).
+      operationId: deleteStation
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  responses:
+    Ok:
+      description: Success.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok]
+            properties:
+              ok: { type: boolean, const: true }
+    BadRequest:
+      description: Validation failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found. Plain-text body ("Not Found"), no JSON.
+      content:
+        text/plain:
+          schema: { type: string }
+    Upstream:
+      description: MusicBrainz unavailable or upstream lookup failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Sha1:
+      type: string
+      pattern: '^[0-9a-f]{40}$'
+    Mbid:
+      type: string
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    HexColor:
+      type: string
+      pattern: '^#[0-9a-fA-F]{6}$'
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Track:
+      type: object
+      description: |
+        A track as served by /api/tracks — file tags merged with enrichment
+        credits, edits overlaid, `path` stripped, plus derived releaseType,
+        canonical genres, and user tag names. Fields absent in the file tags
+        are null, not omitted (except performers/orchestra, which only appear
+        after enrichment).
+      required:
+        - id
+        - addedAt
+        - title
+        - artist
+        - albumArtist
+        - album
+        - albumId
+        - format
+        - lossless
+        - hasArt
+        - releaseType
+        - genres
+        - tags
+      properties:
+        id:
+          $ref: '#/components/schemas/Sha1'
+          description: sha1 hex of the file path relative to MUSIC_DIR.
+        addedAt:
+          type: string
+          format: date-time
+          description: First-seen scan timestamp; carried forward across rescans.
+        title:
+          type: string
+          description: Falls back to the relative file path when the file has no title tag.
+        artist: { type: string, description: 'Defaults to "Unknown Artist".' }
+        albumArtist: { type: string, description: Defaults to artist. }
+        album: { type: string, description: 'Defaults to "Unknown Album".' }
+        albumId:
+          $ref: '#/components/schemas/Sha1'
+          description: sha1 hex of lowercase(albumArtist + "\0" + album).
+        composer: { type: [string, 'null'] }
+        conductor: { type: [string, 'null'] }
+        orchestra:
+          type: string
+          description: Enrichment-only; absent until a MusicBrainz credit pass finds one.
+        performers:
+          type: array
+          description: Enrichment-only per-performer credits; absent until enriched.
+          items: { $ref: '#/components/schemas/Performer' }
+        work: { type: [string, 'null'], description: 'Classical work, from WORK/GROUPING tags or a "Work: Movement" title split.' }
+        movement: { type: [string, 'null'] }
+        mbAlbumId: { type: [string, 'null'], description: MusicBrainz release id from file tags. }
+        mbRecordingId: { type: [string, 'null'] }
+        mbAlbumArtistId: { type: [string, 'null'] }
+        year: { type: [integer, 'null'] }
+        genre: { type: [string, 'null'], description: Raw first genre tag as found in the file. }
+        genres:
+          type: array
+          items: { type: string }
+          description: Canonical genres derived from the raw tag via the /api/genres taxonomy.
+        trackNo: { type: [integer, 'null'] }
+        discNo: { type: [integer, 'null'] }
+        duration: { type: [number, 'null'], description: 'Seconds, fractional.' }
+        format: { type: string, description: 'Container name, e.g. "FLAC", "MPEG", or uppercased extension.' }
+        sampleRate: { type: [integer, 'null'], description: Hz. }
+        bitsPerSample: { type: [integer, 'null'] }
+        channels: { type: [integer, 'null'] }
+        lossless: { type: boolean }
+        hasArt: { type: boolean, description: 'True when GET /api/art succeeds for this albumId.' }
+        releaseType:
+          type: string
+          enum: [Album, EP, Single, Live, Compilation]
+          description: Derived per album (MB release-group type, VA/live/EP heuristics, track count + duration); album edits win. Never persisted.
+        tags:
+          type: array
+          items: { type: string }
+          description: User tag names matching this track directly, via its album, or via artist/albumArtist — each including the tag's ancestor chain.
+
+    Performer:
+      type: object
+      required: [name, role]
+      properties:
+        name: { type: string }
+        role: { type: string, description: 'Instrument attributes joined with ", ", or "vocals"/"performer".' }
+
+    Tag:
+      type: object
+      required: [id, name, parent, items, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 60 }
+        parent: { type: [string, 'null'], description: Parent tag id; null = top-level. Parent tags match all descendants' items. }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TagItem' }
+        createdAt: { type: string, format: date-time }
+
+    TagItem:
+      type: object
+      required: [kind, key]
+      properties:
+        kind: { type: string, enum: [track, album, artist] }
+        key:
+          type: string
+          maxLength: 300
+          description: Track id / albumId (must exist) or free-form artist name (need not be in the library).
+
+    Profile:
+      type: object
+      required: [id, name, color, createdAt]
+      properties:
+        id: { type: string, description: 'UUID, except the seeded profile whose id is literally "default".' }
+        name: { type: string }
+        color: { $ref: '#/components/schemas/HexColor' }
+        createdAt: { type: string, format: date-time }
+
+    Playlist:
+      type: object
+      description: Manual playlists carry `trackIds`; smart playlists carry `rules`. The other field is absent, not null.
+      required: [id, profileId, type, name, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        profileId: { type: string }
+        type: { type: string, enum: [manual, smart] }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        trackIds:
+          type: array
+          items: { $ref: '#/components/schemas/Sha1' }
+          description: Manual only. Ordered; duplicates allowed.
+        rules:
+          $ref: '#/components/schemas/SmartRules'
+          description: Smart only.
+
+    SmartRules:
+      type: object
+      required: [match, rules]
+      properties:
+        match: { type: string, enum: [all, any] }
+        rules:
+          type: array
+          maxItems: 16
+          items: { $ref: '#/components/schemas/SmartRule' }
+
+    SmartRule:
+      type: object
+      description: |
+        Valid field/op combinations:
+        title, artist, albumArtist, album, genre, composer, format, credited:
+        is, isNot, contains, anyOf, allOf (anyOf/allOf take a string array, 1-30 items).
+        year, playCount: is, gt, lt (numeric value).
+        lossless: is (boolean, or the strings "true"/"false").
+        releaseType: is, isNot.
+        addedDays: within (numeric value, days).
+        tag: is, isNot, anyOf, allOf (exact tag-name match).
+        genre matches hierarchically against the canonical taxonomy, with raw-substring
+        fallback for pre-canonicalization rules. credited matches artist, conductor,
+        orchestra and performer names.
+      required: [field, op, value]
+      properties:
+        field:
+          type: string
+          enum: [title, artist, albumArtist, album, genre, composer, format, credited,
+                 year, lossless, releaseType, playCount, addedDays, tag]
+        op:
+          type: string
+          enum: [is, isNot, contains, anyOf, allOf, gt, lt, within]
+        value:
+          oneOf:
+            - { type: string }
+            - { type: number }
+            - { type: boolean }
+            - { type: array, minItems: 1, maxItems: 30, items: { type: string, minLength: 1 } }
+
+    Station:
+      type: object
+      required: [id, name, url]
+      properties:
+        id: { type: string, description: 'Fixed slug for built-ins, UUID for user stations.' }
+        name: { type: string }
+        url: { type: string }
+        genre: { type: [string, 'null'] }
+        builtin: { type: boolean, description: Present (true) only on built-in stations; user stations omit it. }
+        createdAt: { type: string, format: date-time, description: User stations only. }
+
+    EnrichStatus:
+      type: object
+      required: [phase, done, total, running]
+      properties:
+        phase:
+          type: string
+          enum: [idle, albums, artists, discographies, composers, people, faces]
+        done: { type: integer }
+        total: { type: integer }
+        running: { type: boolean }
+
+    Artist:
+      type: object
+      description: Enriched artist/person entry (all fields optional — whatever the sources yielded), with DB edits overlaid.
+      properties:
+        type: { type: [string, 'null'], description: 'MusicBrainz artist type, e.g. "Person", "Group".' }
+        area: { type: [string, 'null'] }
+        born: { type: [string, 'null'], description: Life-span begin date (YYYY or YYYY-MM-DD). }
+        died: { type: [string, 'null'] }
+        bio: { type: string, description: Wikipedia summary extract. }
+        url: { type: [string, 'null'], description: Wikipedia page URL. }
+        image: { type: string, description: 'Portrait URL (Wikipedia preferred, Deezer fallback, edits win).' }
+        imgSrc: { type: string, enum: [wikipedia, deezer] }
+        imgCheckedAt: { type: string, format: date-time, description: Set once the face-upgrade pass has tried this entry. }
+        members:
+          type: array
+          items: { type: string }
+          description: When this artist is a group — member names.
+        bands:
+          type: array
+          items: { type: string }
+          description: When this artist is a person — bands they belong(ed) to.
+        similar:
+          type: array
+          maxItems: 12
+          items:
+            type: object
+            required: [name, image]
+            properties:
+              name: { type: string }
+              image: { type: [string, 'null'] }
+        discography:
+          type: array
+          items: { $ref: '#/components/schemas/DiscographyItem' }
+        discographyAt: { type: string, format: date-time }
+
+    DiscographyItem:
+      type: object
+      required: [title, cover, date, type]
+      properties:
+        title: { type: string }
+        cover: { type: [string, 'null'] }
+        date: { type: [string, 'null'], description: YYYY-MM-DD. }
+        type: { type: string, description: 'Lowercase Deezer record type (album, single, ep, compilation).' }
+
+    Composer:
+      type: object
+      description: Open Opus + Wikipedia composer entry; all fields optional.
+      properties:
+        fullName: { type: string }
+        epoch: { type: string, description: 'e.g. "Baroque", "Romantic".' }
+        portrait: { type: [string, 'null'] }
+        born: { type: [string, 'null'], description: Year (4 chars). }
+        died: { type: [string, 'null'] }
+        bio: { type: string }
+        url: { type: [string, 'null'] }
+
+    Lyrics:
+      type: object
+      required: [synced, plain]
+      properties:
+        synced: { type: [string, 'null'], description: LRC-format timed lyrics; null when no trustworthy sync exists. }
+        plain: { type: [string, 'null'] }
+
+    AlbumInfo:
+      type: object
+      description: On-demand album depth; only found fields are present. Edits overlay label/date/country/blurb.
+      properties:
+        label: { type: [string, 'null'] }
+        date: { type: [string, 'null'], description: MusicBrainz release date. }
+        country: { type: [string, 'null'] }
+        mbType: { type: [string, 'null'], description: MB release-group primary type. }
+        mbSecondary:
+          type: array
+          items: { type: string }
+          description: MB release-group secondary types (Compilation, Live, ...).
+        blurb: { type: string, description: Wikipedia summary of the album. }
+        url: { type: [string, 'null'], description: Wikipedia page URL. }
+
+    ArtistCandidate:
+      type: object
+      required: [mbid, name, type, area, disambiguation, score]
+      properties:
+        mbid: { $ref: '#/components/schemas/Mbid' }
+        name: { type: string }
+        type: { type: [string, 'null'] }
+        area: { type: [string, 'null'] }
+        disambiguation: { type: [string, 'null'] }
+        score: { type: [integer, 'null'] }
+
+    AlbumCandidate:
+      type: object
+      required: [mbid, title, artist, date, country, tracks, score]
+      properties:
+        mbid: { $ref: '#/components/schemas/Mbid' }
+        title: { type: string }
+        artist: { type: [string, 'null'], description: Joined artist-credit string. }
+        date: { type: [string, 'null'] }
+        country: { type: [string, 'null'] }
+        tracks: { type: [integer, 'null'], description: MB track count. }
+        score: { type: [integer, 'null'] }
+
+    TrackEdits:
+      type: object
+      description: Track override fields. In a PATCH request, null clears a field; other values must be non-empty trimmed strings (max 300) or ints 0-3000 for year/trackNo/discNo. In responses, cleared fields are absent.
+      additionalProperties: false
+      properties:
+        title: { type: [string, 'null'] }
+        artist: { type: [string, 'null'] }
+        album: { type: [string, 'null'] }
+        albumArtist: { type: [string, 'null'] }
+        genre: { type: [string, 'null'] }
+        year: { type: [integer, 'null'], minimum: 0, maximum: 3000 }
+        trackNo: { type: [integer, 'null'], minimum: 0, maximum: 3000 }
+        discNo: { type: [integer, 'null'], minimum: 0, maximum: 3000 }
+        composer: { type: [string, 'null'] }
+        work: { type: [string, 'null'] }
+        movement: { type: [string, 'null'] }
+        conductor: { type: [string, 'null'] }
+        orchestra: { type: [string, 'null'] }
+
+    AlbumEdits:
+      type: object
+      description: Album override fields; same null-clears semantics as TrackEdits. blurb allows up to 4000 chars.
+      additionalProperties: false
+      properties:
+        album: { type: [string, 'null'] }
+        albumArtist: { type: [string, 'null'] }
+        genre: { type: [string, 'null'] }
+        year: { type: [integer, 'null'], minimum: 0, maximum: 3000 }
+        releaseType:
+          oneOf:
+            - { type: string, enum: [Album, EP, Single, Live, Compilation] }
+            - { type: 'null' }
+        label: { type: [string, 'null'] }
+        date: { type: [string, 'null'] }
+        country: { type: [string, 'null'] }
+        blurb: { type: [string, 'null'], maxLength: 4000 }
+
+    ArtistEdits:
+      type: object
+      description: Artist override fields; same null-clears semantics. bio allows up to 4000 chars.
+      additionalProperties: false
+      properties:
+        type: { type: [string, 'null'] }
+        area: { type: [string, 'null'] }
+        born: { type: [string, 'null'] }
+        died: { type: [string, 'null'] }
+        image: { type: [string, 'null'] }
+        bio: { type: [string, 'null'], maxLength: 4000 }
+
+    NewRelease:
+      type: object
+      required: [artist, title, cover, date, type]
+      properties:
+        artist: { type: string, description: Library albumArtist the release belongs to. }
+        title: { type: string }
+        cover: { type: [string, 'null'] }
+        date: { type: string, description: YYYY-MM-DD. }
+        type: { type: string, description: Lowercase record type; defaults to "album". }
+
+    PlayRef:
+      type: object
+      required: [id, at]
+      properties:
+        id: { $ref: '#/components/schemas/Sha1' }
+        at: { type: string, format: date-time }
+
+    Stats:
+      type: object
+      required: [profileId, history, totalPlays, totalSeconds, week, month,
+                 uniqueTracks, topTracks, topAlbums, topArtists, recent]
+      properties:
+        profileId: { type: [string, 'null'], description: Echoes the query scope; null = all profiles. }
+        history:
+          type: array
+          items: { $ref: '#/components/schemas/PlayRef' }
+          description: Raw last-30-days plays of tracks still in the library; the client buckets charts in its own timezone.
+        totalPlays: { type: integer, description: Includes plays of tracks no longer in the library. }
+        totalSeconds: { type: integer, description: 'Sum of durations of known plays, rounded.' }
+        week:
+          type: object
+          required: [plays, seconds]
+          properties:
+            plays: { type: integer }
+            seconds: { type: integer }
+        month:
+          type: object
+          required: [plays, seconds, topArtist]
+          properties:
+            plays: { type: integer }
+            seconds: { type: integer }
+            topArtist:
+              oneOf:
+                - { type: 'null' }
+                - type: object
+                  required: [name, count]
+                  properties:
+                    name: { type: string }
+                    count: { type: integer }
+        playCounts:
+          type: object
+          additionalProperties: { type: integer }
+          description: trackId -> play count over the scoped plays. Present only when counts=1.
+        uniqueTracks: { type: integer }
+        topTracks:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, count, lastAt]
+            properties:
+              id: { $ref: '#/components/schemas/Sha1' }
+              count: { type: integer }
+              lastAt: { type: string, format: date-time }
+        topAlbums:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [albumId, count]
+            properties:
+              albumId: { $ref: '#/components/schemas/Sha1' }
+              count: { type: integer }
+        topArtists:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [name, count]
+            properties:
+              name: { type: string }
+              count: { type: integer }
+        recent:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/PlayRef' }
+          description: Most recent 50 distinct known tracks, newest first.
