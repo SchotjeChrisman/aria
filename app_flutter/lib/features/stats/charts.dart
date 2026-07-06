@@ -44,7 +44,7 @@ class BarChart extends StatelessWidget {
             child: CustomPaint(
               painter: _BarsPainter(
                 points: points,
-                barColor: c.accent,
+                barColor: c.fgDim,
                 zeroColor: c.bgHover,
               ),
             ),

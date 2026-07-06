@@ -132,12 +132,12 @@ class SmartBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        border: Border.all(color: c.accent),
+        border: Border.all(color: c.lineStrong),
         borderRadius: BorderRadius.circular(AriaRadius.pill),
       ),
       child: Text(
         'SMART',
-        style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: c.accent),
+        style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: c.fgDim),
       ),
     );
   }

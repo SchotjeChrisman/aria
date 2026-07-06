@@ -86,7 +86,7 @@ class ArtistInfoTab extends ConsumerWidget {
                       onTap: () => openExternal(d.url!),
                       child: Text(
                         'Wikipedia →',
-                        style: TextStyle(color: c.accent),
+                        style: TextStyle(color: c.fg, decoration: TextDecoration.underline),
                       ),
                     ),
                   ),

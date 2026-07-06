@@ -184,7 +184,7 @@ class _StatStrip extends StatelessWidget {
             num,
             style: TextStyle(
               fontSize: 20,
-              color: c.accent,
+              color: c.fg,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
@@ -404,7 +404,7 @@ class _ChartBox extends StatelessWidget {
                         heightFactor: v == 0 ? 0.04 : (v / max).clamp(0.04, 1),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: v == 0 ? c.line : c.accent,
+                            color: v == 0 ? c.line : c.fgDim,
                             borderRadius: BorderRadius.circular(1.5),
                           ),
                         ),

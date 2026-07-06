@@ -8,14 +8,16 @@ import 'connection.dart';
 // [activeProfileIdProvider] re-derives on switch.
 
 // Legacy profileForm PALETTE — the 8 fixed avatar colors.
+// Purples swapped out (red + slate grey); existing profiles keep whatever
+// hex the server stored.
 const profilePalette = [
-  '#6d3fd2',
+  '#d13b58',
   '#d23f6d',
   '#d2803f',
   '#3fd26d',
   '#3f8ad2',
   '#d2c43f',
-  '#8a3fd2',
+  '#6a6a72',
   '#3fd2c4',
 ];
 

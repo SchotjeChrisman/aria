@@ -23,9 +23,12 @@ class FilterPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     return Material(
-      color: selected ? c.bgHover : Colors.transparent,
+      // selected = state → soft accent tint
+      color: selected
+          ? c.accent.withValues(alpha: 0.10)
+          : Colors.transparent,
       shape: StadiumBorder(
-        side: BorderSide(color: selected ? c.lineStrong : c.line),
+        side: BorderSide(color: selected ? c.accent : c.line),
       ),
       child: InkWell(
         onTap: onTap,
@@ -37,7 +40,7 @@ class FilterPill extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: selected ? c.fg : c.fgDim,
+              color: selected ? c.accent : c.fgDim,
             ),
           ),
         ),

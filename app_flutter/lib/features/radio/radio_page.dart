@@ -143,7 +143,7 @@ class _RadioCard extends ConsumerWidget {
               ),
             ),
             IconButton(
-              icon: Icon(Icons.play_arrow, color: c.accent),
+              icon: Icon(Icons.play_arrow, color: c.fg),
               tooltip: 'Play station',
               onPressed: () =>
                   ref.read(radioPlaybackProvider.notifier).play(station),

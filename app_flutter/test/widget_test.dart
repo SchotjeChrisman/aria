@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _app(Widget child) => MaterialApp(
-  theme: AriaTheme.dark(),
+  theme: AriaTheme.light(),
   home: Scaffold(body: child),
 );
 
@@ -43,7 +43,7 @@ void main() {
     expect(find.text('▶'), findsOneWidget);
     expect(find.text('3'), findsNothing);
     final title = tester.widget<Text>(find.text('So What'));
-    expect(title.style?.color, AriaColors.dark.accent);
+    expect(title.style?.color, AriaColors.light.accent);
   });
 
   testWidgets('EmptyState renders message and icon', (tester) async {

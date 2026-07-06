@@ -48,7 +48,7 @@ void main() {
   testWidgets('FormatBadge renders text, accent when lossless', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: AriaTheme.dark(),
+        theme: AriaTheme.light(),
         home: const Scaffold(
           body: FormatBadge(
             format: 'flac',
@@ -60,7 +60,7 @@ void main() {
       ),
     );
     final text = tester.widget<Text>(find.text('FLAC 24/192'));
-    expect(text.style?.color, AriaColors.dark.lossless);
+    expect(text.style?.color, AriaColors.light.lossless);
   });
 
   testWidgets('FormatBadge renders nothing without a format', (tester) async {

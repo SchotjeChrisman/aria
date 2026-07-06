@@ -130,7 +130,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                   style: TextStyle(
                     fontSize: 20,
                     letterSpacing: 6,
-                    color: c.accent,
+                    color: c.fg,
                   ),
                 ),
                 const SizedBox(height: AriaSpace.s8),

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Aria dark theme, ported from the legacy visual language (app/ui/style.css):
-/// same purple accent, 4px spacing base, 6/10/16/pill radii, quiet dim text,
-/// tabular numerals for times — hues shifted onto a dark surface stack.
+/// Aria light theme, ported from the legacy visual language (app/ui/style.css):
+/// pinkish-red state accent, neutral greyscale surfaces, 4px spacing base,
+/// 6/10/16/pill radii, quiet dim text, tabular numerals for times.
 class AriaColors extends ThemeExtension<AriaColors> {
   const AriaColors({
     required this.bg,
@@ -26,29 +26,33 @@ class AriaColors extends ThemeExtension<AriaColors> {
   final Color fgDim;
   final Color accent;
 
-  /// Legacy pairs: lossless shares the accent purple, lossy is green
-  /// (used by the signal path to flag a lossy source).
+  /// Lossless renders in full-strength greyscale (it's the norm); lossy is
+  /// green (used by the signal path to flag a lossy source).
   final Color lossless;
   final Color lossy;
 
-  static const dark = AriaColors(
-    bg: Color(0xFF141318),
-    bgRaised: Color(0xFF1C1A22),
-    bgHover: Color(0xFF2A2733),
-    line: Color(0xFF2E2B38),
-    lineStrong: Color(0xFF565060),
-    fg: Color(0xFFE9E7EF),
-    fgDim: Color(0xFFA19DAD),
-    // legacy accent #6d3fd2, lifted for contrast on dark surfaces
-    accent: Color(0xFF9A7BFF),
-    lossless: Color(0xFF9A7BFF),
-    lossy: Color(0xFF4ADE80),
+  static const light = AriaColors(
+    bg: Color(0xFFFAFAFB),
+    bgRaised: Color(0xFFFFFFFF),
+    bgHover: Color(0xFFECECEE),
+    line: Color(0xFFE5E5E8),
+    // 3.3:1 against white — WCAG UI-component minimum for input borders
+    lineStrong: Color(0xFF8D8D96),
+    fg: Color(0xFF1B1B1E),
+    fgDim: Color(0xFF6A6A72),
+    // Pinkish red, deepened to 4.7:1 on white so state text stays readable.
+    // Accent marks STATES only (current/selected/active/focus/live);
+    // everything else is greyscale.
+    accent: Color(0xFFD13B58),
+    // greyscale: lossless is the norm, only lossy gets flagged (green)
+    lossless: Color(0xFF1B1B1E),
+    lossy: Color(0xFF15803D),
   );
 
   /// Theme lookup with a safe fallback so pure widgets render (and test)
   /// without a fully configured MaterialApp.
   static AriaColors of(BuildContext context) =>
-      Theme.of(context).extension<AriaColors>() ?? dark;
+      Theme.of(context).extension<AriaColors>() ?? light;
 
   @override
   AriaColors copyWith() => this;
@@ -94,12 +98,12 @@ abstract final class AriaRadius {
 }
 
 abstract final class AriaTheme {
-  static ThemeData dark() {
-    const c = AriaColors.dark;
+  static ThemeData light() {
+    const c = AriaColors.light;
     final base = ThemeData(
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       useMaterial3: true,
-      colorScheme: ColorScheme.dark(
+      colorScheme: ColorScheme.light(
         primary: c.accent,
         onPrimary: Colors.white,
         secondary: c.accent,
@@ -109,7 +113,7 @@ abstract final class AriaTheme {
         surfaceContainer: c.bgRaised,
         outline: c.lineStrong,
         outlineVariant: c.line,
-        error: const Color(0xFFF87171),
+        error: const Color(0xFFDC2626),
       ),
       scaffoldBackgroundColor: c.bg,
       splashFactory: InkSparkle.splashFactory,
@@ -119,16 +123,20 @@ abstract final class AriaTheme {
     final text = base.textTheme.copyWith(
       bodyMedium: TextStyle(fontSize: 14, height: 1.5, color: c.fg),
       bodySmall: TextStyle(fontSize: 12.5, height: 1.45, color: c.fgDim),
-      titleLarge: const TextStyle(
+      // Explicit colors required: M3 geometry styles are inherit:false, so a
+      // color-less replacement paints in the engine default (white).
+      titleLarge: TextStyle(
         fontSize: 26,
         height: 1.25,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.4,
+        color: c.fg,
       ),
-      titleMedium: const TextStyle(
+      titleMedium: TextStyle(
         fontSize: 15,
         height: 1.4,
         fontWeight: FontWeight.w600,
+        color: c.fg,
       ),
       labelMedium: TextStyle(
         fontSize: 12,
@@ -177,7 +185,7 @@ abstract final class AriaTheme {
         hintStyle: TextStyle(color: c.fgDim),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        // legacy .play-all: accent pill, 600 weight
+        // legacy .play-all pill, 600 weight — primary actions carry the accent
         style: FilledButton.styleFrom(
           backgroundColor: c.accent,
           foregroundColor: Colors.white,
@@ -188,13 +196,14 @@ abstract final class AriaTheme {
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: c.bgRaised,
-        indicatorColor: c.bgHover,
-        selectedIconTheme: IconThemeData(color: c.fg),
+        // selected = state → accent-tinted pill, accent icon/label
+        indicatorColor: c.accent.withValues(alpha: 0.12),
+        selectedIconTheme: IconThemeData(color: c.accent),
         unselectedIconTheme: IconThemeData(color: c.fgDim),
         selectedLabelTextStyle: TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w500,
-          color: c.fg,
+          color: c.accent,
         ),
         unselectedLabelTextStyle: TextStyle(
           fontSize: 12.5,
@@ -204,10 +213,19 @@ abstract final class AriaTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: c.bgRaised,
-        indicatorColor: c.bgHover,
+        indicatorColor: c.accent.withValues(alpha: 0.12),
         height: 64,
-        labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.fgDim),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? c.accent : c.fgDim,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: states.contains(WidgetState.selected) ? c.accent : c.fgDim,
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
