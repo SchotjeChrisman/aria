@@ -78,6 +78,31 @@ final searchResultsProvider = Provider<SearchResults>((ref) {
   );
 });
 
+/// MusicBrainz artist candidates for the query — the common case is
+/// searching for an artist not in the library yet. Tapping one opens the
+/// regular artist page, which enriches by name like any not-in-library
+/// artist. Debounced against keystrokes (and MB rate limits) via
+/// autoDispose cancellation.
+final mbArtistsProvider = FutureProvider.autoDispose<List<ArtistCandidate>>((
+  ref,
+) async {
+  final q = ref.watch(searchQueryProvider);
+  if (q.length < 3) return const [];
+  var cancelled = false;
+  ref.onDispose(() => cancelled = true);
+  await Future<void>.delayed(const Duration(milliseconds: 500));
+  if (cancelled) return const [];
+  final candidates = await ref.watch(apiClientProvider).identifyArtist(q);
+  // Skip artists the library sections already show, and MB's low-score fuzz.
+  final inLibrary = {
+    for (final a in ref.read(searchResultsProvider).artists) a.toLowerCase(),
+  };
+  return [
+    for (final c in candidates)
+      if ((c.score ?? 0) >= 75 && !inLibrary.contains(c.name.toLowerCase())) c,
+  ].take(6).toList();
+});
+
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
@@ -101,6 +126,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final query = ref.watch(searchQueryProvider);
     final library = ref.watch(libraryTracksProvider);
     final results = ref.watch(searchResultsProvider);
+    final mb = ref.watch(mbArtistsProvider);
+    final nothingAnywhere =
+        results.isEmpty && mb.hasValue && (mb.value?.isEmpty ?? true);
 
     return Scaffold(
       body: SafeArea(
@@ -118,7 +146,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 controller: _ctrl,
                 autofocus: true,
                 decoration: const InputDecoration(
-                  hintText: 'Search your library…',
+                  hintText: 'Search your library and MusicBrainz…',
                   prefixIcon: Icon(Icons.search),
                 ),
                 onChanged: (v) => ref.read(searchQueryProvider.notifier).set(v),
@@ -134,7 +162,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   message: 'Type to search titles, artists and albums.',
                   icon: Icons.search,
                 ),
-                AsyncData() when results.isEmpty => EmptyState(
+                AsyncData() when nothingAnywhere => EmptyState(
                   message: 'Nothing matches "$query".',
                   icon: Icons.search_off,
                 ),
@@ -161,6 +189,8 @@ class _ResultsList extends ConsumerWidget {
     final queue = ref.read(queueProvider.notifier);
     final current = ref.watch(currentTrackProvider);
     final style = Theme.of(context).textTheme.titleMedium;
+    final mb = ref.watch(mbArtistsProvider);
+    final mbArtists = mb.value ?? const <ArtistCandidate>[];
 
     return ListView(
       padding: const EdgeInsets.symmetric(
@@ -230,6 +260,33 @@ class _ResultsList extends ConsumerWidget {
               },
             ),
           ),
+          const SizedBox(height: AriaSpace.s6),
+        ],
+        if (mb.isLoading && results.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(AriaSpace.s6),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        if (mbArtists.isNotEmpty) ...[
+          Text('On MusicBrainz', style: style),
+          const SizedBox(height: AriaSpace.s2),
+          for (final a in mbArtists)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: ArtistAvatar(name: a.name, size: 40),
+              title: Text(a.name),
+              subtitle: Text(
+                [
+                  a.type,
+                  a.area,
+                  a.disambiguation,
+                ].nonNulls.where((s) => s.isNotEmpty).join(' · '),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              // Same flow as any not-in-library artist (e.g. New Releases):
+              // the artist page enriches by name.
+              onTap: () => context.push(artistPath(a.name)),
+            ),
           const SizedBox(height: AriaSpace.s6),
         ],
         if (results.albums.isNotEmpty) ...[
