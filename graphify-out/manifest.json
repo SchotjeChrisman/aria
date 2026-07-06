@@ -47,10 +47,6 @@
     "mtime": 1783358676.233202,
     "hash": "b8aeab9d3fec8f0780bbb87c3e799082"
   },
-  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/core/router.dart": {
-    "mtime": 1783358676.233202,
-    "hash": "b8b5aaeddc04dd9c1081d932c76f6179"
-  },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/core/selection.dart": {
     "mtime": 1783358676.2332463,
     "hash": "bfc476dbfe7b792e995dec65a65a1c1d"
@@ -66,6 +62,10 @@
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/core/theme.dart": {
     "mtime": 1783358676.2332463,
     "hash": "3490d891726e8540eb54436ab5d1b87e"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/core/router.dart": {
+    "mtime": 1783359972.7437644,
+    "hash": "8db5b399d739faa1f607fd65b40299aa"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/lib/features/album/album_page.dart": {
     "mtime": 1783358676.2342272,
@@ -435,6 +435,110 @@
     "mtime": 1783358676.2443113,
     "hash": "d295462c9da9f7fef22dc86c34492318"
   },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_application.h": {
+    "mtime": 1783360041.1331766,
+    "hash": "5774eb642609ea54649f5a74272b973f"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_basic_message_channel.h": {
+    "mtime": 1783360041.1337872,
+    "hash": "8730d7034562b44bcab7c48c894ba862"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_binary_codec.h": {
+    "mtime": 1783360041.1345713,
+    "hash": "5997440e26e079541337c498925226f1"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_binary_messenger.h": {
+    "mtime": 1783360041.1351142,
+    "hash": "5b259053180f6c3a637a3760f5e78921"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_dart_project.h": {
+    "mtime": 1783360041.1371603,
+    "hash": "1ddbe3c8a2821804ced450e37fa9701a"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_engine.h": {
+    "mtime": 1783360041.1388056,
+    "hash": "1b028c1fa72fa880b3f8ceb15c1c69df"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_event_channel.h": {
+    "mtime": 1783360041.1397667,
+    "hash": "f3234aba146e57eced1b9febac78a1ec"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_json_message_codec.h": {
+    "mtime": 1783360041.1405048,
+    "hash": "4f7385406239c0eb8b31855e75b9addc"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_json_method_codec.h": {
+    "mtime": 1783360041.1408975,
+    "hash": "c31254629784a8fd48a5ec671df85e64"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_message_codec.h": {
+    "mtime": 1783360041.1412685,
+    "hash": "4e0c2c7002baf140a95f0067b781d498"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_method_call.h": {
+    "mtime": 1783360041.1419942,
+    "hash": "1187bb4f46363e874137ce4f71356e8b"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_method_channel.h": {
+    "mtime": 1783360041.1426516,
+    "hash": "de7b99c808de5c710ade00638cf7e484"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_method_codec.h": {
+    "mtime": 1783360041.1433332,
+    "hash": "1593085ded6e4a14d8129a5d9a95edb8"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_method_response.h": {
+    "mtime": 1783360041.1438737,
+    "hash": "3373ee1d610372294796ae24f7b10b59"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_pixel_buffer_texture.h": {
+    "mtime": 1783360041.1444337,
+    "hash": "613a2389f2fda4d844e82e63b690a975"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_plugin_registrar.h": {
+    "mtime": 1783360041.1447852,
+    "hash": "3d850b5432140f7e565baa806ee1f716"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_plugin_registry.h": {
+    "mtime": 1783360041.145159,
+    "hash": "9093dc992b7f0c62c899bb5ee75437bb"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_standard_message_codec.h": {
+    "mtime": 1783360041.1454937,
+    "hash": "cde1b5d81be59769b872be4d62b4bae8"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_standard_method_codec.h": {
+    "mtime": 1783360041.1464875,
+    "hash": "09d4ac26822e07f1c2f16d89380b40dc"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_string_codec.h": {
+    "mtime": 1783360041.1469445,
+    "hash": "5edcd4ae8b7d3acb2e56bf8bfad75d4d"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_texture.h": {
+    "mtime": 1783360041.1473973,
+    "hash": "d1894650bbfe9ba65c6f0b195645a9a5"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_texture_gl.h": {
+    "mtime": 1783360041.1477375,
+    "hash": "cdb733646063a05fa20906842efd74b7"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_texture_registrar.h": {
+    "mtime": 1783360041.1484063,
+    "hash": "455c45888f33294a5054d8adacac5a2e"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_value.h": {
+    "mtime": 1783360041.1489267,
+    "hash": "0fad916a7405474cce0f6d85509a12ac"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/fl_view.h": {
+    "mtime": 1783360041.1505275,
+    "hash": "6ea74925703a88112f05f7a5579b91be"
+  },
+  "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/flutter/ephemeral/flutter_linux/flutter_linux.h": {
+    "mtime": 1783360041.1513844,
+    "hash": "1dcce1af8eb3052e29d06a756f0535db"
+  },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/linux/runner/main.cc": {
     "mtime": 1783358676.244587,
     "hash": "0643b8609698e96b3abd63c210361a87"
@@ -452,7 +556,7 @@
     "hash": "6bb1bcaa0eeca5c5c5250bce5b3f1ac3"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift": {
-    "mtime": 1783359750.0537202,
+    "mtime": 1783360035.1922174,
     "hash": "61d013e6c93b3d917c4f6178b9f6c9cb"
   },
   "/home/chris/Repositories/roon/.claude/worktrees/transport-bar-responsive/app_flutter/macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Sources/FlutterGeneratedPluginSwiftPackage/FlutterGeneratedPluginSwiftPackage.swift": {
