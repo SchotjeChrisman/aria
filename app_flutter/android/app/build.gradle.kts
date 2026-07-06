@@ -25,11 +25,29 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release signing: env vars on CI, ~/.keys/aria-key.properties locally,
+    // debug keys as last resort so `flutter run --release` still works anywhere.
+    val keyProps = java.util.Properties().apply {
+        val f = file("${System.getProperty("user.home")}/.keys/aria-key.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val ksFile = System.getenv("ANDROID_KEYSTORE_PATH") ?: keyProps.getProperty("storeFile")
+    val ksPass = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: keyProps.getProperty("storePassword")
+    val ksAlias = System.getenv("ANDROID_KEY_ALIAS") ?: keyProps.getProperty("keyAlias")
+
+    if (ksFile != null && ksPass != null && ksAlias != null) {
+        signingConfigs.create("release") {
+            storeFile = file(ksFile)
+            storePassword = ksPass
+            keyAlias = ksAlias
+            keyPassword = ksPass
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 }
