@@ -19,6 +19,8 @@ class MpvEventData {
     this.propertyName,
     this.propertyValue,
     this.endFileReason,
+    this.logPrefix,
+    this.logText,
   });
 
   final int eventId;
@@ -32,6 +34,10 @@ class MpvEventData {
 
   /// Set for MPV_EVENT_END_FILE (an MpvEndFileReason value).
   final int? endFileReason;
+
+  /// Set for MPV_EVENT_LOG_MESSAGE, e.g. prefix "ao/pipewire".
+  final String? logPrefix;
+  final String? logText;
 }
 
 /// Minimal seam over the raw libmpv C API. The real implementation is
@@ -58,6 +64,9 @@ abstract class MpvRaw {
 
   /// mpv_observe_property.
   int observeProperty(int handle, int replyUserdata, String name, int format);
+
+  /// mpv_request_log_messages — minLevel per client.h ("error", "warn", ...).
+  int requestLogMessages(int handle, String minLevel);
 
   /// mpv_wait_event — non-blocking when timeoutSeconds is 0. Returns null
   /// when the event queue is empty (MPV_EVENT_NONE).

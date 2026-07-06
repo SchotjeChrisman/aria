@@ -2,6 +2,7 @@
 abstract final class MpvEventId {
   static const int none = 0;
   static const int shutdown = 1;
+  static const int logMessage = 5;
   static const int startFile = 6;
   static const int endFile = 7;
   static const int fileLoaded = 8;

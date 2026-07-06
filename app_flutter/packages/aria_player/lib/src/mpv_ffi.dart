@@ -30,6 +30,15 @@ final class _MpvEventProperty extends Struct {
   external Pointer<Void> data;
 }
 
+final class _MpvEventLogMessage extends Struct {
+  external Pointer<Utf8> prefix;
+  external Pointer<Utf8> level;
+  external Pointer<Utf8> text;
+
+  @Int32()
+  external int logLevel;
+}
+
 // mpv_event_end_file: only `reason` (first int) is read — later fields were
 // added across API versions and reading them is not layout-safe.
 
@@ -53,6 +62,8 @@ typedef _ObservePropertyC =
     Int32 Function(Pointer<Void>, Uint64, Pointer<Utf8>, Int32);
 typedef _ObservePropertyD =
     int Function(Pointer<Void>, int, Pointer<Utf8>, int);
+typedef _RequestLogMessagesC = Int32 Function(Pointer<Void>, Pointer<Utf8>);
+typedef _RequestLogMessagesD = int Function(Pointer<Void>, Pointer<Utf8>);
 typedef _WaitEventC = Pointer<_MpvEvent> Function(Pointer<Void>, Double);
 typedef _WaitEventD = Pointer<_MpvEvent> Function(Pointer<Void>, double);
 typedef _TerminateDestroyC = Void Function(Pointer<Void>);
@@ -153,6 +164,10 @@ class FfiMpvRaw implements MpvRaw {
           .lookupFunction<_ObservePropertyC, _ObservePropertyD>(
             'mpv_observe_property',
           ),
+      _requestLogMessages = lib
+          .lookupFunction<_RequestLogMessagesC, _RequestLogMessagesD>(
+            'mpv_request_log_messages',
+          ),
       _waitEvent = lib.lookupFunction<_WaitEventC, _WaitEventD>(
         'mpv_wait_event',
       ),
@@ -169,6 +184,7 @@ class FfiMpvRaw implements MpvRaw {
   final _SetPropertyD _setProperty;
   final _CommandD _command;
   final _ObservePropertyD _observeProperty;
+  final _RequestLogMessagesD _requestLogMessages;
   final _WaitEventD _waitEvent;
   final _TerminateDestroyD _terminateDestroy;
 
@@ -253,6 +269,16 @@ class FfiMpvRaw implements MpvRaw {
   }
 
   @override
+  int requestLogMessages(int handle, String minLevel) {
+    final l = minLevel.toNativeUtf8();
+    try {
+      return _requestLogMessages(_h(handle), l);
+    } finally {
+      calloc.free(l);
+    }
+  }
+
+  @override
   MpvEventData? waitEvent(int handle, double timeoutSeconds) {
     final evPtr = _waitEvent(_h(handle), timeoutSeconds);
     if (evPtr == nullptr) return null;
@@ -282,6 +308,14 @@ class FfiMpvRaw implements MpvRaw {
           replyUserdata: ev.replyUserdata,
           propertyName: name,
           propertyValue: value,
+        );
+      case MpvEventId.logMessage:
+        if (ev.data == nullptr) return MpvEventData(ev.eventId);
+        final msg = ev.data.cast<_MpvEventLogMessage>().ref;
+        return MpvEventData(
+          ev.eventId,
+          logPrefix: msg.prefix == nullptr ? '' : msg.prefix.toDartString(),
+          logText: msg.text == nullptr ? '' : msg.text.toDartString(),
         );
       case MpvEventId.endFile:
         final reason = ev.data == nullptr

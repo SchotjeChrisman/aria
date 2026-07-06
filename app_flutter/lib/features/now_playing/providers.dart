@@ -31,6 +31,12 @@ final playbackDurationProvider = StreamProvider<double>(
   (ref) => ref.watch(ariaPlayerProvider).duration,
 );
 
+/// Audio-output failures (engine already stopped playback). TransportBar
+/// listens and shows a snackbar.
+final audioErrorProvider = StreamProvider<String>(
+  (ref) => ref.watch(ariaPlayerProvider).audioError,
+);
+
 /// Engine-reported duration when valid, else the track's tagged duration
 /// (legacy curDur semantics: streams report junk durations).
 final currentDurationProvider = Provider<double>((ref) {

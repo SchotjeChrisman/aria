@@ -35,6 +35,23 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     final init = ref.watch(playerInitProvider);
     ref.watch(playReporterProvider);
 
+    // Audio output died (e.g. exclusive access denied because another app
+    // holds the device) — the engine already stopped; tell the user why.
+    ref.listen(audioErrorProvider, (_, next) {
+      final detail = next.value;
+      if (detail == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Playback stopped — the audio device is unavailable ($detail). '
+            'Close other audio apps, or turn off Exclusive output in '
+            'Settings.',
+          ),
+        ),
+      );
+    });
+
     final c = AriaColors.of(context);
     final track = ref.watch(currentTrackProvider);
     // Radio owns the bar when no library track does (legacy updateNowBar).

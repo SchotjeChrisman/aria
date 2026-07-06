@@ -102,6 +102,10 @@ class AriaPlayer {
   /// took effect must not clobber the fresh playlist bookkeeping or emit a
   /// transient stopped state (play-button flicker on every auto-advance).
   bool _loadPending = false;
+
+  /// One [audioError] per load: mpv retries a failed audio output in a tight
+  /// loop, logging the same error each time.
+  bool _aoErrorNotified = false;
   TrackMeta? _meta;
   int? _fmtRate;
   int? _fmtChannels;
@@ -113,6 +117,7 @@ class AriaPlayer {
   final _endedCtrl = StreamController<void>.broadcast(sync: true);
   final _formatCtrl = StreamController<AudioFormat>.broadcast(sync: true);
   final _trackStartedCtrl = StreamController<int>.broadcast(sync: true);
+  final _audioErrorCtrl = StreamController<String>.broadcast(sync: true);
 
   /// Seconds into the current track.
   Stream<double> get position => _positionCtrl.stream;
@@ -129,6 +134,12 @@ class AriaPlayer {
 
   /// Playlist index each time a (possibly gapless-queued) entry starts.
   Stream<int> get trackStarted => _trackStartedCtrl.stream;
+
+  /// Fires (with mpv's message) when the audio output fails during playback —
+  /// e.g. exclusive access denied because another stream holds the device.
+  /// Playback is stopped first: without an ao, mpv silently races through
+  /// the track instead of playing it.
+  Stream<String> get audioError => _audioErrorCtrl.stream;
 
   PlaybackState get currentState => _state;
   double get currentPosition => _position;
@@ -201,6 +212,9 @@ class AriaPlayer {
       MpvFormat.int64,
     );
 
+    // Surface audio-output failures (see [audioError]).
+    raw.requestLogMessages(handle, 'error');
+
     _raw = raw;
     _handle = handle;
     _timer = Timer.periodic(pollInterval, (_) => _poll());
@@ -214,6 +228,7 @@ class AriaPlayer {
     _localPlaylistCount = 1;
     _pendingNextIndex = null;
     _loadPending = true;
+    _aoErrorNotified = false;
     _fmtRate = null;
     _fmtChannels = null;
     _fmtSampleFormat = null;
@@ -311,6 +326,7 @@ class AriaPlayer {
     await _endedCtrl.close();
     await _formatCtrl.close();
     await _trackStartedCtrl.close();
+    await _audioErrorCtrl.close();
   }
 
   /// Drains pending mpv events now — what the poll timer does each tick.
@@ -340,6 +356,8 @@ class AriaPlayer {
         if (ev.endFileReason == MpvEndFileReason.eof) {
           _endedCtrl.add(null);
         }
+      case MpvEventId.logMessage:
+        _handleLogMessage(ev.logPrefix, ev.logText);
       case MpvEventId.idle:
         // Idle core == nothing left to play (mpv without keep-open never
         // reports eof-reached; end-file/idle is the reliable stop signal).
@@ -357,6 +375,17 @@ class AriaPlayer {
       default:
         break;
     }
+  }
+
+  /// Error-level mpv log lines (requestLogMessages 'error'). An `ao`-prefixed
+  /// error while a file is active means the output is broken; stop instead of
+  /// letting mpv race through the queue silently.
+  void _handleLogMessage(String? prefix, String? text) {
+    if (prefix == null || !prefix.startsWith('ao')) return;
+    if (_aoErrorNotified || (!_fileActive && !_loadPending)) return;
+    _aoErrorNotified = true;
+    stop();
+    _audioErrorCtrl.add((text ?? 'audio output error').trim());
   }
 
   void _handleProperty(String? name, Object? value) {

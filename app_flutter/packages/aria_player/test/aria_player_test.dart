@@ -51,6 +51,12 @@ class FakeMpvRaw implements MpvRaw {
   }
 
   @override
+  int requestLogMessages(int handle, String minLevel) {
+    log.add('logmessages $minLevel');
+    return 0;
+  }
+
+  @override
   MpvEventData? waitEvent(int handle, double timeoutSeconds) =>
       events.isEmpty ? null : events.removeAt(0);
 
@@ -496,6 +502,66 @@ void main() {
       expect(player.isAvailable, isFalse);
       player.play('u'); // must not throw after dispose
       await player.dispose(); // idempotent
+    });
+  });
+
+  group('audio output errors', () {
+    MpvEventData aoError([String text = 'no target node available']) =>
+        MpvEventData(
+          MpvEventId.logMessage,
+          logPrefix: 'ao/pipewire',
+          logText: text,
+        );
+
+    test('ao error during playback stops and fires audioError once', () async {
+      final (player, fake) = await makePlayer();
+      expect(fake.log, contains('logmessages error'));
+
+      final errors = <String>[];
+      final states = <PlaybackState>[];
+      player.audioError.listen(errors.add);
+      player.state.listen(states.add);
+
+      player.play('http://x/t.flac');
+      fake.events.addAll([startFile, aoError(), aoError()]);
+      player.debugPoll();
+
+      expect(errors, ['no target node available']); // deduped per load
+      expect(states.last, PlaybackState.stopped);
+      expect(fake.log, contains('cmd stop'));
+
+      // A fresh play() re-arms the notification.
+      player.play('http://x/t2.flac');
+      fake.events.addAll([startFile, aoError('device busy')]);
+      player.debugPoll();
+      expect(errors, ['no target node available', 'device busy']);
+      await player.dispose();
+    });
+
+    test('non-ao error logs and idle-state ao errors are ignored', () async {
+      final (player, fake) = await makePlayer();
+      final errors = <String>[];
+      player.audioError.listen(errors.add);
+
+      // Not playing: an ao log line must not fire.
+      fake.events.add(aoError());
+      player.debugPoll();
+
+      // Playing: an unrelated error prefix must not fire.
+      player.play('http://x/t.flac');
+      fake.events.addAll([
+        startFile,
+        const MpvEventData(
+          MpvEventId.logMessage,
+          logPrefix: 'ffmpeg',
+          logText: 'some decode warning',
+        ),
+      ]);
+      player.debugPoll();
+
+      expect(errors, isEmpty);
+      expect(player.currentState, PlaybackState.playing);
+      await player.dispose();
     });
   });
 }

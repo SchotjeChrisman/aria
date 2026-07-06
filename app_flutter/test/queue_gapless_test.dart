@@ -41,6 +41,9 @@ class FakeMpvRaw implements MpvRaw {
       0;
 
   @override
+  int requestLogMessages(int handle, String minLevel) => 0;
+
+  @override
   MpvEventData? waitEvent(int handle, double timeoutSeconds) =>
       events.isEmpty ? null : events.removeAt(0);
 
