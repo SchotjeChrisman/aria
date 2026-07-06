@@ -47,7 +47,19 @@ void main() {
     );
   }
 
-  const widths = [320.0, 480.0, 559.0, 560.0, 680.0, 820.0, 1000.0, 1400.0];
+  // Every layout-mode boundary, one step either side.
+  const widths = [
+    320.0,
+    480.0,
+    639.0,
+    640.0,
+    819.0,
+    820.0,
+    899.0,
+    900.0,
+    1000.0,
+    1400.0,
+  ];
 
   for (final w in widths) {
     testWidgets('no overflow at ${w.toInt()}px with a track', (tester) async {

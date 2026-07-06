@@ -95,26 +95,49 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         builder: (context, box) {
           final w = box.maxWidth;
           final showSignal = w >= 1000;
-          // Thresholds sized so the right slice (~30% of width) fits its
-          // fixed-width children — lower and the row overflows.
-          final showVolume = w >= 820;
-          final showBadge = w >= 680;
+          // Signal path replaces the badge at 1000; below that the badge
+          // needs the right slice (~30% of width) to have room next to the
+          // volume slider and buttons.
+          final showBadge = w >= 900;
 
-          // Phone-width: the three-column layout can't fit. Full-width seek
-          // strip on top, meta + core controls in one row below.
-          if (w < 560) {
+          // Below 820 the three-column layout is too cramped: seek and meta
+          // each get squeezed into a third of the bar. Stack instead —
+          // full-width seek strip on top, meta + core controls in one row
+          // below, with time labels and the format badge joining as width
+          // allows.
+          if (w < 820) {
+            final roomy = w >= 640;
             return Column(
               children: [
                 SizedBox(
                   height: 26,
-                  child: radio != null
-                      ? _seek(0, 0) // disabled — live
-                      : _seek(pos, dur),
+                  child: Row(
+                    children: [
+                      if (roomy && radio == null) _time(_dragPos ?? pos, c),
+                      Expanded(
+                        child: radio != null
+                            ? _seek(0, 0) // disabled — live
+                            : _seek(pos, dur),
+                      ),
+                      if (roomy && radio == null) _time(dur, c),
+                    ],
+                  ),
                 ),
                 Expanded(
                   child: Row(
                     children: [
                       Expanded(child: meta),
+                      if (roomy && track != null) ...[
+                        Flexible(
+                          child: FormatBadge(
+                            format: track.format,
+                            bitsPerSample: fmt?.bitDepth ?? track.bitsPerSample,
+                            sampleRate: fmt?.sampleRate ?? track.sampleRate,
+                            lossless: track.lossless,
+                          ),
+                        ),
+                        const SizedBox(width: AriaSpace.s2),
+                      ],
                       prevBtn,
                       playBtn,
                       nextBtn,
@@ -197,25 +220,24 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                       ),
                       const SizedBox(width: AriaSpace.s3),
                     ],
-                    if (showVolume)
-                      SizedBox(
-                        width: 130,
-                        child: Row(
-                          children: [
-                            Icon(Icons.volume_up, size: 16, color: c.fgDim),
-                            Expanded(
-                              child: _slim(
-                                Slider(
-                                  value: volume,
-                                  max: 100,
-                                  onChanged: (v) =>
-                                      ref.read(volumeProvider.notifier).set(v),
-                                ),
+                    SizedBox(
+                      width: 130,
+                      child: Row(
+                        children: [
+                          Icon(Icons.volume_up, size: 16, color: c.fgDim),
+                          Expanded(
+                            child: _slim(
+                              Slider(
+                                value: volume,
+                                max: 100,
+                                onChanged: (v) =>
+                                    ref.read(volumeProvider.notifier).set(v),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.lyrics_outlined),
                       color: c.fgDim,
