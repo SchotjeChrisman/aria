@@ -49,6 +49,41 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     final player = ref.watch(ariaPlayerProvider);
     final unavailable = init.hasValue && !player.isAvailable;
 
+    final meta = radio != null
+        ? _radioMeta(context, radio)
+        : _nowMeta(context, track);
+    final prevBtn = IconButton(
+      icon: const Icon(Icons.skip_previous),
+      color: c.fg,
+      tooltip: 'Previous',
+      // Live stream: no track skipping (legacy).
+      onPressed: track == null ? null : queue.prev,
+    );
+    final playBtn = IconButton.filled(
+      icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+      tooltip: 'Play/Pause',
+      onPressed: track == null && radio == null ? null : queue.togglePlay,
+    );
+    final nextBtn = radio != null
+        ? IconButton(
+            icon: const Icon(Icons.stop),
+            color: c.fg,
+            tooltip: 'Stop station',
+            onPressed: ref.read(radioPlaybackProvider.notifier).stop,
+          )
+        : IconButton(
+            icon: const Icon(Icons.skip_next),
+            color: c.fg,
+            tooltip: 'Next',
+            onPressed: track == null ? null : queue.next,
+          );
+    final queueBtn = IconButton(
+      icon: const Icon(Icons.queue_music),
+      color: c.fgDim,
+      tooltip: 'Queue',
+      onPressed: () => context.push('/queue'),
+    );
+
     final bar = Container(
       height: 84,
       padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s3),
@@ -60,17 +95,40 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         builder: (context, box) {
           final w = box.maxWidth;
           final showSignal = w >= 1000;
-          final showVolume = w >= 760;
-          final showBadge = w >= 560;
+          // Thresholds sized so the right slice (~30% of width) fits its
+          // fixed-width children — lower and the row overflows.
+          final showVolume = w >= 820;
+          final showBadge = w >= 680;
+
+          // Phone-width: the three-column layout can't fit. Full-width seek
+          // strip on top, meta + core controls in one row below.
+          if (w < 560) {
+            return Column(
+              children: [
+                SizedBox(
+                  height: 26,
+                  child: radio != null
+                      ? _seek(0, 0) // disabled — live
+                      : _seek(pos, dur),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(child: meta),
+                      prevBtn,
+                      playBtn,
+                      nextBtn,
+                      queueBtn,
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
 
           return Row(
             children: [
-              Expanded(
-                flex: 3,
-                child: radio != null
-                    ? _radioMeta(context, radio)
-                    : _nowMeta(context, track),
-              ),
+              Expanded(flex: 3, child: meta),
               const SizedBox(width: AriaSpace.s3),
               Expanded(
                 flex: 4,
@@ -79,38 +137,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.skip_previous),
-                          color: c.fg,
-                          tooltip: 'Previous',
-                          // Live stream: no track skipping (legacy).
-                          onPressed: track == null ? null : queue.prev,
-                        ),
-                        IconButton.filled(
-                          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                          tooltip: 'Play/Pause',
-                          onPressed: track == null && radio == null
-                              ? null
-                              : queue.togglePlay,
-                        ),
-                        if (radio != null)
-                          IconButton(
-                            icon: const Icon(Icons.stop),
-                            color: c.fg,
-                            tooltip: 'Stop station',
-                            onPressed: ref
-                                .read(radioPlaybackProvider.notifier)
-                                .stop,
-                          )
-                        else
-                          IconButton(
-                            icon: const Icon(Icons.skip_next),
-                            color: c.fg,
-                            tooltip: 'Next',
-                            onPressed: track == null ? null : queue.next,
-                          ),
-                      ],
+                      children: [prevBtn, playBtn, nextBtn],
                     ),
                     if (radio != null)
                       Row(
@@ -160,11 +187,13 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                     ] else if (showBadge && track != null) ...[
                       // Actual decoded format from mpv when available,
                       // tagged format until then — the bit-perfect badge.
-                      FormatBadge(
-                        format: track.format,
-                        bitsPerSample: fmt?.bitDepth ?? track.bitsPerSample,
-                        sampleRate: fmt?.sampleRate ?? track.sampleRate,
-                        lossless: track.lossless,
+                      Flexible(
+                        child: FormatBadge(
+                          format: track.format,
+                          bitsPerSample: fmt?.bitDepth ?? track.bitsPerSample,
+                          sampleRate: fmt?.sampleRate ?? track.sampleRate,
+                          lossless: track.lossless,
+                        ),
                       ),
                       const SizedBox(width: AriaSpace.s3),
                     ],
@@ -195,12 +224,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                           ? null
                           : () => context.push('/now-playing'),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.queue_music),
-                      color: c.fgDim,
-                      tooltip: 'Queue',
-                      onPressed: () => context.push('/queue'),
-                    ),
+                    queueBtn,
                   ],
                 ),
               ),
