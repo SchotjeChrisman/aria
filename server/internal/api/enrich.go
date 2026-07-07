@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 	"unicode/utf8"
 
 	"aria/internal/enrich"
@@ -47,37 +48,45 @@ func registerEnrich(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		go func() {
-			if err := d.Enricher.Run(context.Background()); err != nil {
+		d.GoBg(func(ctx context.Context) {
+			if err := d.Enricher.Run(ctx); err != nil {
 				log.Printf("enrich: %v", err)
 			}
-		}()
+		})
 		writeJSON(w, http.StatusOK, d.Enricher.Status())
 	})
 
+	// memoized: recompute scans every artist+composer cache blob, but the
+	// map only changes as enrichment/edits land — 60s staleness is invisible
+	var peopleMemo memo[map[string]string]
 	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) {
-		out := map[string]string{}
-		if we, ok := d.Enricher.(warmEnricher); ok {
-			m, err := we.People(r.Context())
-			if err != nil {
-				httpError(w, http.StatusInternalServerError, "internal error")
-				return
+		out, err := peopleMemo.get(time.Minute, func() (map[string]string, error) {
+			out := map[string]string{}
+			if we, ok := d.Enricher.(warmEnricher); ok {
+				m, err := we.People(r.Context())
+				if err != nil {
+					return nil, err
+				}
+				out = m
 			}
-			out = m
-		}
-		// edited portraits win
-		artists, err := d.Edits.ListKind(r.Context(), "artist")
+			// edited portraits win
+			artists, err := d.Edits.ListKind(r.Context(), "artist")
+			if err != nil {
+				return nil, err
+			}
+			for n, raw := range artists {
+				var e struct {
+					Image string `json:"image"`
+				}
+				if json.Unmarshal(raw, &e) == nil && e.Image != "" {
+					out[n] = e.Image
+				}
+			}
+			return out, nil
+		})
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
-		}
-		for n, raw := range artists {
-			var e struct {
-				Image string `json:"image"`
-			}
-			if json.Unmarshal(raw, &e) == nil && e.Image != "" {
-				out[n] = e.Image
-			}
 		}
 		writeJSON(w, http.StatusOK, out)
 	})

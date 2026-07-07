@@ -106,6 +106,36 @@ func TestScan(t *testing.T) {
 	}
 }
 
+// A vanished/empty music dir must never wipe an existing library.
+func TestScanRefusesToWipeLibrary(t *testing.T) {
+	musicDir, err := filepath.Abs("../../../test-music")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataDir := t.TempDir()
+	d, err := db.Open(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	tracks := repo.NewTracks(d)
+	albums := repo.NewAlbums(d)
+	ctx := context.Background()
+
+	if _, err := New(musicDir, dataDir, tracks, albums, nil).Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dir := range []string{filepath.Join(t.TempDir(), "missing"), t.TempDir()} {
+		if _, err := New(dir, dataDir, tracks, albums, nil).Scan(ctx); err == nil {
+			t.Errorf("scan of %s: want error, got nil", dir)
+		}
+		if n, err := tracks.Count(ctx); err != nil || n != 3 {
+			t.Fatalf("library after scan of %s: %d tracks (err %v), want 3", dir, n, err)
+		}
+	}
+}
+
 func toLowerPair(albumArtist, album string) string {
 	return lower(albumArtist) + "\x00" + lower(album)
 }

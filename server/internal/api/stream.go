@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -47,6 +48,10 @@ func registerStream(mux *http.ServeMux, d *Deps) {
 		if ct, ok := streamMIME[strings.ToLower(filepath.Ext(p))]; ok {
 			w.Header().Set("Content-Type", ct)
 		}
+		// no-cache = revalidate, not "don't cache": unchanged files answer 304
+		// via the ETag, retagged files aren't served stale
+		w.Header().Set("Cache-Control", "private, no-cache")
+		w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, fi.ModTime().UnixNano(), fi.Size()))
 		http.ServeContent(w, r, fi.Name(), fi.ModTime(), f)
 	})
 }

@@ -8,6 +8,8 @@ package enrich
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"hash/fnv"
 	"io"
 	"log"
 	"maps"
@@ -157,9 +159,11 @@ type Enricher struct {
 	warming map[string]bool
 
 	// per-artist-name locks: get→modify→put on one name is serialized across
-	// Run/Person/Warm/Reidentify so concurrent writers can't drop fields
-	namesMu   sync.Mutex
-	nameLocks map[string]*sync.Mutex
+	// Run/Person/Warm/Reidentify so concurrent writers can't drop fields.
+	// ponytail: fixed shard pool, not a per-name map — names arrive from
+	// arbitrary client requests and must not grow memory; a hash collision
+	// merely serializes two unrelated names
+	nameLocks [64]sync.Mutex
 }
 
 // New wires an Enricher; root is the app-lifetime context (Warm's background
@@ -173,24 +177,18 @@ func New(root context.Context, tracks *repo.Tracks, cache *repo.Enrich, dataDir 
 		tracks: tracks, cache: cache, dataDir: dataDir, root: root,
 		pc: newPoliteClient(), mb: NewMB(),
 		dz: NewDeezer(), wiki: NewWikipedia(), oo: NewOpenOpus(), lrc: NewLRCLib(),
-		log:       func(m string) { log.Printf("enrich: %s", m) },
-		phase:     "idle",
-		warming:   map[string]bool{},
-		nameLocks: map[string]*sync.Mutex{},
+		log:     func(m string) { log.Printf("enrich: %s", m) },
+		phase:   "idle",
+		warming: map[string]bool{},
 	}
 }
 
-// lockName acquires the per-name lock (created on first use, kept forever —
-// the name set is bounded by the library) and returns its unlock func.
+// lockName acquires the name's shard lock and returns its unlock func.
 // Callers must not nest locks; the enrich helpers themselves never lock.
 func (e *Enricher) lockName(name string) func() {
-	e.namesMu.Lock()
-	mu := e.nameLocks[name]
-	if mu == nil {
-		mu = &sync.Mutex{}
-		e.nameLocks[name] = mu
-	}
-	e.namesMu.Unlock()
+	h := fnv.New32a()
+	io.WriteString(h, name)
+	mu := &e.nameLocks[h.Sum32()%uint32(len(e.nameLocks))]
 	mu.Lock()
 	return mu.Unlock
 }
@@ -488,7 +486,9 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 	}
 
 	artPath := filepath.Join(e.dataDir, "art", albumID+".jpg")
-	if _, err := os.Stat(artPath); !ts[0].HasArt && err != nil {
+	// only a confirmed-absent file triggers a fetch — a transient stat error
+	// must not overwrite existing art
+	if _, err := os.Stat(artPath); !ts[0].HasArt && errors.Is(err, os.ErrNotExist) {
 		img := e.getBinary(ctx, "https://coverartarchive.org/release/"+mbid+"/front-500")
 		if img == nil {
 			if u, err := e.dz.AlbumCoverURL(ctx, ts[0].AlbumArtist, ts[0].Album); err == nil && u != "" {

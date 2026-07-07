@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"aria/internal/genres"
 	"aria/internal/repo"
@@ -166,16 +169,79 @@ func ptrVal[T any](p *T) any {
 // treat the returned maps as read-only — they are shared across requests.
 func mergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	d.tracksMu.Lock()
-	defer d.tracksMu.Unlock()
-	if d.tracksView != nil {
-		return d.tracksView, nil
+	if v := d.tracksView; v != nil {
+		d.tracksMu.Unlock()
+		return v, nil
 	}
+	gen := d.tracksGen
+	d.tracksMu.Unlock()
+
+	// build outside tracksMu so warm readers never queue behind a rebuild;
+	// buildMu single-flights concurrent cold readers
+	d.buildMu.Lock()
+	defer d.buildMu.Unlock()
+	d.tracksMu.Lock()
+	if v := d.tracksView; v != nil { // another builder finished while we waited
+		d.tracksMu.Unlock()
+		return v, nil
+	}
+	gen = d.tracksGen
+	d.tracksMu.Unlock()
+
 	merged, err := buildMergedTracks(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	d.tracksView = merged
+	d.tracksMu.Lock()
+	if d.tracksGen == gen { // don't publish a view built before an invalidation
+		d.tracksView = merged
+	}
+	d.tracksMu.Unlock()
 	return merged, nil
+}
+
+// mergedTracksGz returns the full /api/tracks payload as pre-gzipped JSON,
+// cached per generation. At 100k tracks, reflection-encoding the map view is
+// seconds of CPU per request — this pays it once per invalidation instead.
+func mergedTracksGz(ctx context.Context, d *Deps) ([]byte, error) {
+	d.tracksMu.Lock()
+	if d.tracksGz != nil {
+		gz := d.tracksGz
+		d.tracksMu.Unlock()
+		return gz, nil
+	}
+	d.tracksMu.Unlock()
+
+	d.gzMu.Lock() // heavy cold path: one encoder at a time
+	defer d.gzMu.Unlock()
+	d.tracksMu.Lock()
+	if d.tracksGz != nil {
+		gz := d.tracksGz
+		d.tracksMu.Unlock()
+		return gz, nil
+	}
+	gen := d.tracksGen
+	d.tracksMu.Unlock()
+
+	out, err := mergedTracks(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	gw, _ := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+	if err := json.NewEncoder(gw).Encode(out); err != nil {
+		return nil, err
+	}
+	if err := gw.Close(); err != nil {
+		return nil, err
+	}
+	b := buf.Bytes()
+	d.tracksMu.Lock()
+	if d.tracksGen == gen {
+		d.tracksGz = b
+	}
+	d.tracksMu.Unlock()
+	return b, nil
 }
 
 // buildMergedTracks builds the full /api/tracks payload: file tags merged with
@@ -359,14 +425,14 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 	})
 
 	// synchronous like the legacy server; the scanner publishes SSE progress
-	// on the hub itself. Background context: a client disconnect must not
-	// abort a half-done scan.
+	// on the hub itself. App-lifetime context: a client disconnect must not
+	// abort a half-done scan, but SIGTERM must.
 	mux.HandleFunc("POST /api/scan", func(w http.ResponseWriter, r *http.Request) {
 		if d.Scanner == nil {
 			httpError(w, http.StatusInternalServerError, "scan failed")
 			return
 		}
-		n, err := d.Scanner.Scan(context.Background())
+		n, err := d.Scanner.Scan(d.bgCtx())
 		if err != nil {
 			if errors.Is(err, scanner.ErrScanRunning) {
 				httpError(w, http.StatusConflict, "scan already running")
@@ -378,12 +444,12 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		}
 		d.InvalidateTracks()
 		if d.Enricher != nil {
-			go func() {
-				if err := d.Enricher.Run(context.Background()); err != nil {
+			d.GoBg(func(ctx context.Context) {
+				if err := d.Enricher.Run(ctx); err != nil {
 					log.Printf("enrich: %v", err)
 				}
 				d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
-			}()
+			})
 		}
 		writeJSON(w, http.StatusOK, map[string]int{"tracks": n})
 	})
@@ -405,6 +471,20 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 				return
 			}
 			offset = n
+		}
+		// the common case — whole library, gzip-capable client — serves the
+		// pre-encoded cache; the gzip middleware passes it through untouched
+		if limit == -1 && offset == 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			gz, err := mergedTracksGz(r.Context(), d)
+			if err != nil {
+				httpError(w, http.StatusInternalServerError, "db error")
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Set("Content-Length", strconv.Itoa(len(gz)))
+			w.Write(gz)
+			return
 		}
 		out, err := mergedTracks(r.Context(), d)
 		if err != nil {

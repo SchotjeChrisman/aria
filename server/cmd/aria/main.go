@@ -18,7 +18,7 @@ import (
 	"aria/internal/scanner"
 )
 
-const version = "2.0.0"
+const version = "2.2.0"
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe /healthz on localhost and exit 0/1 (container healthcheck)")
@@ -43,6 +43,7 @@ func main() {
 	defer stop()
 
 	deps := api.NewDeps(sqlDB, cfg, version)
+	deps.Bg = ctx // background scan/enrich stop on SIGTERM, drained via WaitBg
 	deps.Scanner = scanner.New(cfg.MusicDir, cfg.DataDir, deps.Tracks, deps.Albums, func(done, total int) {
 		deps.Events.Publish("scan", map[string]int{"done": done, "total": total})
 	})
@@ -65,12 +66,12 @@ func main() {
 
 	// legacy kickEnrich() at boot: resume/refresh enrichment on every start,
 	// not only after POST /api/scan. Signal ctx stops it between items.
-	go func() {
+	deps.GoBg(func(ctx context.Context) {
 		if err := deps.Enricher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("enrich: %v", err)
 		}
 		deps.InvalidateTracks() // enrichment feeds credits/hasArt into /api/tracks
-	}()
+	})
 
 	srv := &http.Server{
 		Addr: ":" + cfg.Port, Handler: api.New(deps),
@@ -92,4 +93,5 @@ func main() {
 	if err := srv.Shutdown(shutCtx); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
+	deps.WaitBg() // background scan/enrich must finish before sqlDB.Close
 }

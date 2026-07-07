@@ -30,6 +30,10 @@ func Open(dataDir string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// WAL supports concurrent readers + one writer: a few connections keep
+	// /api/stream lookups from queueing behind multi-second view rebuilds at
+	// 100k-track scale; busy_timeout absorbs the rare writer collision
+	d.SetMaxOpenConns(4)
 	if err := migrate(d); err != nil {
 		d.Close()
 		return nil, err

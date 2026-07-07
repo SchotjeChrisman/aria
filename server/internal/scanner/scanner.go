@@ -92,11 +92,20 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
-	files := s.walk()
+	files, walkErrs := s.walk()
 	prev, err := s.tracks.ListPathInfo(ctx)
 	if err != nil {
 		return 0, err
 	}
+	// a vanished mount must never wipe the library: refuse to run when the
+	// walk errored or found nothing while the DB still has tracks
+	if len(prev) > 0 && (walkErrs > 0 || len(files) == 0) {
+		if len(files) == 0 {
+			return 0, fmt.Errorf("scan aborted: %s yielded no files (%d walk errors) but the library has %d tracks — is the music dir mounted?", s.musicDir, walkErrs, len(prev))
+		}
+		log.Printf("scan: %d walk errors — skipping deletion of vanished files this pass", walkErrs)
+	}
+	deleteOK := walkErrs == 0
 	byPath := make(map[string]repo.PathInfo, len(prev))
 	for _, p := range prev {
 		byPath[p.Path] = p
@@ -176,8 +185,10 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 			return 0, err
 		}
 	}
-	if _, err := s.tracks.DeleteNotIn(ctx, keep); err != nil {
-		return 0, err
+	if deleteOK {
+		if _, err := s.tracks.DeleteNotIn(ctx, keep); err != nil {
+			return 0, err
+		}
 	}
 	if err := s.albums.Rebuild(ctx); err != nil {
 		return 0, err
@@ -193,16 +204,17 @@ func (s *Scanner) progress() {
 	s.done++
 	done, total, cb := s.done, s.total, s.onProgress
 	s.mu.Unlock()
-	if cb != nil {
+	// throttled: one SSE frame per 25 files (plus the final one), not per file
+	if cb != nil && (done%25 == 0 || done == total) {
 		cb(done, total)
 	}
 }
 
-func (s *Scanner) walk() []fileEntry {
-	var out []fileEntry
+func (s *Scanner) walk() (out []fileEntry, errs int) {
 	filepath.WalkDir(s.musicDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("scan: skip %s: %v", p, err)
+			errs++
 			return nil
 		}
 		if d.IsDir() || !exts[strings.ToLower(filepath.Ext(p))] {
@@ -220,7 +232,7 @@ func (s *Scanner) walk() []fileEntry {
 		out = append(out, fileEntry{abs: p, rel: rel, mtime: info.ModTime().Unix(), size: info.Size()})
 		return nil
 	})
-	return out
+	return out, errs
 }
 
 func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[string]bool, artMu *sync.Mutex) (repo.Track, bool) {

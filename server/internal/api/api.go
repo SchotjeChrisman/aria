@@ -3,6 +3,7 @@
 package api
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,31 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
+
+// memo caches one value for a TTL, single-flighting concurrent rebuilds —
+// for endpoints whose recompute scans a whole table/cache (people,
+// newreleases) but whose inputs change rarely.
+type memo[T any] struct {
+	mu  sync.Mutex
+	at  time.Time
+	val T
+}
+
+func (m *memo[T]) get(ttl time.Duration, build func() (T, error)) (T, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.at.IsZero() && time.Since(m.at) < ttl {
+		return m.val, nil
+	}
+	v, err := build()
+	if err != nil {
+		return v, err
+	}
+	m.val, m.at = v, time.Now()
+	return v, nil
+}
 
 const maxBodyBytes = 32 << 10 // legacy express.json limit
 
@@ -21,8 +46,9 @@ var registrars []func(*http.ServeMux, *Deps)
 //	func init() { register(registerLibrary) }
 func register(f func(*http.ServeMux, *Deps)) { registrars = append(registrars, f) }
 
-// New builds the mux with all registered route groups plus /healthz.
-func New(d *Deps) *http.ServeMux {
+// New builds the mux with all registered route groups plus /healthz,
+// wrapped in gzip for the large JSON payloads (/api/tracks is multi-MB).
+func New(d *Deps) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -30,7 +56,65 @@ func New(d *Deps) *http.ServeMux {
 	for _, f := range registrars {
 		f(mux, d)
 	}
-	return mux
+	return gzipped(mux)
+}
+
+// gzipRW starts compressing lazily on the first write so handlers that set
+// their own Content-Encoding (pre-gzipped /api/tracks cache) pass through.
+type gzipRW struct {
+	http.ResponseWriter
+	gz      *gzip.Writer
+	started bool
+	skip    bool
+}
+
+func (g *gzipRW) start() {
+	if g.started {
+		return
+	}
+	g.started = true
+	if g.Header().Get("Content-Encoding") != "" { // handler pre-compressed
+		g.skip = true
+		return
+	}
+	g.Header().Set("Content-Encoding", "gzip")
+	g.Header().Del("Content-Length")
+	g.gz = gzip.NewWriter(g.ResponseWriter)
+}
+
+func (g *gzipRW) WriteHeader(code int) {
+	g.start()
+	g.ResponseWriter.WriteHeader(code)
+}
+
+func (g *gzipRW) Write(b []byte) (int, error) {
+	g.start()
+	if g.skip {
+		return g.ResponseWriter.Write(b)
+	}
+	return g.gz.Write(b)
+}
+
+// gzipped compresses responses when the client accepts it; SSE and file
+// serving are excluded (long-lived/Range streams, already-compressed art).
+func gzipped(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") ||
+			p == "/api/events" ||
+			strings.HasPrefix(p, "/api/stream/") ||
+			strings.HasPrefix(p, "/api/art/") {
+			h.ServeHTTP(w, r)
+			return
+		}
+		grw := &gzipRW{ResponseWriter: w}
+		defer func() {
+			if grw.gz != nil {
+				grw.gz.Close()
+			}
+		}()
+		h.ServeHTTP(grw, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -106,13 +190,16 @@ func (h *Hub) Close() {
 // Publish sends an SSE frame to all subscribers; slow ones drop frames
 // (progress events are refreshed constantly, losing one is harmless).
 func (h *Hub) Publish(event string, data any) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.subs) == 0 { // nobody listening: skip the marshal/format entirely
+		return
+	}
 	b, err := json.Marshal(data)
 	if err != nil {
 		return
 	}
 	frame := []byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, b))
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	for ch := range h.subs {
 		select {
 		case ch <- frame:

@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"aria/internal/repo"
@@ -38,7 +37,6 @@ type playRef struct {
 func init() { register(registerPlays) }
 
 func registerPlays(mux *http.ServeMux, d *Deps) {
-	var inserts atomic.Int64 // trim throttle: every 100th insert (and the first after boot)
 	mux.HandleFunc("POST /api/plays", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {
 			TrackID   json.RawMessage `json:"trackId"`
@@ -74,18 +72,24 @@ func registerPlays(mux *http.ServeMux, d *Deps) {
 			fail(w, err)
 			return
 		}
-		if inserts.Add(1)%100 == 1 {
-			if err := d.Plays.Trim(r.Context(), 20000); err != nil {
-				log.Printf("plays trim: %v", err)
-			}
-		}
+		// no trim: play history is kept forever (the legacy 20k cap silently
+		// turned all-time stats into a rolling window); stats aggregate in SQL
 		go scrobble(d, t)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) { stats(w, r, d) })
 
-	mux.HandleFunc("GET /api/newreleases", func(w http.ResponseWriter, r *http.Request) { newReleases(w, r, d) })
+	// memoized: recompute scans 100k tracks + every artist discography blob
+	var nrMemo memo[[]release]
+	mux.HandleFunc("GET /api/newreleases", func(w http.ResponseWriter, r *http.Request) {
+		out, err := nrMemo.get(time.Minute, func() ([]release, error) { return newReleases(r.Context(), d) })
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
 }
 
 // scrobble fires a ListenBrainz submit with edits overlaid so fixed titles
@@ -153,6 +157,11 @@ func scrobble(d *Deps, t *repo.Track) {
 	}
 }
 
+// stats aggregates entirely in SQL: the plays table is unbounded (no trim),
+// so per-request work must scale with the result size, not history size.
+// Legacy semantics preserved: stale trackIds (files gone) count in
+// totalPlays/week/month plays only; ISO timestamps compare lexicographically;
+// ties rank by first-ever play (MIN(p.id) = legacy Map insertion order).
 func stats(w http.ResponseWriter, r *http.Request, d *Deps) {
 	ctx := r.Context()
 	pid := r.URL.Query().Get("profileId")
@@ -167,100 +176,14 @@ func stats(w http.ResponseWriter, r *http.Request, d *Deps) {
 			return
 		}
 	}
-	plays, err := d.Plays.List(ctx, pid)
-	if err != nil {
-		fail(w, err)
-		return
-	}
 
-	type tinfo struct {
-		dur             float64
-		albumID, artist string
-	}
-	rows, err := d.DB.QueryContext(ctx, `SELECT id, duration, albumId, artist FROM tracks`)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	byID := map[string]tinfo{}
-	for rows.Next() {
-		var id string
-		var dur sql.NullFloat64
-		var ti tinfo
-		if err := rows.Scan(&id, &dur, &ti.albumID, &ti.artist); err != nil {
-			rows.Close()
-			fail(w, err)
-			return
-		}
-		ti.dur = dur.Float64
-		byID[id] = ti
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		fail(w, err)
-		return
-	}
+	// every query filters (?1='' OR p.profileId=?1); cutoffs bind as ?2/?3
+	now := time.Now().UTC()
+	weekCut := now.Add(-7 * 24 * time.Hour).Format("2006-01-02T15:04:05.000Z")
+	monthCut := now.Add(-30 * 24 * time.Hour).Format("2006-01-02T15:04:05.000Z")
+	const scope = `(?1 = '' OR p.profileId = ?1)`
+	const known = `plays p JOIN tracks t ON t.id = p.trackId` // stale plays excluded
 
-	// stale trackIds (files gone from disk) count in totalPlays only
-	known := make([]repo.Play, 0, len(plays))
-	for _, p := range plays {
-		if _, ok := byID[p.TrackID]; ok {
-			known = append(known, p)
-		}
-	}
-
-	type agg struct {
-		count  int
-		lastAt string
-	}
-	var totalSeconds float64
-	trackAgg := map[string]*agg{}
-	albumAgg := map[string]int{}
-	artistAgg := map[string]int{}
-	var trackOrder, albumOrder, artistOrder []string // first-seen order = legacy Map insertion order
-	for _, p := range known {
-		t := byID[p.TrackID]
-		totalSeconds += t.dur
-		ta := trackAgg[p.TrackID]
-		if ta == nil {
-			ta = &agg{}
-			trackAgg[p.TrackID] = ta
-			trackOrder = append(trackOrder, p.TrackID)
-		}
-		ta.count++
-		if p.At > ta.lastAt { // ISO strings compare lexicographically
-			ta.lastAt = p.At
-		}
-		if _, ok := albumAgg[t.albumID]; !ok {
-			albumOrder = append(albumOrder, t.albumID)
-		}
-		albumAgg[t.albumID]++
-		if t.artist != "" {
-			if _, ok := artistAgg[t.artist]; !ok {
-				artistOrder = append(artistOrder, t.artist)
-			}
-			artistAgg[t.artist]++
-		}
-	}
-
-	recent := []playRef{}
-	seen := map[string]bool{}
-	for i := len(known) - 1; i >= 0 && len(recent) < 50; i-- {
-		p := known[i]
-		if !seen[p.TrackID] {
-			seen[p.TrackID] = true
-			recent = append(recent, playRef{ID: p.TrackID, At: p.At})
-		}
-	}
-
-	// R4: rolling windows (play counts over all scoped plays; seconds/topArtist
-	// need known tracks). Unparseable timestamps fall out, like NaN did.
-	now := time.Now()
-	weekCut, monthCut := now.Add(-7*24*time.Hour), now.Add(-30*24*time.Hour)
-	atOf := func(p repo.Play) (time.Time, bool) {
-		t, err := time.Parse(time.RFC3339, p.At)
-		return t, err == nil
-	}
 	type window struct {
 		Plays   int `json:"plays"`
 		Seconds int `json:"seconds"`
@@ -274,52 +197,45 @@ func stats(w http.ResponseWriter, r *http.Request, d *Deps) {
 		window
 		TopArtist *artistStat `json:"topArtist"`
 	}{}
-	var weekSec, monthSec float64
-	monthArtists := map[string]int{}
-	var monthArtistOrder []string
-	for _, p := range plays {
-		if at, ok := atOf(p); ok {
-			if !at.Before(weekCut) {
-				week.Plays++
-			}
-			if !at.Before(monthCut) {
-				month.Plays++
-			}
-		}
-	}
-	for _, p := range known {
-		at, ok := atOf(p)
-		if !ok || at.Before(monthCut) {
-			continue
-		}
-		t := byID[p.TrackID]
-		monthSec += t.dur
-		if !at.Before(weekCut) {
-			weekSec += t.dur
-		}
-		if t.artist != "" {
-			if _, ok := monthArtists[t.artist]; !ok {
-				monthArtistOrder = append(monthArtistOrder, t.artist)
-			}
-			monthArtists[t.artist]++
-		}
-	}
-	week.Seconds = int(math.Round(weekSec))
-	month.Seconds = int(math.Round(monthSec))
-	sort.SliceStable(monthArtistOrder, func(i, j int) bool {
-		return monthArtists[monthArtistOrder[i]] > monthArtists[monthArtistOrder[j]]
-	})
-	if len(monthArtistOrder) > 0 {
-		n := monthArtistOrder[0]
-		month.TopArtist = &artistStat{Name: n, Count: monthArtists[n]}
-	}
 
-	// raw 30-day history of known tracks — the client buckets in its own timezone
-	history := []playRef{}
-	for _, p := range known {
-		if at, ok := atOf(p); ok && !at.Before(monthCut) {
-			history = append(history, playRef{ID: p.TrackID, At: p.At})
+	var totalPlays, uniqueTracks int
+	var totalSec, weekSec, monthSec float64
+	err := d.DB.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(p.at >= ?2), 0), COALESCE(SUM(p.at >= ?3), 0)
+		FROM plays p WHERE `+scope, pid, weekCut, monthCut).Scan(&totalPlays, &week.Plays, &month.Plays)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	err = d.DB.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT p.trackId), COALESCE(SUM(t.duration), 0),
+		       COALESCE(SUM(CASE WHEN p.at >= ?2 THEN t.duration END), 0),
+		       COALESCE(SUM(CASE WHEN p.at >= ?3 THEN t.duration END), 0)
+		FROM `+known+` WHERE `+scope, pid, weekCut, monthCut).Scan(&uniqueTracks, &totalSec, &weekSec, &monthSec)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	week.Seconds, month.Seconds = int(math.Round(weekSec)), int(math.Round(monthSec))
+
+	collect := func(dst func(*sql.Rows) error, q string, args ...any) bool {
+		rows, err := d.DB.QueryContext(ctx, q, args...)
+		if err != nil {
+			fail(w, err)
+			return false
 		}
+		defer rows.Close()
+		for rows.Next() {
+			if err := dst(rows); err != nil {
+				fail(w, err)
+				return false
+			}
+		}
+		if err := rows.Err(); err != nil {
+			fail(w, err)
+			return false
+		}
+		return true
 	}
 
 	type trackStat struct {
@@ -327,36 +243,98 @@ func stats(w http.ResponseWriter, r *http.Request, d *Deps) {
 		Count  int    `json:"count"`
 		LastAt string `json:"lastAt"`
 	}
-	sort.SliceStable(trackOrder, func(i, j int) bool {
-		return trackAgg[trackOrder[i]].count > trackAgg[trackOrder[j]].count
-	})
 	topTracks := []trackStat{}
-	for _, id := range trackOrder[:min(50, len(trackOrder))] {
-		topTracks = append(topTracks, trackStat{ID: id, Count: trackAgg[id].count, LastAt: trackAgg[id].lastAt})
+	if !collect(func(rows *sql.Rows) error {
+		var t trackStat
+		if err := rows.Scan(&t.ID, &t.Count, &t.LastAt); err != nil {
+			return err
+		}
+		topTracks = append(topTracks, t)
+		return nil
+	}, `SELECT p.trackId, COUNT(*) AS c, MAX(p.at) FROM `+known+` WHERE `+scope+`
+	    GROUP BY p.trackId ORDER BY c DESC, MIN(p.id) LIMIT 50`, pid) {
+		return
 	}
-	sort.SliceStable(albumOrder, func(i, j int) bool { return albumAgg[albumOrder[i]] > albumAgg[albumOrder[j]] })
+
 	type albumStat struct {
 		AlbumID string `json:"albumId"`
 		Count   int    `json:"count"`
 	}
 	topAlbums := []albumStat{}
-	for _, id := range albumOrder[:min(50, len(albumOrder))] {
-		topAlbums = append(topAlbums, albumStat{AlbumID: id, Count: albumAgg[id]})
+	if !collect(func(rows *sql.Rows) error {
+		var a albumStat
+		if err := rows.Scan(&a.AlbumID, &a.Count); err != nil {
+			return err
+		}
+		topAlbums = append(topAlbums, a)
+		return nil
+	}, `SELECT t.albumId, COUNT(*) AS c FROM `+known+` WHERE `+scope+`
+	    GROUP BY t.albumId ORDER BY c DESC, MIN(p.id) LIMIT 50`, pid) {
+		return
 	}
-	sort.SliceStable(artistOrder, func(i, j int) bool { return artistAgg[artistOrder[i]] > artistAgg[artistOrder[j]] })
+
 	topArtists := []artistStat{}
-	for _, n := range artistOrder[:min(50, len(artistOrder))] {
-		topArtists = append(topArtists, artistStat{Name: n, Count: artistAgg[n]})
+	if !collect(func(rows *sql.Rows) error {
+		var a artistStat
+		if err := rows.Scan(&a.Name, &a.Count); err != nil {
+			return err
+		}
+		topArtists = append(topArtists, a)
+		return nil
+	}, `SELECT t.artist, COUNT(*) AS c FROM `+known+` WHERE `+scope+` AND t.artist <> ''
+	    GROUP BY t.artist ORDER BY c DESC, MIN(p.id) LIMIT 50`, pid) {
+		return
+	}
+
+	if !collect(func(rows *sql.Rows) error {
+		var a artistStat
+		if err := rows.Scan(&a.Name, &a.Count); err != nil {
+			return err
+		}
+		month.TopArtist = &a
+		return nil
+	}, `SELECT t.artist, COUNT(*) AS c FROM `+known+` WHERE `+scope+` AND p.at >= ?2 AND t.artist <> ''
+	    GROUP BY t.artist ORDER BY c DESC, MIN(p.id) LIMIT 1`, pid, monthCut) {
+		return
+	}
+
+	// newest distinct known tracks; p.at rides along from the MAX(p.id) row
+	// (SQLite bare-column-with-MAX guarantee)
+	recent := []playRef{}
+	if !collect(func(rows *sql.Rows) error {
+		var p playRef
+		var mid int64
+		if err := rows.Scan(&p.ID, &p.At, &mid); err != nil {
+			return err
+		}
+		recent = append(recent, p)
+		return nil
+	}, `SELECT p.trackId, p.at, MAX(p.id) AS mid FROM `+known+` WHERE `+scope+`
+	    GROUP BY p.trackId ORDER BY mid DESC LIMIT 50`, pid) {
+		return
+	}
+
+	// raw 30-day history of known tracks — the client buckets in its own timezone
+	history := []playRef{}
+	if !collect(func(rows *sql.Rows) error {
+		var p playRef
+		if err := rows.Scan(&p.ID, &p.At); err != nil {
+			return err
+		}
+		history = append(history, p)
+		return nil
+	}, `SELECT p.trackId, p.at FROM `+known+` WHERE `+scope+` AND p.at >= ?2 ORDER BY p.id`, pid, monthCut) {
+		return
 	}
 
 	resp := map[string]any{
 		"profileId":    nil,
 		"history":      history,
-		"totalPlays":   len(plays),
-		"totalSeconds": int(math.Round(totalSeconds)),
+		"totalPlays":   totalPlays,
+		"totalSeconds": int(math.Round(totalSec)),
 		"week":         week,
 		"month":        month,
-		"uniqueTracks": len(trackAgg),
+		"uniqueTracks": uniqueTracks,
 		"topTracks":    topTracks,
 		"topAlbums":    topAlbums,
 		"topArtists":   topArtists,
@@ -368,31 +346,45 @@ func stats(w http.ResponseWriter, r *http.Request, d *Deps) {
 	// R7: full per-track counts for the played/never-played filter, opt-in only
 	if r.URL.Query().Get("counts") == "1" {
 		pc := map[string]int{}
-		for _, p := range plays {
-			pc[p.TrackID]++
+		if !collect(func(rows *sql.Rows) error {
+			var id string
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				return err
+			}
+			pc[id] = n
+			return nil
+		}, `SELECT p.trackId, COUNT(*) FROM plays p WHERE `+scope+` GROUP BY p.trackId`, pid) {
+			return
 		}
 		resp["playCounts"] = pc
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
+type release struct {
+	Artist string  `json:"artist"`
+	Title  string  `json:"title"`
+	Cover  *string `json:"cover"`
+	Date   string  `json:"date"`
+	Type   string  `json:"type"`
+	n      string
+}
+
 // newReleases: recently released, not-in-library items from the cached Deezer
 // discographies (enrich_cache kind "artist", field "discography"). Cache only —
 // no network; cold cache or empty library just yields [].
-func newReleases(w http.ResponseWriter, r *http.Request, d *Deps) {
-	ctx := r.Context()
+func newReleases(ctx context.Context, d *Deps) ([]release, error) {
 	rows, err := d.DB.QueryContext(ctx, `SELECT DISTINCT albumArtist, album FROM tracks WHERE albumArtist <> ''`)
 	if err != nil {
-		fail(w, err)
-		return
+		return nil, err
 	}
 	libTitles := map[string]map[string]bool{} // albumArtist -> set of normTitle(owned albums)
 	for rows.Next() {
 		var aa, al string
 		if err := rows.Scan(&aa, &al); err != nil {
 			rows.Close()
-			fail(w, err)
-			return
+			return nil, err
 		}
 		if libTitles[aa] == nil {
 			libTitles[aa] = map[string]bool{}
@@ -401,14 +393,12 @@ func newReleases(w http.ResponseWriter, r *http.Request, d *Deps) {
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		fail(w, err)
-		return
+		return nil, err
 	}
 
 	entries, err := d.EnrichCache.ListKind(ctx, "artist")
 	if err != nil {
-		fail(w, err)
-		return
+		return nil, err
 	}
 	artists := make([]string, 0, len(entries))
 	for name := range entries {
@@ -418,14 +408,6 @@ func newReleases(w http.ResponseWriter, r *http.Request, d *Deps) {
 	}
 	sort.Strings(artists) // map order is random; fix it for deterministic ties
 
-	type release struct {
-		Artist string  `json:"artist"`
-		Title  string  `json:"title"`
-		Cover  *string `json:"cover"`
-		Date   string  `json:"date"`
-		Type   string  `json:"type"`
-		n      string
-	}
 	dateRE := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	now := time.Now()
 	cutoff := now.Add(-180 * 24 * time.Hour)
@@ -484,5 +466,5 @@ func newReleases(w http.ResponseWriter, r *http.Request, d *Deps) {
 			break
 		}
 	}
-	writeJSON(w, http.StatusOK, picked)
+	return picked, nil
 }
