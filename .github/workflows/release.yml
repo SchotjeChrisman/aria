@@ -3,6 +3,7 @@ name: release-builds
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 defaults:
   run:
@@ -10,6 +11,7 @@ defaults:
 
 jobs:
   docker:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,6 +46,7 @@ jobs:
       - name: Package
         run: tar -C build/linux/x64/release/bundle -czf aria-linux-x64.tar.gz .
       - name: Upload to release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" aria-linux-x64.tar.gz --clobber
@@ -66,6 +69,7 @@ jobs:
       - name: Package
         run: ditto -c -k --keepParent build/macos/Build/Products/Release/aria.app aria-macos.zip
       - name: Upload to release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" aria-macos.zip --clobber
@@ -95,6 +99,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: flutter build apk --release
       - name: Upload to release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -1,8 +1,22 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release signing: env vars on CI, ~/.keys/aria-key.properties locally,
+// debug keys as last resort so `flutter run --release` still works anywhere.
+val keyProps = Properties()
+val keyPropsFile = file("${System.getProperty("user.home")}/.keys/aria-key.properties")
+if (keyPropsFile.exists()) {
+    keyProps.load(FileInputStream(keyPropsFile))
+}
+val ksFile: String? = System.getenv("ANDROID_KEYSTORE_PATH") ?: keyProps.getProperty("storeFile")
+val ksPass: String? = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: keyProps.getProperty("storePassword")
+val ksAlias: String? = System.getenv("ANDROID_KEY_ALIAS") ?: keyProps.getProperty("keyAlias")
 
 android {
     namespace = "dev.aria.aria"
@@ -24,16 +38,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
-
-    // Release signing: env vars on CI, ~/.keys/aria-key.properties locally,
-    // debug keys as last resort so `flutter run --release` still works anywhere.
-    // Not kotlin's .apply{} — inside this block Gradle resolves that to plugin-apply
-    val keyProps = java.util.Properties()
-    val keyPropsFile = file("${System.getProperty("user.home")}/.keys/aria-key.properties")
-    if (keyPropsFile.exists()) keyPropsFile.inputStream().use { keyProps.load(it) }
-    val ksFile = System.getenv("ANDROID_KEYSTORE_PATH") ?: keyProps.getProperty("storeFile")
-    val ksPass = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: keyProps.getProperty("storePassword")
-    val ksAlias = System.getenv("ANDROID_KEY_ALIAS") ?: keyProps.getProperty("keyAlias")
 
     if (ksFile != null && ksPass != null && ksAlias != null) {
         signingConfigs.create("release") {
