@@ -29,10 +29,9 @@ func track(id, path, title, artist, album string) Track {
 	}
 }
 
-func TestTracksUpsertPreservesAddedAtAndSyncsFTS(t *testing.T) {
+func TestTracksUpsertPreservesAddedAt(t *testing.T) {
 	d := testDB(t)
 	r := NewTracks(d)
-	s := NewSearch(d)
 	ctx := context.Background()
 
 	t1 := track("id1", "a/one.flac", "Moonlight Sonata", "Beethoven", "Sonatas")
@@ -63,39 +62,11 @@ func TestTracksUpsertPreservesAddedAtAndSyncsFTS(t *testing.T) {
 	if got.Year == nil || *got.Year != 1801 {
 		t.Errorf("year = %v, want 1801", got.Year)
 	}
-
-	// FTS reflects the update: old title gone, new one found
-	for _, tc := range []struct {
-		q    string
-		want []string
-	}{
-		{"moonlight", []string{}},
-		{"piano sonata", []string{"id1"}},
-		{"pian", []string{"id1"}}, // prefix match
-		{"debussy", []string{"id2"}},
-		{"clair", []string{"id2"}},
-		{`son"; DROP TABLE tracks; --`, []string{}}, // operators neutralized: no error, extra tokens just AND-fail
-	} {
-		ids, err := s.Tracks(ctx, tc.q, 10)
-		if err != nil {
-			t.Fatalf("search %q: %v", tc.q, err)
-		}
-		if len(ids) != len(tc.want) {
-			t.Errorf("search %q = %v, want %v", tc.q, ids, tc.want)
-			continue
-		}
-		for i := range ids {
-			if ids[i] != tc.want[i] {
-				t.Errorf("search %q = %v, want %v", tc.q, ids, tc.want)
-			}
-		}
-	}
 }
 
-func TestTracksDeleteNotInAndFTS(t *testing.T) {
+func TestTracksDeleteNotIn(t *testing.T) {
 	d := testDB(t)
 	r := NewTracks(d)
-	s := NewSearch(d)
 	ctx := context.Background()
 
 	if err := r.UpsertAll(ctx, []Track{
@@ -111,9 +82,6 @@ func TestTracksDeleteNotInAndFTS(t *testing.T) {
 	}
 	if got, _ := r.Count(ctx); got != 2 {
 		t.Errorf("count = %d, want 2", got)
-	}
-	if ids, _ := s.Tracks(ctx, "beta", 10); len(ids) != 0 {
-		t.Errorf("deleted track still in fts: %v", ids)
 	}
 	if ts, err := r.ByAlbum(ctx, "al-X"); err != nil || len(ts) != 1 || ts[0].ID != "id1" {
 		t.Errorf("byAlbum = %v, %v; want [id1]", ts, err)

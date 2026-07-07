@@ -4,7 +4,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -47,7 +49,7 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	body := http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	err := json.NewDecoder(body).Decode(dst)
-	if err != nil && err.Error() == "EOF" {
+	if errors.Is(err, io.EOF) {
 		return nil
 	}
 	return err

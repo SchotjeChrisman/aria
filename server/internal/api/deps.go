@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"sync"
 
 	"aria/internal/config"
 	"aria/internal/repo"
@@ -39,11 +40,24 @@ type Deps struct {
 	EnrichCache *repo.Enrich
 	Settings    *repo.Settings
 	Radio       *repo.Radio
-	Search      *repo.Search
 
 	Scanner  Scanner
 	Enricher Enricher
 	Events   *Hub
+
+	// cached merged /api/tracks view (built lazily by mergedTracks in
+	// library.go; mutators call InvalidateTracks)
+	tracksMu   sync.Mutex
+	tracksView []map[string]any
+}
+
+// InvalidateTracks drops the cached merged /api/tracks view. Every mutation
+// that feeds the merge (scan/enrich done, edits, reidentify, tags) calls it;
+// the next read rebuilds lazily.
+func (d *Deps) InvalidateTracks() {
+	d.tracksMu.Lock()
+	d.tracksView = nil
+	d.tracksMu.Unlock()
 }
 
 // NewDeps wires all repos and the SSE hub; Scanner/Enricher stay nil until
@@ -64,7 +78,6 @@ func NewDeps(db *sql.DB, cfg config.Config, version string) *Deps {
 		EnrichCache: repo.NewEnrich(db),
 		Settings:    repo.NewSettings(db),
 		Radio:       repo.NewRadio(db),
-		Search:      repo.NewSearch(db),
 
 		Events: NewHub(),
 	}

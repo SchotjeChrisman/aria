@@ -46,7 +46,7 @@ func main() {
 	deps.Scanner = scanner.New(cfg.MusicDir, cfg.DataDir, deps.Tracks, deps.Albums, func(done, total int) {
 		deps.Events.Publish("scan", map[string]int{"done": done, "total": total})
 	})
-	deps.Enricher = enrich.New(deps.Tracks, deps.EnrichCache, cfg.DataDir)
+	deps.Enricher = enrich.New(ctx, deps.Tracks, deps.EnrichCache, cfg.DataDir)
 
 	if err := deps.Profiles.EnsureDefault(ctx); err != nil {
 		log.Fatalf("profiles: %v", err)
@@ -69,9 +69,15 @@ func main() {
 		if err := deps.Enricher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("enrich: %v", err)
 		}
+		deps.InvalidateTracks() // enrichment feeds credits/hasArt into /api/tracks
 	}()
 
-	srv := &http.Server{Addr: ":" + cfg.Port, Handler: api.New(deps)}
+	srv := &http.Server{
+		Addr: ":" + cfg.Port, Handler: api.New(deps),
+		// no ReadTimeout/WriteTimeout: /api/events is a long-lived SSE stream
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	srv.RegisterOnShutdown(deps.Events.Close) // SSE streams must not block Shutdown
 	go func() {
 		log.Printf("aria-server on :%s, music=%s", cfg.Port, cfg.MusicDir)

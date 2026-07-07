@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"aria/internal/repo"
@@ -37,6 +38,7 @@ type playRef struct {
 func init() { register(registerPlays) }
 
 func registerPlays(mux *http.ServeMux, d *Deps) {
+	var inserts atomic.Int64 // trim throttle: every 100th insert (and the first after boot)
 	mux.HandleFunc("POST /api/plays", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {
 			TrackID   json.RawMessage `json:"trackId"`
@@ -72,8 +74,10 @@ func registerPlays(mux *http.ServeMux, d *Deps) {
 			fail(w, err)
 			return
 		}
-		if err := d.Plays.Trim(r.Context(), 20000); err != nil {
-			log.Printf("plays trim: %v", err)
+		if inserts.Add(1)%100 == 1 {
+			if err := d.Plays.Trim(r.Context(), 20000); err != nil {
+				log.Printf("plays trim: %v", err)
+			}
 		}
 		go scrobble(d, t)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

@@ -188,6 +188,7 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		d.InvalidateTracks() // tag names/chains annotate the merged view
 		tag.Name, tag.Parent = name, parent
 		writeJSON(w, http.StatusOK, tag)
 	})
@@ -206,6 +207,7 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		d.InvalidateTracks()
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 
@@ -257,6 +259,7 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		d.InvalidateTracks()
 		fresh, err := d.Tags.ByID(r.Context(), tag.ID)
 		if err != nil || fresh == nil {
 			httpError(w, http.StatusInternalServerError, "internal error")
@@ -287,6 +290,7 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		d.InvalidateTracks()
 		fresh, err := d.Tags.ByID(r.Context(), tag.ID)
 		if err != nil || fresh == nil {
 			httpError(w, http.StatusInternalServerError, "internal error")

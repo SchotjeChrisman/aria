@@ -17,11 +17,17 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 			t.Fatal("no migrations recorded")
 		}
 		for _, table := range []string{"tracks", "albums", "tags", "tag_items", "playlists",
-			"playlist_tracks", "plays", "profiles", "edits", "enrich_cache", "settings", "radio", "tracks_fts"} {
+			"playlist_tracks", "plays", "profiles", "edits", "enrich_cache", "settings", "radio"} {
 			var name string
 			if err := d.QueryRow(`SELECT name FROM sqlite_master WHERE name = ?`, table).Scan(&name); err != nil {
 				t.Errorf("missing table %s: %v", table, err)
 			}
+		}
+		// 002_drop_fts removed the dead search index and its triggers
+		var fts int
+		if err := d.QueryRow(`SELECT COUNT(*) FROM sqlite_master
+			WHERE name IN ('tracks_fts', 'tracks_ai', 'tracks_ad', 'tracks_au')`).Scan(&fts); err != nil || fts != 0 {
+			t.Errorf("fts leftovers = %d, %v; want 0", fts, err)
 		}
 		var mode string
 		if err := d.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil || mode != "wal" {

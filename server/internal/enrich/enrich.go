@@ -139,6 +139,7 @@ type Enricher struct {
 	tracks  *repo.Tracks
 	cache   *repo.Enrich
 	dataDir string
+	root    context.Context // app lifetime; Warm's goroutines derive from it
 	log     func(string)
 
 	pc   *politeClient // binary fetches (Cover Art Archive, Deezer cover files)
@@ -154,18 +155,44 @@ type Enricher struct {
 	done    int
 	total   int
 	warming map[string]bool
+
+	// per-artist-name locks: get→modify→put on one name is serialized across
+	// Run/Person/Warm/Reidentify so concurrent writers can't drop fields
+	namesMu   sync.Mutex
+	nameLocks map[string]*sync.Mutex
 }
 
-func New(tracks *repo.Tracks, cache *repo.Enrich, dataDir string) *Enricher {
+// New wires an Enricher; root is the app-lifetime context (Warm's background
+// goroutines derive from it so shutdown cancels outbound calls).
+func New(root context.Context, tracks *repo.Tracks, cache *repo.Enrich, dataDir string) *Enricher {
 	os.MkdirAll(filepath.Join(dataDir, "art"), 0o755)
+	if root == nil {
+		root = context.Background()
+	}
 	return &Enricher{
-		tracks: tracks, cache: cache, dataDir: dataDir,
+		tracks: tracks, cache: cache, dataDir: dataDir, root: root,
 		pc: newPoliteClient(), mb: NewMB(),
 		dz: NewDeezer(), wiki: NewWikipedia(), oo: NewOpenOpus(), lrc: NewLRCLib(),
-		log:     func(m string) { log.Printf("enrich: %s", m) },
-		phase:   "idle",
-		warming: map[string]bool{},
+		log:       func(m string) { log.Printf("enrich: %s", m) },
+		phase:     "idle",
+		warming:   map[string]bool{},
+		nameLocks: map[string]*sync.Mutex{},
 	}
+}
+
+// lockName acquires the per-name lock (created on first use, kept forever —
+// the name set is bounded by the library) and returns its unlock func.
+// Callers must not nest locks; the enrich helpers themselves never lock.
+func (e *Enricher) lockName(name string) func() {
+	e.namesMu.Lock()
+	mu := e.nameLocks[name]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		e.nameLocks[name] = mu
+	}
+	e.namesMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
 }
 
 func (e *Enricher) Status() any {
@@ -265,7 +292,9 @@ func (e *Enricher) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		unlock := e.lockName(n)
 		e.enrichArtist(ctx, n, artistMbid[n])
+		unlock()
 		e.step()
 	}
 
@@ -284,9 +313,11 @@ func (e *Enricher) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		unlock := e.lockName(n)
 		if a := e.artistGet(ctx, n); a != nil {
 			e.refreshDiscography(ctx, n, a)
 		}
+		unlock()
 		e.step()
 	}
 
@@ -358,7 +389,9 @@ func (e *Enricher) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		unlock := e.lockName(n)
 		e.enrichArtist(ctx, n, "")
+		unlock()
 		e.step()
 	}
 
@@ -386,6 +419,7 @@ func (e *Enricher) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		unlock := e.lockName(n)
 		if a := e.artistGet(ctx, n); a != nil {
 			if img := e.wikiImage(ctx, n); img != "" {
 				a.Image, a.ImgSrc = img, "wikipedia"
@@ -393,6 +427,7 @@ func (e *Enricher) Run(ctx context.Context) error {
 			a.ImgCheckedAt = nowISO() // success, miss or error: never retried
 			e.artistPut(ctx, n, a)
 		}
+		unlock()
 		e.step()
 	}
 
@@ -745,6 +780,7 @@ func (e *Enricher) enrichComposer(ctx context.Context, name string) {
 // serves from cache with lazy discography/band-rel refreshes. nil = MB never
 // heard of it AND we have nothing cached.
 func (e *Enricher) Person(ctx context.Context, name string) (json.RawMessage, error) {
+	defer e.lockName(name)()
 	if needsSimilar(e.artistGet(ctx, name)) {
 		e.enrichArtist(ctx, name, "")
 	}
@@ -894,7 +930,7 @@ func (e *Enricher) Discographies(ctx context.Context) ([]ArtistDiscography, erro
 // Warm is the fire-and-forget warm-up of visible names (viewport-driven
 // browsing depth); returns how many were queued.
 func (e *Enricher) Warm(names []string) int {
-	ctx := context.Background()
+	ctx := e.root // app-lifetime: shutdown cancels in-flight warm-up calls
 	var todo []string
 	for _, n := range names {
 		if needsSimilar(e.artistGet(ctx, n)) {
@@ -913,7 +949,11 @@ func (e *Enricher) Warm(names []string) int {
 	if len(kept) > 0 {
 		go func() {
 			for _, n := range kept {
-				e.enrichArtist(ctx, n, "")
+				if ctx.Err() == nil {
+					unlock := e.lockName(n)
+					e.enrichArtist(ctx, n, "")
+					unlock()
+				}
 				e.mu.Lock()
 				delete(e.warming, n)
 				e.mu.Unlock()
@@ -1017,6 +1057,7 @@ func (e *Enricher) IdentifyArtist(ctx context.Context, name string) ([]ArtistCan
 // ReidentifyArtist fully re-enriches, optionally pinned to the chosen MB
 // artist. nil = re-enrichment yielded nothing (API sends {}).
 func (e *Enricher) ReidentifyArtist(ctx context.Context, name, mbid string) (json.RawMessage, error) {
+	defer e.lockName(name)()
 	if err := e.cache.Delete(ctx, KindArtist, name); err != nil {
 		return nil, err
 	}

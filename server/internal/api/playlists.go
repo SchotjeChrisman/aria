@@ -372,23 +372,34 @@ func evalRule(t, r map[string]any, counts map[string]int) bool {
 
 // ---- routes -----------------------------------------------------------------
 
-// playlistJSON builds the legacy playlist shape: manual playlists carry
-// trackIds, smart ones carry rules.
-func playlistJSON(ctx context.Context, d *Deps, p *repo.Playlist) (map[string]any, error) {
+// playlistView builds the legacy playlist shape: manual playlists carry
+// trackIds (pre-loaded; nil means empty), smart ones carry rules.
+func playlistView(p *repo.Playlist, trackIDs []string) map[string]any {
 	out := map[string]any{
 		"id": p.ID, "profileId": p.ProfileID, "type": p.Type, "name": p.Name,
 		"createdAt": p.CreatedAt, "updatedAt": p.UpdatedAt,
 	}
 	if p.Type == "manual" {
-		ids, err := d.Playlists.TrackIDs(ctx, p.ID)
-		if err != nil {
-			return nil, err
+		if trackIDs == nil {
+			trackIDs = []string{}
 		}
-		out["trackIds"] = ids
+		out["trackIds"] = trackIDs
 	} else {
 		out["rules"] = json.RawMessage(p.Rules)
 	}
-	return out, nil
+	return out
+}
+
+// playlistJSON is the single-playlist variant: loads trackIds itself.
+func playlistJSON(ctx context.Context, d *Deps, p *repo.Playlist) (map[string]any, error) {
+	var ids []string
+	if p.Type == "manual" {
+		var err error
+		if ids, err = d.Playlists.TrackIDs(ctx, p.ID); err != nil {
+			return nil, err
+		}
+	}
+	return playlistView(p, ids), nil
 }
 
 func registerPlaylists(mux *http.ServeMux, d *Deps) {
@@ -420,14 +431,20 @@ func registerPlaylists(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		var manualIDs []string
+		for i := range pls {
+			if pls[i].Type == "manual" {
+				manualIDs = append(manualIDs, pls[i].ID)
+			}
+		}
+		idsBy, err := d.Playlists.TrackIDsFor(r.Context(), manualIDs)
+		if err != nil {
+			httpError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 		out := []map[string]any{}
 		for i := range pls {
-			m, err := playlistJSON(r.Context(), d, &pls[i])
-			if err != nil {
-				httpError(w, http.StatusInternalServerError, "internal error")
-				return
-			}
-			out = append(out, m)
+			out = append(out, playlistView(&pls[i], idsBy[pls[i].ID]))
 		}
 		writeJSON(w, http.StatusOK, out)
 	})

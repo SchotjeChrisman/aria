@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -91,7 +92,11 @@ func registerRadio(mux *http.ServeMux, d *Deps) {
 			return
 		}
 		u, ok := asStr(b.URL)
-		if !ok || !stationURLRE.MatchString(u) {
+		if !ok || len(u) > 2048 || !stationURLRE.MatchString(u) {
+			httpError(w, http.StatusBadRequest, "invalid url")
+			return
+		}
+		if parsed, err := url.Parse(u); err != nil || parsed.Host == "" {
 			httpError(w, http.StatusBadRequest, "invalid url")
 			return
 		}

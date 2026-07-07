@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 
 	"aria/internal/genres"
 	"aria/internal/repo"
+	"aria/internal/scanner"
 )
 
 func init() { register(RegisterLibrary) }
@@ -151,13 +153,38 @@ func releaseType(albumTracks []map[string]any, cachedInfo json.RawMessage) strin
 
 // ---- /api/tracks response (port of server.js tracksResponse) ---------------
 
-// mergedTracks builds the full /api/tracks payload: file tags merged with
+// ptrVal collapses a nullable struct field to its JSON-shaped map value.
+func ptrVal[T any](p *T) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// mergedTracks returns the full /api/tracks payload, served from the Deps
+// cache when clean and rebuilt via buildMergedTracks otherwise. Callers must
+// treat the returned maps as read-only — they are shared across requests.
+func mergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
+	d.tracksMu.Lock()
+	defer d.tracksMu.Unlock()
+	if d.tracksView != nil {
+		return d.tracksView, nil
+	}
+	merged, err := buildMergedTracks(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	d.tracksView = merged
+	return merged, nil
+}
+
+// buildMergedTracks builds the full /api/tracks payload: file tags merged with
 // enrichment credits (enrich_cache kind "track"), hasArt widened by
 // enrichment-fetched art (kind "album"), album edits fanned onto tracks,
 // track edits overlaid (edits beat file tags AND enrichment), path stripped,
 // plus derived releaseType, canonical genres and user tag names. Shared with
 // playlists/stats route files — smart rules evaluate against this shape.
-func mergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
+func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	ts, err := d.Tracks.ListAll(ctx)
 	if err != nil {
 		return nil, err
@@ -210,13 +237,19 @@ func mergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 
 	merged := make([]map[string]any, 0, len(ts))
 	for _, t := range ts {
-		b, err := json.Marshal(t)
-		if err != nil {
-			return nil, err
-		}
-		var m map[string]any
-		if err := json.Unmarshal(b, &m); err != nil {
-			return nil, err
+		// built straight from struct fields ("path" intentionally omitted);
+		// keys mirror the repo.Track json tags
+		m := map[string]any{
+			"id": t.ID, "addedAt": t.AddedAt, "title": t.Title, "artist": t.Artist,
+			"albumArtist": t.AlbumArtist, "album": t.Album, "albumId": t.AlbumID,
+			"trackNo": ptrVal(t.TrackNo), "discNo": ptrVal(t.DiscNo), "year": ptrVal(t.Year),
+			"genre": ptrVal(t.Genre), "composer": ptrVal(t.Composer), "conductor": ptrVal(t.Conductor),
+			"work": ptrVal(t.Work), "movement": ptrVal(t.Movement),
+			"mbAlbumId": ptrVal(t.MBAlbumID), "mbRecordingId": ptrVal(t.MBRecordingID),
+			"mbAlbumArtistId": ptrVal(t.MBAlbumArtistID),
+			"duration":        ptrVal(t.Duration), "format": t.Format,
+			"sampleRate": ptrVal(t.SampleRate), "bitsPerSample": ptrVal(t.BitsPerSample),
+			"channels": ptrVal(t.Channels), "lossless": t.Lossless, "hasArt": t.HasArt,
 		}
 		if raw, ok := enrichTrack[t.ID]; ok {
 			overlay(m, raw) // composer/conductor/orchestra/performers corrections
@@ -283,7 +316,6 @@ func mergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	}
 
 	for _, m := range merged {
-		delete(m, "path")
 		m["releaseType"] = types[str(m["albumId"])]
 		m["genres"] = genres.Split(str(m["genre"]))
 		names := []string{}
@@ -336,15 +368,21 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		}
 		n, err := d.Scanner.Scan(context.Background())
 		if err != nil {
+			if errors.Is(err, scanner.ErrScanRunning) {
+				httpError(w, http.StatusConflict, "scan already running")
+				return
+			}
 			log.Printf("scan failed: %v", err)
 			httpError(w, http.StatusInternalServerError, "scan failed")
 			return
 		}
+		d.InvalidateTracks()
 		if d.Enricher != nil {
 			go func() {
 				if err := d.Enricher.Run(context.Background()); err != nil {
 					log.Printf("enrich: %v", err)
 				}
+				d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
 			}()
 		}
 		writeJSON(w, http.StatusOK, map[string]int{"tracks": n})
@@ -430,13 +468,23 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		writeJSON(w, http.StatusOK, out)
 	})
 
+	// bounds synchronous on-demand Person() calls so a burst of artist-page
+	// requests can't pile up goroutines behind the polite MB rate limit
+	personSem := make(chan struct{}, 4)
 	mux.HandleFunc("GET /api/artist/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		var doc json.RawMessage
 		var err error
 		if od, ok := asOnDemand(d); ok {
+			select {
+			case personSem <- struct{}{}:
+			case <-r.Context().Done():
+				return
+			}
 			// enriches unknown names on demand (~3-6s first time)
-			if doc, err = od.Person(r.Context(), name); err != nil {
+			doc, err = od.Person(r.Context(), name)
+			<-personSem
+			if err != nil {
 				notFound(w)
 				return
 			}

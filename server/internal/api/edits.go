@@ -146,6 +146,7 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 			fail(w, err)
 			return
 		}
+		d.InvalidateTracks() // track/album edits feed the merged /api/tracks view
 		writeJSON(w, http.StatusOK, cur)
 	}
 
@@ -391,6 +392,7 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusBadGateway, "reidentify failed")
 			return
 		}
+		d.InvalidateTracks() // credits/albumInfo were rewritten
 		if nullish(res) {
 			writeJSON(w, http.StatusOK, map[string]any{})
 			return

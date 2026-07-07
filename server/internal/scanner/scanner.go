@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -38,6 +39,10 @@ var losslessFmt = map[string]bool{
 var workRE = regexp.MustCompile(`^(.+)(?::|\s[-–—])\s+((?:[IVXLCDM]+|No\.?\s*\d+|\d+)[.):]\s*.+)$`)
 
 const batchSize = 500
+
+// ErrScanRunning is returned by Scan when another scan holds the run lock;
+// the API maps it to 409.
+var ErrScanRunning = errors.New("scan already running")
 
 type Scanner struct {
 	musicDir, dataDir string
@@ -77,7 +82,9 @@ type fileEntry struct {
 // Scan walks the library, re-parses new/changed files across NumCPU workers,
 // deletes rows for vanished files, rebuilds albums, and returns the track count.
 func (s *Scanner) Scan(ctx context.Context) (int, error) {
-	s.runMu.Lock()
+	if !s.runMu.TryLock() {
+		return 0, ErrScanRunning
+	}
 	defer s.runMu.Unlock()
 
 	artDir := filepath.Join(s.dataDir, "art")

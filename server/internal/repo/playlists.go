@@ -95,6 +95,33 @@ func (r *Playlists) TrackIDs(ctx context.Context, playlistID string) ([]string, 
 	return out, rows.Err()
 }
 
+// TrackIDsFor returns the ordered track ids of many manual playlists in one
+// query; playlists with no tracks have no entry.
+func (r *Playlists) TrackIDsFor(ctx context.Context, playlistIDs []string) (map[string][]string, error) {
+	out := map[string][]string{}
+	if len(playlistIDs) == 0 {
+		return out, nil
+	}
+	ids, err := json.Marshal(playlistIDs)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT playlistId, trackId FROM playlist_tracks
+		WHERE playlistId IN (SELECT value FROM json_each(?)) ORDER BY playlistId, pos`, string(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pid, tid string
+		if err := rows.Scan(&pid, &tid); err != nil {
+			return nil, err
+		}
+		out[pid] = append(out[pid], tid)
+	}
+	return out, rows.Err()
+}
+
 // AddTrack appends a track (duplicates allowed, legacy semantics).
 func (r *Playlists) AddTrack(ctx context.Context, playlistID, trackID string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO playlist_tracks (playlistId, pos, trackId)
