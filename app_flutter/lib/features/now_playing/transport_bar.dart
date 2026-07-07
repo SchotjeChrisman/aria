@@ -5,12 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
-import '../../core/formats.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
 import '../../widgets/format_badge.dart';
 import 'providers.dart';
+import 'seek_bar.dart';
 import 'signal_path.dart';
 
 /// Persistent bottom transport (legacy #now-bar): art + title/artist,
@@ -24,10 +24,6 @@ class TransportBar extends ConsumerStatefulWidget {
 }
 
 class _TransportBarState extends ConsumerState<TransportBar> {
-  /// Non-null while the user drags the seek slider; the engine position
-  /// keeps ticking underneath but must not fight the thumb.
-  double? _dragPos;
-
   @override
   Widget build(BuildContext context) {
     // Keep the engine initialized and the play-report latch alive for the
@@ -58,8 +54,8 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     final radio = track == null ? ref.watch(radioPlaybackProvider) : null;
     final playing =
         ref.watch(playbackStateProvider).value == PlaybackState.playing;
-    final pos = ref.watch(playbackPositionProvider).value ?? 0;
-    final dur = ref.watch(currentDurationProvider);
+    // Position/duration live inside SeekBar so time-pos ticks don't rebuild
+    // the whole bar.
     final fmt = ref.watch(playbackFormatProvider).value;
     final volume = ref.watch(volumeProvider);
     final queue = ref.read(queueProvider.notifier);
@@ -102,174 +98,175 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     );
 
     final bar = Container(
-      height: 84,
       padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s3),
       decoration: BoxDecoration(
         color: c.bgRaised,
         border: Border(top: BorderSide(color: c.line)),
       ),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final w = box.maxWidth;
-          final showSignal = w >= 1000;
-          // Signal path replaces the badge at 1000; below that the badge
-          // needs the right slice (~30% of width) to have room next to the
-          // volume slider and buttons.
-          final showBadge = w >= 900;
+      // Bottom safe-area so the bar clears Android gesture handles, with a
+      // little breathing room even without a system inset.
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: AriaSpace.s2),
+        child: SizedBox(
+          height: 84,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth;
+              final showSignal = w >= 1000;
+              // Signal path replaces the badge at 1000; below that the badge
+              // needs the right slice (~30% of width) to have room next to the
+              // volume slider and buttons.
+              final showBadge = w >= 900;
 
-          // Below 820 the three-column layout is too cramped: seek and meta
-          // each get squeezed into a third of the bar. Stack instead —
-          // full-width seek strip on top, meta + core controls in one row
-          // below, with time labels and the format badge joining as width
-          // allows.
-          if (w < 820) {
-            final roomy = w >= 640;
-            return Column(
-              children: [
-                SizedBox(
-                  height: 26,
-                  child: Row(
-                    children: [
-                      if (roomy && radio == null) _time(_dragPos ?? pos, c),
-                      Expanded(
-                        child: radio != null
-                            ? _seek(0, 0) // disabled — live
-                            : _seek(pos, dur),
-                      ),
-                      if (roomy && radio == null) _time(dur, c),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(child: meta),
-                      if (roomy && track != null) ...[
-                        Flexible(
-                          child: FormatBadge(
-                            format: track.format,
-                            bitsPerSample: fmt?.bitDepth ?? track.bitsPerSample,
-                            sampleRate: fmt?.sampleRate ?? track.sampleRate,
-                            lossless: track.lossless,
-                          ),
-                        ),
-                        const SizedBox(width: AriaSpace.s2),
-                      ],
-                      prevBtn,
-                      playBtn,
-                      nextBtn,
-                      queueBtn,
-                    ],
-                  ),
-                ),
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(flex: 3, child: meta),
-              const SizedBox(width: AriaSpace.s3),
-              Expanded(
-                flex: 4,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+              // Below 820 the three-column layout is too cramped: seek and meta
+              // each get squeezed into a third of the bar. Stack instead —
+              // full-width seek strip on top, meta + core controls in one row
+              // below, with time labels and the format badge joining as width
+              // allows.
+              if (w < 820) {
+                final roomy = w >= 640;
+                return Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [prevBtn, playBtn, nextBtn],
-                    ),
-                    if (radio != null)
-                      Row(
-                        children: [
-                          _time(0, c),
-                          Expanded(child: _seek(0, 0)), // disabled — live
-                          Text(
-                            'LIVE',
-                            style: TextStyle(
-                              fontSize: 12,
-                              letterSpacing: 1,
-                              color: c.accent,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Row(
-                        children: [
-                          _time(_dragPos ?? pos, c),
-                          Expanded(child: _seek(pos, dur)),
-                          _time(dur, c),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AriaSpace.s3),
-              Expanded(
-                flex: 3,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (showSignal) ...[
-                      const Flexible(child: SignalPath()),
-                      const SizedBox(width: AriaSpace.s3),
-                    ] else if (showBadge && radio != null) ...[
-                      Text(
-                        'STREAM',
-                        style: TextStyle(
-                          fontSize: 11,
-                          letterSpacing: 1,
-                          color: c.fgDim,
-                        ),
-                      ),
-                      const SizedBox(width: AriaSpace.s3),
-                    ] else if (showBadge && track != null) ...[
-                      // Actual decoded format from mpv when available,
-                      // tagged format until then — the bit-perfect badge.
-                      Flexible(
-                        child: FormatBadge(
-                          format: track.format,
-                          bitsPerSample: fmt?.bitDepth ?? track.bitsPerSample,
-                          sampleRate: fmt?.sampleRate ?? track.sampleRate,
-                          lossless: track.lossless,
-                        ),
-                      ),
-                      const SizedBox(width: AriaSpace.s3),
-                    ],
                     SizedBox(
-                      width: 130,
+                      height: 26,
+                      child: radio != null
+                          // disabled — live
+                          ? const SeekBar(live: true, showTimes: false)
+                          : SeekBar(showTimes: roomy),
+                    ),
+                    Expanded(
                       child: Row(
                         children: [
-                          Icon(Icons.volume_up, size: 16, color: c.fgDim),
-                          Expanded(
-                            child: _slim(
-                              Slider(
-                                value: volume,
-                                max: 100,
-                                onChanged: (v) =>
-                                    ref.read(volumeProvider.notifier).set(v),
+                          Expanded(child: meta),
+                          if (roomy && track != null) ...[
+                            Flexible(
+                              child: FormatBadge(
+                                format: track.format,
+                                bitsPerSample:
+                                    fmt?.bitDepth ?? track.bitsPerSample,
+                                sampleRate: fmt?.sampleRate ?? track.sampleRate,
+                                lossless: track.lossless,
                               ),
                             ),
-                          ),
+                            const SizedBox(width: AriaSpace.s2),
+                          ],
+                          prevBtn,
+                          playBtn,
+                          nextBtn,
+                          queueBtn,
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.lyrics_outlined),
-                      color: c.fgDim,
-                      tooltip: 'Now playing / lyrics',
-                      onPressed: track == null
-                          ? null
-                          : () => context.push('/now-playing'),
-                    ),
-                    queueBtn,
                   ],
-                ),
-              ),
-            ],
-          );
-        },
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(flex: 3, child: meta),
+                  const SizedBox(width: AriaSpace.s3),
+                  Expanded(
+                    flex: 4,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [prevBtn, playBtn, nextBtn],
+                        ),
+                        if (radio != null)
+                          Row(
+                            children: [
+                              const TimeLabel(0),
+                              // disabled — live
+                              const Expanded(
+                                child: SeekBar(live: true, showTimes: false),
+                              ),
+                              Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  letterSpacing: 1,
+                                  color: c.accent,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          const SeekBar(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AriaSpace.s3),
+                  Expanded(
+                    flex: 3,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (showSignal) ...[
+                          const Flexible(child: SignalPath()),
+                          const SizedBox(width: AriaSpace.s3),
+                        ] else if (showBadge && radio != null) ...[
+                          Text(
+                            'STREAM',
+                            style: TextStyle(
+                              fontSize: 11,
+                              letterSpacing: 1,
+                              color: c.fgDim,
+                            ),
+                          ),
+                          const SizedBox(width: AriaSpace.s3),
+                        ] else if (showBadge && track != null) ...[
+                          // Actual decoded format from mpv when available,
+                          // tagged format until then — the bit-perfect badge.
+                          Flexible(
+                            child: FormatBadge(
+                              format: track.format,
+                              bitsPerSample:
+                                  fmt?.bitDepth ?? track.bitsPerSample,
+                              sampleRate: fmt?.sampleRate ?? track.sampleRate,
+                              lossless: track.lossless,
+                            ),
+                          ),
+                          const SizedBox(width: AriaSpace.s3),
+                        ],
+                        SizedBox(
+                          width: 130,
+                          child: Row(
+                            children: [
+                              Icon(Icons.volume_up, size: 16, color: c.fgDim),
+                              Expanded(
+                                child: _slim(
+                                  Slider(
+                                    value: volume,
+                                    max: 100,
+                                    onChanged: (v) => ref
+                                        .read(volumeProvider.notifier)
+                                        .set(v),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.lyrics_outlined),
+                          color: c.fgDim,
+                          tooltip: 'Now playing / lyrics',
+                          onPressed: track == null
+                              ? null
+                              : () => context.push('/now-playing'),
+                        ),
+                        queueBtn,
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
 
@@ -361,7 +358,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         child: Text('Nothing playing', style: TextStyle(color: c.fgDim)),
       );
     }
-    final artUrl = ref.read(apiClientProvider).artUrl(track.albumId);
+    final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId);
     return InkWell(
       onTap: () => context.push('/now-playing'),
       borderRadius: BorderRadius.circular(AriaRadius.sm),
@@ -395,33 +392,6 @@ class _TransportBarState extends ConsumerState<TransportBar> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _time(double seconds, AriaColors c) => Text(
-    formatDuration(seconds),
-    style: TextStyle(
-      fontSize: 12,
-      color: c.fgDim,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    ),
-  );
-
-  Widget _seek(double pos, double dur) {
-    final enabled = dur > 0;
-    final max = enabled ? dur : 1.0;
-    return _slim(
-      Slider(
-        value: (_dragPos ?? pos).clamp(0.0, max),
-        max: max,
-        onChanged: enabled ? (v) => setState(() => _dragPos = v) : null,
-        onChangeEnd: enabled
-            ? (v) {
-                ref.read(ariaPlayerProvider).seek(v);
-                setState(() => _dragPos = null);
-              }
-            : null,
       ),
     );
   }

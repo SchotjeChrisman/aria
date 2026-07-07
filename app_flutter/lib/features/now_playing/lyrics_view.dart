@@ -6,6 +6,26 @@ import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
 import 'lrc.dart';
 import 'providers.dart';
+import 'transport_bar.dart';
+
+/// Full-screen lyrics, pushed from now-playing (mirrors QueueScreen).
+class LyricsScreen extends StatelessWidget {
+  const LyricsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AriaColors.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: c.bg,
+        elevation: 0,
+        title: Text('Lyrics', style: Theme.of(context).textTheme.titleMedium),
+      ),
+      body: const LyricsView(),
+      bottomNavigationBar: const TransportBar(),
+    );
+  }
+}
 
 /// Lyrics pane for the current track (legacy loadLyrics + syncLyrics):
 /// synced LRC highlights and follows the playing line; plain text scrolls;

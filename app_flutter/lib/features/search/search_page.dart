@@ -6,10 +6,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/connection.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
-import '../../widgets/album_card.dart';
 import '../../widgets/artist_avatar.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/library_cards.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/track_actions.dart';
 import '../../widgets/track_row.dart';
 import 'library_lookup.dart';
@@ -184,7 +185,6 @@ class _ResultsList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final client = ref.watch(apiClientProvider);
     final people = ref.watch(peopleProvider).value ?? const {};
     final queue = ref.read(queueProvider.notifier);
     final current = ref.watch(currentTrackProvider);
@@ -215,46 +215,50 @@ class _ResultsList extends ConsumerWidget {
                   for (final t in tracks)
                     if (t.artist == name || t.albumArtist == name) t,
                 ];
-                return GestureDetector(
-                  onTap: () {
-                    if (selectionTapHandled(
-                      ref,
-                      artistSelectionItem(name, artistTracks()),
-                    )) {
-                      return;
-                    }
-                    context.push(artistPath(name));
-                  },
-                  onSecondaryTapUp: (d) => showAriaContextMenu(
-                    context,
-                    d.globalPosition,
-                    artistMenuItems(
+                return SelectionHighlight(
+                  kind: 'artist',
+                  itemKey: name,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (selectionTapHandled(
+                        ref,
+                        artistSelectionItem(name, artistTracks()),
+                      )) {
+                        return;
+                      }
+                      context.push(artistPath(name));
+                    },
+                    onSecondaryTapUp: (d) => showAriaContextMenu(
                       context,
-                      ref,
-                      name: name,
-                      tracks: artistTracks(),
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ArtistAvatar(
+                      d.globalPosition,
+                      artistMenuItems(
+                        context,
+                        ref,
                         name: name,
-                        imageUrl: people[name],
-                        size: 72,
+                        tracks: artistTracks(),
                       ),
-                      const SizedBox(height: AriaSpace.s2),
-                      SizedBox(
-                        width: 88,
-                        child: Text(
-                          name,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12.5),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ArtistAvatar(
+                          name: name,
+                          imageUrl: people[name],
+                          size: 72,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: AriaSpace.s2),
+                        SizedBox(
+                          width: 88,
+                          child: Text(
+                            name,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12.5),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -304,30 +308,12 @@ class _ResultsList extends ConsumerWidget {
             itemCount: results.albums.length,
             itemBuilder: (context, i) {
               final a = results.albums[i];
-              return AlbumCard(
+              return AlbumGridCard(
+                albumId: a.id,
                 title: a.title,
-                subtitle: a.albumArtist,
-                artUrl: a.hasArt ? client.artUrl(a.id) : null,
-                onTap: () {
-                  if (selectionTapHandled(
-                    ref,
-                    albumSelectionItem(a.id, a.tracks),
-                  )) {
-                    return;
-                  }
-                  context.push(albumPath(a.id));
-                },
-                onSecondary: (pos) => showAriaContextMenu(
-                  context,
-                  pos,
-                  albumMenuItems(
-                    context,
-                    ref,
-                    albumId: a.id,
-                    tracks: a.tracks,
-                    artistName: a.albumArtist,
-                  ),
-                ),
+                artistName: a.albumArtist,
+                tracks: a.tracks,
+                hasArt: a.hasArt,
               );
             },
           ),
@@ -337,32 +323,36 @@ class _ResultsList extends ConsumerWidget {
           Text('Tracks', style: style),
           const SizedBox(height: AriaSpace.s2),
           for (var i = 0; i < results.tracks.length; i++)
-            TrackRow(
-              number: i + 1,
-              title: results.tracks[i].title ?? '',
-              subtitle: [
-                results.tracks[i].artist,
-                results.tracks[i].album,
-              ].nonNulls.join(' · '),
-              duration: results.tracks[i].duration,
-              format: results.tracks[i].format,
-              bitsPerSample: results.tracks[i].bitsPerSample,
-              sampleRate: results.tracks[i].sampleRate,
-              lossless: results.tracks[i].lossless,
-              isCurrent: current?.id == results.tracks[i].id,
-              onTap: () {
-                if (selectionTapHandled(
-                  ref,
-                  trackSelectionItem(results.tracks[i]),
-                )) {
-                  return;
-                }
-                queue.playQueue(results.tracks, i);
-              },
-              onSecondary: (pos) => showAriaContextMenu(
-                context,
-                pos,
-                trackMenuItems(context, ref, results.tracks[i]),
+            SelectionHighlight(
+              kind: 'track',
+              itemKey: results.tracks[i].id,
+              child: TrackRow(
+                number: i + 1,
+                title: results.tracks[i].title ?? '',
+                subtitle: [
+                  results.tracks[i].artist,
+                  results.tracks[i].album,
+                ].nonNulls.join(' · '),
+                duration: results.tracks[i].duration,
+                format: results.tracks[i].format,
+                bitsPerSample: results.tracks[i].bitsPerSample,
+                sampleRate: results.tracks[i].sampleRate,
+                lossless: results.tracks[i].lossless,
+                isCurrent: current?.id == results.tracks[i].id,
+                onTap: () {
+                  if (selectionTapHandled(
+                    ref,
+                    trackSelectionItem(results.tracks[i]),
+                  )) {
+                    return;
+                  }
+                  queue.playQueue(results.tracks, i);
+                },
+                onSecondary: (pos) => showAriaContextMenu(
+                  context,
+                  pos,
+                  trackMenuItems(context, ref, results.tracks[i]),
+                ),
               ),
             ),
         ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -50,6 +51,21 @@ class AriaClient {
 
   // ---- plumbing
 
+  /// Per-request cap so a dead/unreachable server fails fast instead of
+  /// hanging callers forever. The SSE stream ([events]) is exempt — only its
+  /// initial connection is guarded.
+  static const _timeout = Duration(seconds: 15);
+
+  /// Awaits [f] with [_timeout], mapping [TimeoutException] into the normal
+  /// [AriaApiException] flow (statusCode 0 = no response).
+  Future<T> _timed<T>(Future<T> f, String path) async {
+    try {
+      return await f.timeout(_timeout);
+    } on TimeoutException {
+      throw AriaApiException(0, 'request timed out', path: path);
+    }
+  }
+
   Never _throw(http.Response r, String path) {
     String msg = r.body;
     try {
@@ -63,7 +79,7 @@ class AriaClient {
 
   Future<Object?> _json(Future<http.Response> f, String path,
       {bool nullOn404 = false}) async {
-    final r = await f;
+    final r = await _timed(f, path);
     if (r.statusCode == 404 && nullOn404) return null;
     if (r.statusCode < 200 || r.statusCode >= 300) _throw(r, path);
     if (r.body.isEmpty) return null;
@@ -82,8 +98,8 @@ class AriaClient {
       req.headers.addAll(_jsonHeaders);
       req.body = jsonEncode(body);
     }
-    final streamed = await _http.send(req);
-    final r = await http.Response.fromStream(streamed);
+    final r =
+        await _timed(_http.send(req).then(http.Response.fromStream), path);
     if (r.statusCode < 200 || r.statusCode >= 300) _throw(r, path);
     if (r.body.isEmpty) return null;
     return jsonDecode(utf8.decode(r.bodyBytes));
@@ -352,7 +368,9 @@ class AriaClient {
   Stream<AriaEvent> events({String path = '/api/events'}) async* {
     final req = http.Request('GET', _u(path))
       ..headers['Accept'] = 'text/event-stream';
-    final res = await _http.send(req);
+    // Guard only the initial connection; the stream itself is long-lived and
+    // must never be killed by a timeout.
+    final res = await _timed(_http.send(req), path);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw AriaApiException(res.statusCode, 'event stream failed', path: path);
     }

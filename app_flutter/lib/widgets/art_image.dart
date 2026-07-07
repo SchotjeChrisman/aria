@@ -56,6 +56,11 @@ class ArtImage extends StatelessWidget {
           : Image.network(
               url!,
               fit: fit,
+              // Decode at display resolution when the size is known — full
+              // covers in small grids waste memory and jank scrolling.
+              cacheWidth: size == null
+                  ? null
+                  : (size! * MediaQuery.devicePixelRatioOf(context)).round(),
               gaplessPlayback: true,
               errorBuilder: (_, _, _) => fallback,
               frameBuilder: (_, child, frame, wasSync) => wasSync

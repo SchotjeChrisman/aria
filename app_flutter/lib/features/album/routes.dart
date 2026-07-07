@@ -1,20 +1,17 @@
 import 'package:go_router/go_router.dart';
 
-import '../../core/router.dart';
 import 'album_page.dart';
 
-/// Detail page pushed above the shell (no nav tab). The integrator may nest
-/// this under the library branch instead if per-tab back-stacks are wanted.
-final featureEntry = FeatureEntry(
-  routes: [
-    GoRoute(
-      path: '/album/:id',
-      builder: (context, state) => AlbumPage(
-        albumId: decodeAlbumRouteParam(state.pathParameters['id'] ?? ''),
-      ),
+/// Detail routes mounted inside the library/albums shell branch so they
+/// render in the content area, not above the shell.
+final detailRoutes = <RouteBase>[
+  GoRoute(
+    path: '/album/:id',
+    builder: (context, state) => AlbumPage(
+      albumId: decodeAlbumRouteParam(state.pathParameters['id'] ?? ''),
     ),
-  ],
-);
+  ),
+];
 
 String albumPath(String albumId) => '/album/${Uri.encodeComponent(albumId)}';
 

@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/connection.dart';
 import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
-import '../../widgets/album_card.dart';
-import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/library_cards.dart';
 import '../../widgets/new_releases_shelf.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
@@ -207,7 +205,7 @@ class _StatStrip extends StatelessWidget {
   }
 }
 
-class _AlbumShelf extends ConsumerWidget {
+class _AlbumShelf extends StatelessWidget {
   const _AlbumShelf({
     required this.title,
     required this.albums,
@@ -221,35 +219,20 @@ class _AlbumShelf extends ConsumerWidget {
   final Map<String, String> subFor;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final api = ref.watch(apiClientProvider);
+  Widget build(BuildContext context) {
     return Shelf(
       title: title,
       height: 236,
       itemCount: albums.length,
       itemBuilder: (context, i) {
         final a = albums[i];
-        return AlbumCard(
+        return AlbumGridCard(
+          albumId: a.id,
           title: a.title,
-          subtitle: subFor[a.id] ?? a.albumArtist,
-          artUrl: a.hasArt ? api.artUrl(a.id) : null,
-          onTap: () {
-            if (selectionTapHandled(ref, albumSelectionItem(a.id, a.tracks))) {
-              return;
-            }
-            context.push(albumPath(a.id));
-          },
-          onSecondary: (pos) => showAriaContextMenu(
-            context,
-            pos,
-            albumMenuItems(
-              context,
-              ref,
-              albumId: a.id,
-              tracks: a.tracks,
-              artistName: a.albumArtist,
-            ),
-          ),
+          artistName: a.albumArtist,
+          tracks: a.tracks,
+          hasArt: a.hasArt,
+          subtitle: subFor[a.id],
         );
       },
     );

@@ -15,8 +15,7 @@ dependencies:
   go_router: ^16.0.0
   shared_preferences: ^2.5.0
 
-  # Local packages (see PLAN.md). May not exist on disk yet while parallel
-  # agents scaffold them — `flutter pub get` fails until both are present.
+  # Local packages.
   aria_api:
     path: packages/aria_api
   aria_player:

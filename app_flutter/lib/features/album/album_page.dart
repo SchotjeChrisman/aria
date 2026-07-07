@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/tag_picker.dart';
 import '../../widgets/track_actions.dart';
@@ -31,6 +32,7 @@ class AlbumPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
+      appBar: AppBar(),
       body: SafeArea(
         child: ref
             .watch(albumsByIdProvider)
@@ -63,7 +65,6 @@ class _AlbumBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = AriaColors.of(context);
     final api = ref.watch(albumApiProvider);
     final currentId = ref.watch(currentTrackProvider)?.id;
     final queue = ref.read(queueProvider.notifier);
@@ -71,14 +72,6 @@ class _AlbumBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(AriaSpace.s6),
       children: [
-        if (context.canPop())
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => context.pop(),
-              child: Text('← Back', style: TextStyle(color: c.fgDim)),
-            ),
-          ),
         _header(context, ref, api, queue),
         const SizedBox(height: AriaSpace.s4),
         _infoBox(context, ref),
@@ -249,7 +242,10 @@ class _AlbumBody extends ConsumerWidget {
                     onTap: () => openExternal(d.url!),
                     child: Text(
                       'Wikipedia →',
-                      style: TextStyle(color: c.fg, decoration: TextDecoration.underline),
+                      style: TextStyle(
+                        color: c.fg,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ],
@@ -297,22 +293,26 @@ class _AlbumBody extends ConsumerWidget {
       final inWork =
           grouped && (t.work ?? '').isNotEmpty && (t.movement ?? '').isNotEmpty;
       rows.add(
-        Padding(
-          padding: EdgeInsets.only(left: inWork ? AriaSpace.s4 : 0),
-          child: TrackRow(
-            number: t.trackNo ?? i + 1,
-            title: (inWork ? t.movement : t.title) ?? '',
-            duration: t.duration,
-            format: t.format,
-            bitsPerSample: t.bitsPerSample,
-            sampleRate: t.sampleRate,
-            lossless: t.lossless,
-            isCurrent: t.id == currentId,
-            onTap: () {
-              if (selectionTapHandled(ref, trackSelectionItem(t))) return;
-              queue.playQueue(album.tracks, i);
-            },
-            onSecondary: (pos) => _trackMenu(context, ref, pos, t),
+        SelectionHighlight(
+          kind: 'track',
+          itemKey: t.id,
+          child: Padding(
+            padding: EdgeInsets.only(left: inWork ? AriaSpace.s4 : 0),
+            child: TrackRow(
+              number: t.trackNo ?? i + 1,
+              title: (inWork ? t.movement : t.title) ?? '',
+              duration: t.duration,
+              format: t.format,
+              bitsPerSample: t.bitsPerSample,
+              sampleRate: t.sampleRate,
+              lossless: t.lossless,
+              isCurrent: t.id == currentId,
+              onTap: () {
+                if (selectionTapHandled(ref, trackSelectionItem(t))) return;
+                queue.playQueue(album.tracks, i);
+              },
+              onSecondary: (pos) => _trackMenu(context, ref, pos, t),
+            ),
           ),
         ),
       );

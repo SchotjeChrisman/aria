@@ -11,6 +11,7 @@ import '../../widgets/album_card.dart';
 import '../../widgets/artist_avatar.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
 import 'charts.dart';
@@ -130,72 +131,76 @@ class _StatsBody extends ConsumerWidget {
           // Legacy rows: rank, title + artist · album, play count; tap plays
           // the top-track list from that row.
           for (var i = 0; i < topTracks.length; i++)
-            InkWell(
-              onTap: () {
-                if (selectionTapHandled(
-                  ref,
-                  trackSelectionItem(topTracks[i].t),
-                )) {
-                  return;
-                }
-                queue.playQueue([for (final x in topTracks) x.t], i);
-              },
-              onSecondaryTapUp: (d) => showAriaContextMenu(
-                context,
-                d.globalPosition,
-                trackMenuItems(context, ref, topTracks[i].t),
-              ),
-              borderRadius: BorderRadius.circular(AriaRadius.md),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+            SelectionHighlight(
+              kind: 'track',
+              itemKey: topTracks[i].t.id,
+              child: InkWell(
+                onTap: () {
+                  if (selectionTapHandled(
+                    ref,
+                    trackSelectionItem(topTracks[i].t),
+                  )) {
+                    return;
+                  }
+                  queue.playQueue([for (final x in topTracks) x.t], i);
+                },
+                onSecondaryTapUp: (d) => showAriaContextMenu(
+                  context,
+                  d.globalPosition,
+                  trackMenuItems(context, ref, topTracks[i].t),
                 ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 34,
-                      child: Text(
-                        current?.id == topTracks[i].t.id ? '▶' : '${i + 1}',
-                        style: TextStyle(
-                          color: current?.id == topTracks[i].t.id
-                              ? c.accent
-                              : c.fgDim,
+                borderRadius: BorderRadius.circular(AriaRadius.md),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 34,
+                        child: Text(
+                          current?.id == topTracks[i].t.id ? '▶' : '${i + 1}',
+                          style: TextStyle(
+                            color: current?.id == topTracks[i].t.id
+                                ? c.accent
+                                : c.fgDim,
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            topTracks[i].t.title ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: current?.id == topTracks[i].t.id
-                                  ? c.accent
-                                  : c.fg,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              topTracks[i].t.title ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: current?.id == topTracks[i].t.id
+                                    ? c.accent
+                                    : c.fg,
+                              ),
                             ),
-                          ),
-                          Text(
-                            [
-                              topTracks[i].t.artist,
-                              topTracks[i].t.album,
-                            ].nonNulls.join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12.5, color: c.fgDim),
-                          ),
-                        ],
+                            Text(
+                              [
+                                topTracks[i].t.artist,
+                                topTracks[i].t.album,
+                              ].nonNulls.join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AriaSpace.s3),
-                    Text(
-                      _plays(topTracks[i].c),
-                      style: TextStyle(color: c.fgDim, fontSize: 12.5),
-                    ),
-                  ],
+                      const SizedBox(width: AriaSpace.s3),
+                      Text(
+                        _plays(topTracks[i].c),
+                        style: TextStyle(color: c.fgDim, fontSize: 12.5),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

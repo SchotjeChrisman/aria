@@ -49,21 +49,10 @@ final apiClientProvider = Provider<AriaClient>((ref) {
   return client;
 });
 
-enum ConnectionStatus { connecting, connected, offline }
-
 /// One status ping. Refresh with ref.invalidate(serverStatusProvider).
 final serverStatusProvider = FutureProvider<ServerStatus>(
   (ref) => ref.watch(apiClientProvider).status(),
 );
-
-final connectionStatusProvider = Provider<ConnectionStatus>((ref) {
-  if (ref.watch(serverUrlProvider) == null) return ConnectionStatus.offline;
-  return switch (ref.watch(serverStatusProvider)) {
-    AsyncData() => ConnectionStatus.connected,
-    AsyncError() => ConnectionStatus.offline,
-    _ => ConnectionStatus.connecting,
-  };
-});
 
 /// First-run screen: enter the server URL, test it, save. Also reachable
 /// later from settings to repoint the app.

@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/connection.dart';
+import '../../core/library_providers.dart';
 import '../../core/theme.dart';
+import '../../widgets/art_image.dart';
 import '../../widgets/empty_state.dart';
 import 'name_dialog.dart';
 import 'providers.dart';
 import 'smart_editor.dart';
 
-/// Legacy renderPlaylists(): list + create buttons.
+/// Legacy renderPlaylists(): create buttons + a grid of playlist tiles, each
+/// fronted by a collage of album art from its tracks.
 class PlaylistsScreen extends ConsumerWidget {
   const PlaylistsScreen({super.key});
 
@@ -59,15 +63,26 @@ class PlaylistsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: AriaSpace.s4),
+          const SizedBox(height: AriaSpace.s5),
           switch (pls) {
             AsyncData(:final value) when value.isEmpty => const EmptyState(
               message:
                   'No playlists yet — make one, or pick "Add to playlist…" '
                   'on any track.',
             ),
-            AsyncData(:final value) => Column(
-              children: [for (final pl in value) _PlaylistRow(playlist: pl)],
+            AsyncData(:final value) => LayoutBuilder(
+              builder: (context, box) => GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: (box.maxWidth / 190).floor().clamp(2, 8),
+                  mainAxisSpacing: AriaSpace.s5,
+                  crossAxisSpacing: AriaSpace.s5,
+                  childAspectRatio: 0.78,
+                ),
+                itemCount: value.length,
+                itemBuilder: (context, i) => _PlaylistTile(playlist: value[i]),
+              ),
             ),
             AsyncError() => const EmptyState(message: 'Playlists unavailable.'),
             _ => const Padding(
@@ -81,42 +96,91 @@ class PlaylistsScreen extends ConsumerWidget {
   }
 }
 
-class _PlaylistRow extends StatelessWidget {
-  const _PlaylistRow({required this.playlist});
+/// Grid tile: 2×2 album-art collage (fewer arts fall back to one image or a
+/// placeholder icon), name + count/SMART underneath.
+class _PlaylistTile extends ConsumerWidget {
+  const _PlaylistTile({required this.playlist});
 
   final Playlist playlist;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
     final n = playlist.trackIds?.length ?? 0;
+
+    // Distinct album arts, in playlist order, from the loaded library.
+    final byId = ref.watch(trackByIdProvider);
+    final api = ref.read(apiClientProvider);
+    final albumIds = <String>{};
+    for (final id in playlist.trackIds ?? const <String>[]) {
+      final t = byId[id];
+      if (t != null) albumIds.add(t.albumId);
+      if (albumIds.length == 4) break;
+    }
+    final urls = [for (final a in albumIds) api.artUrl(a)];
+
+    final Widget art;
+    if (urls.length >= 4) {
+      art = Column(
+        children: [
+          for (var row = 0; row < 2; row++)
+            Expanded(
+              child: Row(
+                children: [
+                  for (var col = 0; col < 2; col++)
+                    Expanded(
+                      child: ArtImage(
+                        url: urls[row * 2 + col],
+                        borderRadius: 0,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      );
+    } else if (urls.isNotEmpty) {
+      art = ArtImage(url: urls.first, borderRadius: 0);
+    } else {
+      art = Container(
+        color: c.bgRaised,
+        child: Icon(
+          playlist.isSmart ? Icons.auto_awesome : Icons.queue_music,
+          size: 36,
+          color: c.fgDim,
+        ),
+      );
+    }
+
     return InkWell(
       onTap: () => context.push('/playlists/${playlist.id}'),
       borderRadius: BorderRadius.circular(AriaRadius.md),
       hoverColor: c.bgHover,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AriaSpace.s3,
-          vertical: AriaSpace.s3,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                playlist.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AriaRadius.md),
+              child: art,
             ),
-            if (playlist.isSmart)
-              const SmartBadge()
-            else
-              Text(
-                '$n track${n == 1 ? '' : 's'}',
-                style: TextStyle(color: c.fgDim, fontSize: 12.5),
-              ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            playlist.name,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (playlist.isSmart)
+            const Padding(padding: EdgeInsets.only(top: 2), child: SmartBadge())
+          else
+            Text(
+              '$n track${n == 1 ? '' : 's'}',
+              style: TextStyle(color: c.fgDim, fontSize: 12.5),
+            ),
+        ],
       ),
     );
   }

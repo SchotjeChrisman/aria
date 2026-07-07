@@ -35,6 +35,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     return Scaffold(
+      appBar: AppBar(),
       body: SafeArea(
         child: ref
             .watch(artistTracksProvider)
@@ -71,14 +72,6 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
     return ListView(
       padding: const EdgeInsets.all(AriaSpace.s6),
       children: [
-        if (context.canPop())
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => context.pop(),
-              child: Text('← Back', style: TextStyle(color: c.fgDim)),
-            ),
-          ),
         Text(name, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s4),
         _ComposerHero(name: name),
@@ -333,7 +326,10 @@ class _ComposerHero extends ConsumerWidget {
                             onTap: () => openExternal(d.url!),
                             child: Text(
                               'Wikipedia →',
-                              style: TextStyle(color: c.fg, decoration: TextDecoration.underline),
+                              style: TextStyle(
+                                color: c.fg,
+                                decoration: TextDecoration.underline,
+                              ),
                             ),
                           ),
                         ),

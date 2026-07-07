@@ -94,6 +94,10 @@ class _NewReleaseCard extends StatelessWidget {
                 : Image.network(
                     item.cover!,
                     fit: BoxFit.cover,
+                    // Cards are Shelf.itemWidth (168) wide — decode at that
+                    // size instead of the full remote cover.
+                    cacheWidth:
+                        (168 * MediaQuery.devicePixelRatioOf(context)).round(),
                     gaplessPlayback: true,
                     errorBuilder: (_, _, _) => Center(
                       child: Icon(Icons.album_outlined, color: c.fgDim),

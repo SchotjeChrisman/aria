@@ -1,8 +1,8 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/filter_bar.dart';
@@ -39,20 +39,12 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
 
   @override
   Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
     return Scaffold(
+      appBar: AppBar(),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AriaSpace.s6),
           children: [
-            if (context.canPop())
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => context.pop(),
-                  child: Text('← Back', style: TextStyle(color: c.fgDim)),
-                ),
-              ),
             Row(
               children: [
                 Expanded(
@@ -63,6 +55,18 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Shuffle all',
+                  icon: const Icon(Icons.shuffle),
+                  onPressed: () {
+                    final tracks = _artistTracks();
+                    if (tracks.isEmpty) return;
+                    ref
+                        .read(queueProvider.notifier)
+                        .playQueue(List.of(tracks)..shuffle(), 0);
+                  },
+                ),
+                const SizedBox(width: AriaSpace.s3),
                 Builder(
                   builder: (bctx) => OutlinedButton.icon(
                     onPressed: () => _editMenu(bctx),

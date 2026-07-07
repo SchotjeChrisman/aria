@@ -1,15 +1,11 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../core/connection.dart';
 import '../../core/theme.dart';
-import '../../widgets/album_card.dart';
-import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/filter_bar.dart';
-import '../../widgets/track_actions.dart';
+import '../../widgets/library_cards.dart';
 import 'album_filters.dart';
 import 'library_providers.dart';
 import 'library_sort.dart';
@@ -77,7 +73,6 @@ class AlbumsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final api = ref.watch(apiClientProvider);
     final filters = ref.watch(albumFiltersProvider);
     final sortKey = ref.watch(albumSortProvider);
     final list = ref.watch(visibleAlbumsProvider);
@@ -192,31 +187,13 @@ class AlbumsSection extends ConsumerWidget {
                       if (a.year != null) '${a.year}',
                       if (type != null && type != 'Album') type,
                     ].join(' · ');
-                    return AlbumCard(
+                    return AlbumGridCard(
+                      albumId: a.id,
                       title: a.title,
+                      artistName: a.albumArtist,
+                      tracks: a.tracks,
+                      hasArt: a.hasArt,
                       subtitle: sub,
-                      artUrl: a.hasArt ? api.artUrl(a.id) : null,
-                      onTap: () {
-                        if (selectionTapHandled(
-                          ref,
-                          albumSelectionItem(a.id, a.tracks),
-                        )) {
-                          return;
-                        }
-                        context.push('/album/${a.id}');
-                      },
-                      // Legacy albumCtx on every card.
-                      onSecondary: (pos) => showAriaContextMenu(
-                        context,
-                        pos,
-                        albumMenuItems(
-                          context,
-                          ref,
-                          albumId: a.id,
-                          tracks: a.tracks,
-                          artistName: a.albumArtist,
-                        ),
-                      ),
                     );
                   },
                 ),

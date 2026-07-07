@@ -8,6 +8,7 @@ import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/track_actions.dart';
 import '../../widgets/track_row.dart';
 import 'name_dialog.dart';
@@ -101,6 +102,15 @@ class PlaylistScreen extends ConsumerWidget {
               onPressed: list == null || list.isEmpty
                   ? null
                   : () => ref.read(queueProvider.notifier).playQueue(list, 0),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.shuffle, size: 16),
+              label: const Text('Shuffle'),
+              onPressed: list == null || list.isEmpty
+                  ? null
+                  : () => ref
+                        .read(queueProvider.notifier)
+                        .playQueue(List.of(list)..shuffle(), 0),
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.edit_outlined, size: 16),
@@ -201,19 +211,25 @@ class PlaylistScreen extends ConsumerWidget {
         ),
       ),
     );
-    if (pl.isSmart) return row;
+    if (pl.isSmart) {
+      return SelectionHighlight(kind: 'track', itemKey: t.id, child: row);
+    }
     // Manual playlists get the legacy row ✕ (removes ALL occurrences
     // server-side). GAP: TrackRow has no trailing-action slot.
-    return Row(
-      children: [
-        Expanded(child: row),
-        IconButton(
-          icon: const Icon(Icons.close, size: 16),
-          tooltip: 'Remove from playlist',
-          onPressed: () =>
-              ref.read(playlistsProvider.notifier).removeTrack(pl.id, t.id),
-        ),
-      ],
+    return SelectionHighlight(
+      kind: 'track',
+      itemKey: t.id,
+      child: Row(
+        children: [
+          Expanded(child: row),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: 'Remove from playlist',
+            onPressed: () =>
+                ref.read(playlistsProvider.notifier).removeTrack(pl.id, t.id),
+          ),
+        ],
+      ),
     );
   }
 

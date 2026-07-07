@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/filter_bar.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/track_actions.dart';
 import 'library_providers.dart';
 import 'track_filters.dart';
@@ -173,22 +174,26 @@ class TracksSection extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: AriaSpace.s6),
                   itemCount: list.length,
                   itemExtent: 44,
-                  itemBuilder: (context, i) => _TrackTableRow(
-                    track: list[i],
-                    index: i,
-                    plays: counts?[list[i].id],
-                    isCurrent: list[i].id == currentId,
-                    onTap: () {
-                      final t = list[i];
-                      if (selectionTapHandled(ref, trackSelectionItem(t))) {
-                        return;
-                      }
-                      ref.read(queueProvider.notifier).playQueue(list, i);
-                    },
-                    onSecondary: (pos) => showAriaContextMenu(
-                      context,
-                      pos,
-                      trackMenuItems(context, ref, list[i]),
+                  itemBuilder: (context, i) => SelectionHighlight(
+                    kind: 'track',
+                    itemKey: list[i].id,
+                    child: _TrackTableRow(
+                      track: list[i],
+                      index: i,
+                      plays: counts?[list[i].id],
+                      isCurrent: list[i].id == currentId,
+                      onTap: () {
+                        final t = list[i];
+                        if (selectionTapHandled(ref, trackSelectionItem(t))) {
+                          return;
+                        }
+                        ref.read(queueProvider.notifier).playQueue(list, i);
+                      },
+                      onSecondary: (pos) => showAriaContextMenu(
+                        context,
+                        pos,
+                        trackMenuItems(context, ref, list[i]),
+                      ),
                     ),
                   ),
                 ),

@@ -10,6 +10,7 @@ import '../../widgets/album_card.dart';
 import '../../widgets/artist_avatar.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
 import '../../widgets/track_row.dart';
@@ -119,38 +120,42 @@ class TagScreen extends ConsumerWidget {
                 for (final t in idx.byId.values)
                   if (t.artist == name || t.albumArtist == name) t,
               ];
-              return GestureDetector(
-                onTap: () {
-                  if (selectionTapHandled(
-                    ref,
-                    artistSelectionItem(name, artistTracks()),
-                  )) {
-                    return;
-                  }
-                  context.push(artistPath(name));
-                },
-                onSecondaryTapUp: (d) => showAriaContextMenu(
-                  context,
-                  d.globalPosition,
-                  artistMenuItems(
+              return SelectionHighlight(
+                kind: 'artist',
+                itemKey: name,
+                child: GestureDetector(
+                  onTap: () {
+                    if (selectionTapHandled(
+                      ref,
+                      artistSelectionItem(name, artistTracks()),
+                    )) {
+                      return;
+                    }
+                    context.push(artistPath(name));
+                  },
+                  onSecondaryTapUp: (d) => showAriaContextMenu(
                     context,
-                    ref,
-                    name: name,
-                    tracks: artistTracks(),
+                    d.globalPosition,
+                    artistMenuItems(
+                      context,
+                      ref,
+                      name: name,
+                      tracks: artistTracks(),
+                    ),
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ArtistAvatar(name: name, size: 120),
-                    const SizedBox(height: AriaSpace.s2),
-                    Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    if (idx.artistNames.contains(name))
-                      Text(
-                        'In library',
-                        style: TextStyle(color: c.fgDim, fontSize: 12),
-                      ),
-                  ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ArtistAvatar(name: name, size: 120),
+                      const SizedBox(height: AriaSpace.s2),
+                      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (idx.artistNames.contains(name))
+                        Text(
+                          'In library',
+                          style: TextStyle(color: c.fgDim, fontSize: 12),
+                        ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -164,28 +169,32 @@ class TagScreen extends ConsumerWidget {
             itemCount: albumGroups.length,
             itemBuilder: (context, i) {
               final a = albumGroups[i];
-              return AlbumCard(
-                title: a.album,
-                subtitle: a.albumArtist,
-                artUrl: client.artUrl(a.id),
-                onTap: () {
-                  if (selectionTapHandled(
-                    ref,
-                    albumSelectionItem(a.id, a.tracks),
-                  )) {
-                    return;
-                  }
-                  context.push(albumPath(a.id));
-                },
-                onSecondary: (pos) => showAriaContextMenu(
-                  context,
-                  pos,
-                  albumMenuItems(
+              return SelectionHighlight(
+                kind: 'album',
+                itemKey: a.id,
+                child: AlbumCard(
+                  title: a.album,
+                  subtitle: a.albumArtist,
+                  artUrl: client.artUrl(a.id),
+                  onTap: () {
+                    if (selectionTapHandled(
+                      ref,
+                      albumSelectionItem(a.id, a.tracks),
+                    )) {
+                      return;
+                    }
+                    context.push(albumPath(a.id));
+                  },
+                  onSecondary: (pos) => showAriaContextMenu(
                     context,
-                    ref,
-                    albumId: a.id,
-                    tracks: a.tracks,
-                    artistName: a.albumArtist,
+                    pos,
+                    albumMenuItems(
+                      context,
+                      ref,
+                      albumId: a.id,
+                      tracks: a.tracks,
+                      artistName: a.albumArtist,
+                    ),
                   ),
                 ),
               );
@@ -197,27 +206,31 @@ class TagScreen extends ConsumerWidget {
           Text('Tracks', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AriaSpace.s3),
           for (final (i, t) in trackList.indexed)
-            TrackRow(
-              number: i + 1,
-              title: t.title ?? 'Unknown',
-              subtitle: [
-                t.artist,
-                t.album,
-              ].where((s) => s != null && s.isNotEmpty).join(' · '),
-              duration: t.duration,
-              format: t.format,
-              bitsPerSample: t.bitsPerSample,
-              sampleRate: t.sampleRate,
-              lossless: t.lossless,
-              isCurrent: t.id == currentId,
-              onTap: () {
-                if (selectionTapHandled(ref, trackSelectionItem(t))) return;
-                ref.read(queueProvider.notifier).playQueue(trackList, i);
-              },
-              onSecondary: (pos) => showAriaContextMenu(
-                context,
-                pos,
-                trackMenuItems(context, ref, t),
+            SelectionHighlight(
+              kind: 'track',
+              itemKey: t.id,
+              child: TrackRow(
+                number: i + 1,
+                title: t.title ?? 'Unknown',
+                subtitle: [
+                  t.artist,
+                  t.album,
+                ].where((s) => s != null && s.isNotEmpty).join(' · '),
+                duration: t.duration,
+                format: t.format,
+                bitsPerSample: t.bitsPerSample,
+                sampleRate: t.sampleRate,
+                lossless: t.lossless,
+                isCurrent: t.id == currentId,
+                onTap: () {
+                  if (selectionTapHandled(ref, trackSelectionItem(t))) return;
+                  ref.read(queueProvider.notifier).playQueue(trackList, i);
+                },
+                onSecondary: (pos) => showAriaContextMenu(
+                  context,
+                  pos,
+                  trackMenuItems(context, ref, t),
+                ),
               ),
             ),
         ],

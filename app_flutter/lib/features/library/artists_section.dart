@@ -1,13 +1,11 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
-import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/track_actions.dart';
+import '../../widgets/library_cards.dart';
 import 'library_providers.dart';
 import 'library_sort.dart';
 import 'person_card.dart';
@@ -129,28 +127,13 @@ class _ArtistsSectionState extends ConsumerState<ArtistsSection> {
                 for (final t in ref.read(loadedTracksProvider))
                   if (t.artist == a.name || t.albumArtist == a.name) t,
               ];
-              return PersonCard(
+              return ArtistTile(
                 name: a.name,
-                subtitle: countLabel(a.albumIds.length, 'album'),
-                imageUrl: people[a.name],
-                onTap: () {
-                  if (selectionTapHandled(
-                    ref,
-                    artistSelectionItem(a.name, artistTracks()),
-                  )) {
-                    return;
-                  }
-                  context.push('/artist/${Uri.encodeComponent(a.name)}');
-                },
-                onSecondary: (pos) => showAriaContextMenu(
-                  context,
-                  pos,
-                  artistMenuItems(
-                    context,
-                    ref,
-                    name: a.name,
-                    tracks: artistTracks(),
-                  ),
+                tracksOf: artistTracks,
+                child: PersonCard(
+                  name: a.name,
+                  subtitle: countLabel(a.albumIds.length, 'album'),
+                  imageUrl: people[a.name],
                 ),
               );
             },

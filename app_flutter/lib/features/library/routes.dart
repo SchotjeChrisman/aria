@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router.dart';
+import '../album/routes.dart' as album;
+import '../artist/routes.dart' as artist;
 import 'genre_screen.dart';
 import 'library_screen.dart';
 
@@ -42,6 +44,14 @@ final featureEntries = <FeatureEntry>[
               ),
           ],
         ),
+        // Detail pages live in their section's branch so the rail keeps the
+        // section highlighted and the page renders in the content area.
+        ...switch (s) {
+          LibrarySection.albums => album.detailRoutes,
+          LibrarySection.artists => artist.artistDetailRoutes,
+          LibrarySection.composers => artist.composerDetailRoutes,
+          _ => const <RouteBase>[],
+        },
       ],
     ),
 ];

@@ -46,6 +46,9 @@ class ArtistAvatar extends StatelessWidget {
           : Image.network(
               imageUrl!,
               fit: BoxFit.cover,
+              // Decode at display resolution — portraits can be huge.
+              cacheWidth:
+                  (size * MediaQuery.devicePixelRatioOf(context)).round(),
               gaplessPlayback: true,
               errorBuilder: (_, _, _) => fallback,
             ),

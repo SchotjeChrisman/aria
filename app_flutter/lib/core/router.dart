@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/album/routes.dart' as album;
-import '../features/artist/routes.dart' as artist;
 import '../features/home/routes.dart' as home;
 import '../features/library/routes.dart' as library_;
 import '../features/now_playing/routes.dart' as now_playing;
@@ -75,8 +73,6 @@ final List<FeatureEntry> featureEntries = [
   radio.radioFeatureEntry,
   stats.statsFeatureEntry,
   settings.settingsFeatureEntry,
-  album.featureEntry,
-  artist.featureEntry,
   now_playing.featureEntry,
 ];
 

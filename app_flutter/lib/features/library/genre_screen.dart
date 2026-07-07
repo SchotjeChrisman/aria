@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../widgets/album_card.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/selection_highlight.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
 import 'genre_card.dart';
@@ -197,30 +198,34 @@ class _GenreBody extends ConsumerWidget {
             itemCount: albums.length,
             itemBuilder: (context, i) {
               final a = albums[i];
-              return AlbumCard(
-                title: a.title,
-                subtitle: a.year != null
-                    ? '${a.albumArtist} · ${a.year}'
-                    : a.albumArtist,
-                artUrl: a.hasArt ? api.artUrl(a.id) : null,
-                onTap: () {
-                  if (selectionTapHandled(
-                    ref,
-                    albumSelectionItem(a.id, a.tracks),
-                  )) {
-                    return;
-                  }
-                  context.push('/album/${a.id}');
-                },
-                onSecondary: (pos) => showAriaContextMenu(
-                  context,
-                  pos,
-                  albumMenuItems(
+              return SelectionHighlight(
+                kind: 'album',
+                itemKey: a.id,
+                child: AlbumCard(
+                  title: a.title,
+                  subtitle: a.year != null
+                      ? '${a.albumArtist} · ${a.year}'
+                      : a.albumArtist,
+                  artUrl: a.hasArt ? api.artUrl(a.id) : null,
+                  onTap: () {
+                    if (selectionTapHandled(
+                      ref,
+                      albumSelectionItem(a.id, a.tracks),
+                    )) {
+                      return;
+                    }
+                    context.push('/album/${a.id}');
+                  },
+                  onSecondary: (pos) => showAriaContextMenu(
                     context,
-                    ref,
-                    albumId: a.id,
-                    tracks: a.tracks,
-                    artistName: a.albumArtist,
+                    pos,
+                    albumMenuItems(
+                      context,
+                      ref,
+                      albumId: a.id,
+                      tracks: a.tracks,
+                      artistName: a.albumArtist,
+                    ),
                   ),
                 ),
               );

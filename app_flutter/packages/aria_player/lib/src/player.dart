@@ -80,9 +80,15 @@ class AriaPlayer {
   final Duration pollInterval;
   final MpvRaw Function() _rawFactory;
 
+  /// Poll cadence while the core is stopped/idle: no time-pos ticks arrive,
+  /// so draining at [pollInterval] just burns CPU. play() restores the fast
+  /// poll immediately; state changes keep it in sync otherwise.
+  static const _idlePollInterval = Duration(milliseconds: 500);
+
   MpvRaw? _raw;
   int _handle = 0;
   Timer? _timer;
+  Duration? _timerInterval;
   String? _unavailableReason;
   bool _disposed = false;
 
@@ -217,7 +223,20 @@ class AriaPlayer {
 
     _raw = raw;
     _handle = handle;
-    _timer = Timer.periodic(pollInterval, (_) => _poll());
+    _syncPollRate();
+  }
+
+  /// Fast poll whenever a file is (about to be) active, slow poll when the
+  /// core idles — event delivery during playback and track transitions is
+  /// untouched (state stays playing across gapless advances).
+  void _syncPollRate() {
+    if (_disposed || _handle == 0) return;
+    final idle = _state == PlaybackState.stopped && !_loadPending;
+    final want = idle ? _idlePollInterval : pollInterval;
+    if (_timer != null && want == _timerInterval) return;
+    _timer?.cancel();
+    _timerInterval = want;
+    _timer = Timer.periodic(want, (_) => _poll());
   }
 
   /// Replace the playlist with [url] and start playing.
@@ -228,6 +247,7 @@ class AriaPlayer {
     _localPlaylistCount = 1;
     _pendingNextIndex = null;
     _loadPending = true;
+    _syncPollRate(); // back to the fast poll before START_FILE arrives
     _aoErrorNotified = false;
     _fmtRate = null;
     _fmtChannels = null;
@@ -372,6 +392,7 @@ class AriaPlayer {
       case MpvEventId.shutdown:
         _timer?.cancel();
         _timer = null;
+        _timerInterval = null;
       default:
         break;
     }
@@ -450,5 +471,6 @@ class AriaPlayer {
     if (s == _state) return;
     _state = s;
     _stateCtrl.add(s);
+    _syncPollRate();
   }
 }
