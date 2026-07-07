@@ -37,6 +37,10 @@ class AlbumPage extends ConsumerWidget {
         child: ref
             .watch(albumsByIdProvider)
             .when(
+              // Metadata edits invalidate the library cache underneath this
+              // derived provider (a "reload", not a "refresh") — keep showing
+              // the previous album instead of flashing a spinner.
+              skipLoadingOnReload: true,
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => const EmptyState(
                 message: 'Could not load the library.',

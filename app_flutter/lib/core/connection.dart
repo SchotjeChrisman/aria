@@ -82,8 +82,9 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
       _error = null;
     });
     final url = normalizeServerUrl(_ctrl.text);
+    final client = AriaClient(baseUrl: url);
     try {
-      final status = await AriaClient(baseUrl: url).status();
+      final status = await client.status();
       if (!mounted) return;
       await ref.read(serverUrlProvider.notifier).set(url);
       if (!mounted) return;
@@ -96,6 +97,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
         setState(() => _error = 'Could not reach the server at $url');
       }
     } finally {
+      client.close();
       if (mounted) setState(() => _testing = false);
     }
   }

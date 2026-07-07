@@ -86,7 +86,12 @@ final playReporterProvider = Provider<void>((ref) {
       // (legacy switchProfile). Wait for profiles once on cold start.
       await ref.read(profilesProvider.future);
       final profileId = ref.read(activeProfileIdProvider);
-      if (profileId == null) return;
+      if (profileId == null) {
+        // No profile yet (cold start): re-arm so the play isn't lost — but
+        // only if the track hasn't changed and re-armed the latch meanwhile.
+        unreportedId ??= t.id;
+        return;
+      }
       await ref
           .read(apiClientProvider)
           .recordPlay(trackId: t.id, profileId: profileId);

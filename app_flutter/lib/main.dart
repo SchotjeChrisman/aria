@@ -8,6 +8,11 @@ import 'core/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 100k-track headroom: a 10k-cover grid thrashes the default image cache
+  // (100MB / 1000 images), so give it room to keep decoded covers around.
+  PaintingBinding.instance.imageCache
+    ..maximumSizeBytes = 400 << 20 // ~400MB
+    ..maximumSize = 4000;
   final prefs = await SharedPreferences.getInstance();
   runApp(
     ProviderScope(

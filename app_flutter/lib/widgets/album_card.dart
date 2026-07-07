@@ -43,7 +43,13 @@ class AlbumCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 1,
-              child: ArtImage(url: artUrl, fallbackText: title),
+              child: ArtImage(
+                url: artUrl,
+                fallbackText: title,
+                // Grid/shelf tiles are capped at ~190 logical px — decode at
+                // display size instead of the full cover resolution.
+                decodeSize: 190,
+              ),
             ),
             const SizedBox(height: 10),
             Text(

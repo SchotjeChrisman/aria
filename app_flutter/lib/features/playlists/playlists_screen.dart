@@ -131,6 +131,8 @@ class _PlaylistTile extends ConsumerWidget {
                     Expanded(
                       child: ArtImage(
                         url: urls[row * 2 + col],
+                        // Quarter of a ~190px grid tile.
+                        decodeSize: 95,
                         borderRadius: 0,
                       ),
                     ),
@@ -140,7 +142,7 @@ class _PlaylistTile extends ConsumerWidget {
         ],
       );
     } else if (urls.isNotEmpty) {
-      art = ArtImage(url: urls.first, borderRadius: 0);
+      art = ArtImage(url: urls.first, decodeSize: 190, borderRadius: 0);
     } else {
       art = Container(
         color: c.bgRaised,

@@ -101,6 +101,7 @@ class _Meta extends ConsumerWidget {
                 child: ArtImage(
                   url: artUrl,
                   fallbackText: track.album,
+                  decodeSize: 340, // hero art is capped at 340 logical px
                   borderRadius: AriaRadius.lg,
                 ),
               ),

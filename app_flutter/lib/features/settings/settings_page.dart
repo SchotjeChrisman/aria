@@ -83,10 +83,9 @@ class _ServerUrlFieldState extends ConsumerState<_ServerUrlField> {
       _failed = false;
     });
     final url = normalizeServerUrl(_ctrl.text);
+    final client = AriaClient(baseUrl: url);
     try {
-      final client = AriaClient(baseUrl: url);
       final status = await client.status();
-      client.close();
       await ref.read(serverUrlProvider.notifier).set(url);
       if (mounted) {
         setState(() => _note = 'Connected — ${status.tracks} tracks.');
@@ -99,6 +98,7 @@ class _ServerUrlFieldState extends ConsumerState<_ServerUrlField> {
         });
       }
     } finally {
+      client.close();
       if (mounted) setState(() => _busy = false);
     }
   }

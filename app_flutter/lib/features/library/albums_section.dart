@@ -34,15 +34,17 @@ final visibleAlbumsProvider = Provider<List<Album>>((ref) {
       if (albumPassesFilters(a, f, parents: parents, tagIndex: tagIndex)) a,
   ];
 
-  int cmpStr(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+  // Lowercased sort keys, computed once per album instead of per comparison.
+  final artistKey = {for (final a in list) a.id: a.albumArtist.toLowerCase()};
   int byArtist(Album x, Album y) {
-    final d = cmpStr(x.albumArtist, y.albumArtist);
+    final d = artistKey[x.id]!.compareTo(artistKey[y.id]!);
     return d != 0 ? d : (x.year ?? 0) - (y.year ?? 0);
   }
 
   switch (key) {
     case 'title':
-      list.sort((x, y) => cmpStr(x.title, y.title));
+      final titleKey = {for (final a in list) a.id: a.title.toLowerCase()};
+      list.sort((x, y) => titleKey[x.id]!.compareTo(titleKey[y.id]!));
     case 'yearNew':
       list.sort((x, y) => (y.year ?? 0) - (x.year ?? 0));
     case 'yearOld':
@@ -60,7 +62,7 @@ final visibleAlbumsProvider = Provider<List<Album>>((ref) {
       };
       list.sort((x, y) {
         final d = plays[y.id]! - plays[x.id]!;
-        return d != 0 ? d : cmpStr(x.albumArtist, y.albumArtist);
+        return d != 0 ? d : artistKey[x.id]!.compareTo(artistKey[y.id]!);
       });
     default:
       list.sort(byArtist);

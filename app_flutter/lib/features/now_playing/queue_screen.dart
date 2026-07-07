@@ -85,29 +85,34 @@ class QueueScreen extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
 
     final ctrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save queue as playlist'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLength: 60,
-          decoration: const InputDecoration(hintText: 'Playlist name'),
-          onSubmitted: (v) => Navigator.of(context).pop(v),
+    final String? name;
+    try {
+      name = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Save queue as playlist'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLength: 60,
+            decoration: const InputDecoration(hintText: 'Playlist name'),
+            onSubmitted: (v) => Navigator.of(context).pop(v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(ctrl.text),
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(ctrl.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      ctrl.dispose();
+    }
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty) return;
 

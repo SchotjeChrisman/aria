@@ -18,6 +18,39 @@ final artistAlbumsProvider = FutureProvider<List<Album>>((ref) async {
   return Album.group(tracks);
 });
 
+/// Tracks crediting this artist in any field (artist, album artist, composer,
+/// conductor, orchestra, performers), filtered from the library ONCE per
+/// artist and cached — the overview derives appears-on/works/genres from
+/// this instead of each section rescanning all 100k tracks.
+final artistRelevantTracksProvider = Provider.family<List<Track>, String>((
+  ref,
+  name,
+) {
+  final tracks = ref.watch(artistTracksProvider).value ?? const <Track>[];
+  return [
+    for (final t in tracks)
+      if (t.artist == name ||
+          t.albumArtist == name ||
+          t.composer == name ||
+          t.conductor == name ||
+          t.orchestra == name ||
+          t.performers.any((p) => p.name == name))
+        t,
+  ];
+});
+
+/// Every artist/album-artist name in the library (the "In library" badge on
+/// the people shelves) — one cached pass, shared by every artist page.
+final libraryArtistNamesProvider = Provider<Set<String>>((ref) {
+  final tracks = ref.watch(artistTracksProvider).value ?? const <Track>[];
+  return {
+    for (final t in tracks) ...[
+      if ((t.albumArtist ?? '').isNotEmpty) t.albumArtist!,
+      if ((t.artist ?? '').isNotEmpty) t.artist!,
+    ],
+  };
+});
+
 /// Enriched person/band info; unknown names are researched on demand
 /// server-side (a few seconds the first time). null = nothing found.
 final artistInfoProvider = FutureProvider.family<ArtistInfo?, String>(

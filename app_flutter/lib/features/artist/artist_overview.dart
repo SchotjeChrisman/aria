@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/album_card.dart';
@@ -36,19 +37,16 @@ class ArtistOverview extends ConsumerWidget {
             message: 'Could not load the library.',
             icon: Icons.cloud_off,
           ),
-          data: (tracks) => _body(context, ref, tracks),
+          data: (_) => _body(context, ref),
         );
   }
 
-  Widget _body(BuildContext context, WidgetRef ref, List<Track> tracks) {
+  Widget _body(BuildContext context, WidgetRef ref) {
+    // Cached, artist-filtered subset — never rescan the full library here.
+    final tracks = ref.watch(artistRelevantTracksProvider(name));
     final albums = ref.watch(artistAlbumsProvider).value ?? const <Album>[];
     final albumsById = {for (final a in albums) a.id: a};
-    final inLibrary = <String>{
-      for (final t in tracks) ...[
-        if ((t.albumArtist ?? '').isNotEmpty) t.albumArtist!,
-        if ((t.artist ?? '').isNotEmpty) t.artist!,
-      ],
-    };
+    final inLibrary = ref.watch(libraryArtistNamesProvider);
 
     final main = [
       for (final a in albums)
@@ -349,9 +347,9 @@ class _TopTracks extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
     final stats = ref.watch(artistStatsProvider).value;
-    final tracks = ref.watch(artistTracksProvider).value;
-    if (stats == null || tracks == null) return const SizedBox.shrink();
-    final byId = {for (final t in tracks) t.id: t};
+    // Shared cached id map — don't rebuild a 100k-entry map per build.
+    final byId = ref.watch(trackByIdProvider);
+    if (stats == null || byId.isEmpty) return const SizedBox.shrink();
     final top = [
       for (final x in stats.topTracks)
         if (byId[x.id] != null &&

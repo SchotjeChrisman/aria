@@ -55,7 +55,7 @@ final albumsProvider = Provider<List<Album>>(
 final queueRestoreProvider = Provider<void>((ref) {
   final tracks = ref.watch(loadedTracksProvider);
   if (tracks.isEmpty) return;
-  final byId = {for (final t in tracks) t.id: t};
+  final byId = ref.watch(trackByIdProvider);
   // Riverpod forbids mutating other providers while one is building —
   // restore must run after this build completes, never inside it.
   var alive = true;

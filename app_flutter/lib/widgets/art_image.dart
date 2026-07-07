@@ -13,6 +13,7 @@ class ArtImage extends StatelessWidget {
     this.url,
     this.fallbackText,
     this.size,
+    this.decodeSize,
     this.borderRadius = AriaRadius.md,
     this.fit = BoxFit.cover,
   });
@@ -22,12 +23,17 @@ class ArtImage extends StatelessWidget {
 
   /// Square edge length; null fills the parent.
   final double? size;
+
+  /// Decode-resolution hint (logical px) for when [size] is null and the
+  /// widget fills the parent (e.g. a grid tile extent). Layout is unaffected.
+  final double? decodeSize;
   final double borderRadius;
   final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
+    final decodeEdge = size ?? decodeSize;
 
     final fallback = Center(
       child: Text(
@@ -58,9 +64,10 @@ class ArtImage extends StatelessWidget {
               fit: fit,
               // Decode at display resolution when the size is known — full
               // covers in small grids waste memory and jank scrolling.
-              cacheWidth: size == null
+              cacheWidth: decodeEdge == null
                   ? null
-                  : (size! * MediaQuery.devicePixelRatioOf(context)).round(),
+                  : (decodeEdge * MediaQuery.devicePixelRatioOf(context))
+                        .round(),
               gaplessPlayback: true,
               errorBuilder: (_, _, _) => fallback,
               frameBuilder: (_, child, frame, wasSync) => wasSync

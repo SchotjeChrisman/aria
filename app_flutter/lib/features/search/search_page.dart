@@ -39,15 +39,24 @@ class SearchResults {
   });
 
   final List<String> artists;
-  final List<AlbumEntry> albums;
+  final List<Album> albums;
   final List<Track> tracks;
 
   bool get isEmpty => artists.isEmpty && albums.isEmpty && tracks.isEmpty;
 }
 
-final searchResultsProvider = Provider<SearchResults>((ref) {
+/// Client-side scan of the whole library (up to 6 fields per track, plus
+/// transliteration) — too heavy to run per keystroke at 100k tracks, so it
+/// is debounced like [mbArtistsProvider] via autoDispose cancellation.
+final searchResultsProvider = FutureProvider.autoDispose<SearchResults>((
+  ref,
+) async {
   final q = ref.watch(searchQueryProvider);
   if (q.isEmpty) return const SearchResults();
+  var cancelled = false;
+  ref.onDispose(() => cancelled = true);
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+  if (cancelled) return const SearchResults();
   final tracks = ref.watch(libraryTracksProvider).value ?? const [];
   final albums = ref.watch(albumsProvider);
 
@@ -65,7 +74,7 @@ final searchResultsProvider = Provider<SearchResults>((ref) {
     }
   }
   final albumHits = [
-    for (final a in albums.values)
+    for (final a in albums)
       if (m(a.title) || m(a.albumArtist)) a,
   ]..sort((x, y) => x.title.toLowerCase().compareTo(y.title.toLowerCase()));
 
@@ -96,7 +105,9 @@ final mbArtistsProvider = FutureProvider.autoDispose<List<ArtistCandidate>>((
   final candidates = await ref.watch(apiClientProvider).identifyArtist(q);
   // Skip artists the library sections already show, and MB's low-score fuzz.
   final inLibrary = {
-    for (final a in ref.read(searchResultsProvider).artists) a.toLowerCase(),
+    for (final a
+        in ref.read(searchResultsProvider).value?.artists ?? const <String>[])
+      a.toLowerCase(),
   };
   return [
     for (final c in candidates)
@@ -126,7 +137,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget build(BuildContext context) {
     final query = ref.watch(searchQueryProvider);
     final library = ref.watch(libraryTracksProvider);
-    final results = ref.watch(searchResultsProvider);
+    // Previous results stay visible while the debounced scan re-runs.
+    final results =
+        ref.watch(searchResultsProvider).value ?? const SearchResults();
     final mb = ref.watch(mbArtistsProvider);
     final nothingAnywhere =
         results.isEmpty && mb.hasValue && (mb.value?.isEmpty ?? true);
@@ -154,20 +167,23 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               ),
             ),
             Expanded(
+              // hasValue (not AsyncData) so a library refetch after a
+              // metadata edit keeps showing results instead of a spinner.
               child: switch (library) {
                 AsyncError() => const EmptyState(
                   message: 'Library unavailable — check the server.',
                   icon: Icons.cloud_off,
                 ),
-                AsyncData() when query.isEmpty => const EmptyState(
-                  message: 'Type to search titles, artists and albums.',
-                  icon: Icons.search,
-                ),
-                AsyncData() when nothingAnywhere => EmptyState(
+                AsyncValue(hasValue: true) when query.isEmpty =>
+                  const EmptyState(
+                    message: 'Type to search titles, artists and albums.',
+                    icon: Icons.search,
+                  ),
+                AsyncValue(hasValue: true) when nothingAnywhere => EmptyState(
                   message: 'Nothing matches "$query".',
                   icon: Icons.search_off,
                 ),
-                AsyncData() => _ResultsList(results: results),
+                AsyncValue(hasValue: true) => _ResultsList(results: results),
                 _ => const Center(child: CircularProgressIndicator()),
               },
             ),

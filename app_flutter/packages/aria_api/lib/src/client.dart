@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:http/http.dart' as http;
 
@@ -125,13 +126,24 @@ class AriaClient {
   Future<int> scan() async =>
       asInt(asMap(await _post('/api/scan'))['tracks']) ?? 0;
 
-  Future<List<Track>> tracks({int? limit, int? offset}) async => _list(
-        await _get('/api/tracks', query: {
+  /// The whole-library payload (100k+ rows). Decode + Track mapping run in a
+  /// background isolate ([Isolate.run], pure Dart — fine on every non-web
+  /// target) so the UI isolate never freezes; the tracks come back via
+  /// isolate copy, which is much cheaper than parsing on the main thread.
+  /// Small endpoints stay on the calling isolate.
+  Future<List<Track>> tracks({int? limit, int? offset}) async {
+    const path = '/api/tracks';
+    final r = await _timed(
+        _http.get(_u(path, {
           if (limit != null) 'limit': '$limit',
           if (offset != null) 'offset': '$offset',
-        }),
-        Track.fromJson,
-      );
+        })),
+        path);
+    if (r.statusCode < 200 || r.statusCode >= 300) _throw(r, path);
+    final bytes = r.bodyBytes;
+    return Isolate.run(
+        () => _list(jsonDecode(utf8.decode(bytes)), Track.fromJson));
+  }
 
   Future<GenreTree> genres() async =>
       GenreTree.fromJson(asMap(await _get('/api/genres')));

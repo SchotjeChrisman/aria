@@ -92,16 +92,21 @@ final visibleTracksProvider = Provider<List<Track>>((ref) {
     'plays' => counts?[t.id] ?? 0,
     _ => str(t.artist),
   };
-  list.sort((x, y) {
-    final c = keyFn(x).compareTo(keyFn(y));
+  // Decorate-sort-undecorate: the keys (format text, lowercasing, genre
+  // joins) are expensive — compute them once per track, not per comparison.
+  final decorated = [
+    for (final t in list) (keyFn(t), str(t.artist), str(t.title), t),
+  ];
+  decorated.sort((x, y) {
+    final c = x.$1.compareTo(y.$1);
     final tie = c != 0
         ? c
-        : (str(x.artist).compareTo(str(y.artist)) != 0
-              ? str(x.artist).compareTo(str(y.artist))
-              : str(x.title).compareTo(str(y.title)));
+        : (x.$2.compareTo(y.$2) != 0
+              ? x.$2.compareTo(y.$2)
+              : x.$3.compareTo(y.$3));
     return tie * s.dir;
   });
-  return list;
+  return [for (final d in decorated) d.$4];
 });
 
 const _cols = [

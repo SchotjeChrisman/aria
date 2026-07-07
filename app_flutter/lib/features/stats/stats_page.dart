@@ -14,6 +14,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/selection_highlight.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
+import '../library/library_providers.dart' show albumByIdProvider;
 import 'charts.dart';
 import 'stats_providers.dart';
 
@@ -52,7 +53,7 @@ class _StatsBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final byId = ref.watch(trackByIdProvider);
-    final albums = ref.watch(libraryAlbumsProvider);
+    final albums = ref.watch(albumByIdProvider);
     final people = ref.watch(peopleProvider).value ?? const {};
     final client = ref.watch(apiClientProvider);
     final queue = ref.read(queueProvider.notifier);

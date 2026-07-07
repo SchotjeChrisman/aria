@@ -20,12 +20,19 @@ final serverSettingsProvider = FutureProvider<Settings>(
 /// Enrichment progress, polled every 5s while watched (legacy watchEnrich).
 /// When a pass finishes (busy -> idle) the library caches are refreshed so
 /// new credits/faces land without a manual reload.
-final enrichStatusProvider = StreamProvider<EnrichStatus>((ref) async* {
+final enrichStatusProvider = StreamProvider.autoDispose<EnrichStatus>((
+  ref,
+) async* {
   final client = ref.watch(apiClientProvider);
+  // async* cancellation only lands at a yield; the flag stops the loop (and
+  // guards ref use) when disposal happens mid-await.
+  var disposed = false;
+  ref.onDispose(() => disposed = true);
   var wasBusy = false;
-  while (true) {
+  while (!disposed) {
     try {
       final s = await client.enrichStatus();
+      if (disposed) break;
       final busy = s.phase != 'idle';
       // New credits/faces land in every feature — the caches are core-owned.
       if (wasBusy && !busy) invalidateLibrary(ref);
