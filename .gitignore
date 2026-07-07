@@ -12,3 +12,6 @@ server/aria
 # local env
 .env
 .claude/
+
+# generated knowledge graph
+graphify-out/

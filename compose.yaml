@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       # NFS can't be SELinux-relabeled (no :z) — virt_use_nfs boolean grants access instead
       - /mnt/nfs/share/media/music:/music:ro

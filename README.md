@@ -13,7 +13,7 @@ mkdir -p music        # or point it at your library
 podman-compose up -d  # docker-compose works too
 ```
 
-Up at `http://localhost:3000`. First boot scans `./music` into SQLite on the
+Up at `http://localhost:3001`. First boot scans `./music` into SQLite on the
 `aria-data` volume; later boots rescan incrementally (only changed files are
 re-read). Volume mounts use `:z` SELinux labels for Fedora-style hosts.
 
