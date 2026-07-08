@@ -1,7 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 
 /// Compact number: no trailing zeros ("105", "-6.8", "0.7").
-String _n(double v) {
+String _n(num v) {
   var s = v.toStringAsFixed(2);
   if (s.contains('.')) s = s.replaceFirst(RegExp(r'\.?0+$'), '');
   return s;
@@ -14,9 +14,12 @@ String _n(double v) {
 String eqToAf(EqProfile p) {
   final parts = <String>[];
   for (final b in p.bands) {
-    final f = _n(b.frequency);
-    final q = _n(b.q ?? 1);
-    final g = _n(b.gainDb);
+    // ponytail: clamp to mpv-safe biquad ranges — out-of-range values make
+    // mpv reject the whole lavfi chain silently, and this also caps a
+    // hostile/broken OPRA payload.
+    final f = _n(b.frequency.clamp(1, 96000));
+    final q = _n((b.q ?? 1).clamp(0.1, double.infinity));
+    final g = _n(b.gainDb.clamp(-30, 30));
     // ponytail: ffmpeg low/highpass biquads max out at 2 poles — OPRA slope
     // is clamped to 12 dB/oct.
     final part = switch (b.type) {
@@ -32,6 +35,7 @@ String eqToAf(EqProfile p) {
     if (part != null) parts.add(part);
   }
   if (parts.isEmpty) return '';
-  if (p.gainDb != 0) parts.insert(0, 'volume=${_n(p.gainDb)}dB');
+  final pre = p.gainDb.clamp(-24, 24);
+  if (pre != 0) parts.insert(0, 'volume=${_n(pre)}dB');
   return 'lavfi=[${parts.join(',')}]';
 }

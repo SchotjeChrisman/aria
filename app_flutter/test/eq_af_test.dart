@@ -34,6 +34,19 @@ void main() {
     expect(eqToAf(p), 'lavfi=[equalizer=f=105:t=q:w=0.7:g=3]');
   });
 
+  test('out-of-range values are clamped to mpv-safe ranges', () {
+    const p = EqProfile(gainDb: -99, bands: [
+      EqBand(type: 'peak_dip', frequency: 0, gainDb: 100, q: 0),
+      EqBand(type: 'peak_dip', frequency: 200000, gainDb: -100, q: 5),
+    ]);
+    expect(
+      eqToAf(p),
+      'lavfi=[volume=-24dB,'
+      'equalizer=f=1:t=q:w=0.1:g=30,'
+      'equalizer=f=96000:t=q:w=5:g=-30]',
+    );
+  });
+
   test('no usable bands clears the chain', () {
     expect(eqToAf(const EqProfile(gainDb: -4)), '');
     expect(

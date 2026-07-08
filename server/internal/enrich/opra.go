@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"time"
@@ -22,7 +23,7 @@ type Opra struct {
 func NewOpra() *Opra {
 	return &Opra{
 		hc:  &http.Client{Timeout: 60 * time.Second}, // the feed is ~20k JSONL lines
-		url: "http://opra.roonlabs.net/database_v1.jsonl",
+		url: "https://opra.roonlabs.net/database_v1.jsonl",
 	}
 }
 
@@ -90,7 +91,10 @@ func (o *Opra) Fetch(ctx context.Context) (json.RawMessage, error) {
 	type prod struct{ name, vendorID string }
 	products := map[string]prod{} // product id -> {name, vendor id}
 	eqs := map[string][]OpraEq{}  // product id -> eqs
-	sc := bufio.NewScanner(res.Body)
+	// ponytail: 64 MB ceiling — the real feed is ~12.6 MB; hitting it means a
+	// runaway or hostile body, so error out rather than cache a truncated parse.
+	lr := &io.LimitedReader{R: res.Body, N: 64 << 20}
+	sc := bufio.NewScanner(lr)
 	sc.Buffer(make([]byte, 64<<10), 1<<20) // eq lines can exceed the 64K default
 	for sc.Scan() {
 		var l line
@@ -114,6 +118,9 @@ func (o *Opra) Fetch(ctx context.Context) (json.RawMessage, error) {
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
+	}
+	if lr.N == 0 {
+		return nil, fmt.Errorf("opra: body exceeds 64 MB cap")
 	}
 
 	out := []OpraProduct{}

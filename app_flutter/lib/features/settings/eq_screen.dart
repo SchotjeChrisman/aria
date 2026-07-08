@@ -64,10 +64,11 @@ class _EqScreenState extends ConsumerState<EqScreen> {
       presets[index] = edited;
     }
     ref.read(customEqPresetsProvider.notifier).set(presets);
-    // Editing the active preset re-applies it live.
+    // Editing the selected preset updates it in place — the master enabled
+    // switch stays as the user left it.
     if (index != null &&
         ref.read(eqProvider).profile?.name == preset?.name) {
-      ref.read(eqProvider.notifier).select(edited);
+      ref.read(eqProvider.notifier).updateProfile(edited);
     }
   }
 
@@ -77,6 +78,14 @@ class _EqScreenState extends ConsumerState<EqScreen> {
     final custom = ref.watch(customEqPresetsProvider);
     final opra = ref.watch(opraProvider);
     final theme = Theme.of(context);
+    // Null while the OPRA fetch is loading/failed — the list then shows a
+    // single status row after the always-available local head.
+    final filtered = opra.whenOrNull(
+      data: (products) => [
+        for (final p in products)
+          if ('${p.vendor} ${p.product}'.toLowerCase().contains(_query)) p,
+      ],
+    );
 
     Widget header(String title) => Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -112,9 +121,16 @@ class _EqScreenState extends ConsumerState<EqScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: () => ref
-                    .read(customEqPresetsProvider.notifier)
-                    .set(List.of(custom)..removeAt(i)),
+                onPressed: () {
+                  // Deleting the active preset turns the EQ off — the state
+                  // must match what the player is actually doing.
+                  if (eq.profile?.name == p.name) {
+                    ref.read(eqProvider.notifier).select(null);
+                  }
+                  ref
+                      .read(customEqPresetsProvider.notifier)
+                      .set(List.of(custom)..removeAt(i));
+                },
               ),
             ],
           ),
@@ -142,36 +158,40 @@ class _EqScreenState extends ConsumerState<EqScreen> {
             ),
           ),
           Expanded(
-            child: opra.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) =>
-                  Center(child: Text('Could not load the OPRA database: $e')),
-              data: (products) {
-                final filtered = [
-                  for (final p in products)
-                    if ('${p.vendor} ${p.product}'.toLowerCase().contains(
-                      _query,
-                    ))
-                      p,
-                ];
-                return ListView.builder(
-                  itemCount: head.length + filtered.length,
-                  itemBuilder: (context, i) {
-                    if (i < head.length) return head[i];
-                    final p = filtered[i - head.length];
-                    final name = '${p.vendor} ${p.product}';
-                    return ListTile(
-                      title: Text(name),
-                      subtitle: Text(
-                        p.eqs.length == 1
-                            ? (p.eqs.single.author ?? '')
-                            : '${p.eqs.length} EQs',
+            child: ListView.builder(
+              itemCount: head.length + (filtered?.length ?? 1),
+              itemBuilder: (context, i) {
+                if (i < head.length) return head[i];
+                if (filtered == null) {
+                  // OPRA fetch state row — the local head above stays usable.
+                  return opra.when(
+                    data: (_) => const SizedBox.shrink(), // unreachable
+                    loading: () => const ListTile(
+                      leading: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      selected: eq.profile?.name?.startsWith('$name ·') ??
-                          false,
-                      onTap: () => _pick(p),
-                    );
-                  },
+                      title: Text('Loading the OPRA database…'),
+                    ),
+                    error: (e, _) => ListTile(
+                      leading: const Icon(Icons.error_outline),
+                      title: Text('Could not load the OPRA database: $e'),
+                    ),
+                  );
+                }
+                final p = filtered[i - head.length];
+                final name = '${p.vendor} ${p.product}';
+                return ListTile(
+                  title: Text(name),
+                  subtitle: Text(
+                    p.eqs.length == 1
+                        ? (p.eqs.single.author ?? '')
+                        : '${p.eqs.length} EQs',
+                  ),
+                  selected: eq.profile?.name?.startsWith('$name ·') ??
+                      false,
+                  onTap: () => _pick(p),
                 );
               },
             ),
@@ -245,20 +265,42 @@ class _CustomEqDialogState extends State<_CustomEqDialog> {
   }
 
   void _save() {
+    final preamp = double.tryParse(_preamp.text) ?? 0;
+    final bands = [
+      for (final b in _bands)
+        EqBand(
+          type: b.type,
+          frequency: double.tryParse(b.freq.text) ?? 1000,
+          gainDb: double.tryParse(b.gain.text) ?? 0,
+          q: double.tryParse(b.q.text) ?? 1,
+        ),
+    ];
+    // mpv silently rejects out-of-range biquads — refuse to save them.
+    final invalid = preamp.abs() > 24 ||
+        bands.any(
+          (b) =>
+              b.frequency <= 0 ||
+              b.frequency > 96000 ||
+              (b.q ?? 1) < 0.1 ||
+              b.gainDb.abs() > 30,
+        );
+    if (invalid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Invalid EQ: frequency 1–96000 Hz, Q ≥ 0.1, '
+            'band gain ±30 dB, preamp ±24 dB.',
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.pop(
       context,
       EqProfile(
         name: _name.text.trim().isEmpty ? 'Custom' : _name.text.trim(),
-        gainDb: double.tryParse(_preamp.text) ?? 0,
-        bands: [
-          for (final b in _bands)
-            EqBand(
-              type: b.type,
-              frequency: double.tryParse(b.freq.text) ?? 1000,
-              gainDb: double.tryParse(b.gain.text) ?? 0,
-              q: double.tryParse(b.q.text) ?? 1,
-            ),
-        ],
+        gainDb: preamp,
+        bands: bands,
       ),
     );
   }

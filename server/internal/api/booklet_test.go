@@ -33,13 +33,36 @@ func TestBooklet(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// multi-disc box set: booklet at the album root, tracks in CD1/CD2
+	boxDir := filepath.Join(music, "Artist", "Box")
+	for _, sub := range []string{"CD1", "CD2"} {
+		if err := os.MkdirAll(filepath.Join(boxDir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(boxDir, "booklet.pdf"), []byte("%PDF box booklet"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// a PDF at the music root must never be attributed to any album
+	if err := os.WriteFile(filepath.Join(music, "random.pdf"), []byte("%PDF unrelated"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	deps := NewDeps(d, config.Config{MusicDir: music}, "test")
 	withPdf := strings.Repeat("a", 40)
 	without := strings.Repeat("b", 40)
+	multiDisc := strings.Repeat("c", 40)
+	rootAlbum := strings.Repeat("d", 40)
 	if err := deps.Tracks.UpsertAll(context.Background(), []repo.Track{
 		{ID: "t1", Path: "Artist/Album/01.flac", Title: "One", AlbumID: withPdf,
 			AddedAt: "2026-01-01T00:00:00.000Z", Format: "FLAC"},
 		{ID: "t2", Path: "Artist/Other/01.flac", Title: "Two", AlbumID: without,
+			AddedAt: "2026-01-01T00:00:00.000Z", Format: "FLAC"},
+		{ID: "t3", Path: "Artist/Box/CD1/01.flac", Title: "Three", AlbumID: multiDisc,
+			AddedAt: "2026-01-01T00:00:00.000Z", Format: "FLAC"},
+		{ID: "t4", Path: "Artist/Box/CD2/01.flac", Title: "Four", AlbumID: multiDisc,
+			AddedAt: "2026-01-01T00:00:00.000Z", Format: "FLAC"},
+		{ID: "t5", Path: "loose.flac", Title: "Five", AlbumID: rootAlbum,
 			AddedAt: "2026-01-01T00:00:00.000Z", Format: "FLAC"},
 	}); err != nil {
 		t.Fatal(err)
@@ -63,6 +86,12 @@ func TestBooklet(t *testing.T) {
 	}
 	if rec := get(without); rec.Code != 404 {
 		t.Errorf("no-pdf album = %d, want 404", rec.Code)
+	}
+	if rec := get(multiDisc); rec.Code != 200 || rec.Body.String() != "%PDF box booklet" {
+		t.Errorf("multi-disc booklet = %d %q, want 200 %%PDF box booklet", rec.Code, rec.Body.String())
+	}
+	if rec := get(rootAlbum); rec.Code != 404 {
+		t.Errorf("root-level album = %d, want 404 (root PDFs unattributable)", rec.Code)
 	}
 	if rec := get("not-a-sha1"); rec.Code != 404 {
 		t.Errorf("bad id = %d, want 404", rec.Code)

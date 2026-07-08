@@ -81,6 +81,14 @@ class EqNotifier extends Notifier<EqState> {
     _persist();
   }
 
+  /// Replace the selected profile in place, preserving the enabled flag —
+  /// editing a preset while the master switch is off must not re-enable it.
+  void updateProfile(EqProfile p) {
+    state = EqState(enabled: state.enabled, profile: p);
+    apply();
+    _persist();
+  }
+
   void setEnabled(bool on) {
     state = EqState(enabled: on, profile: state.profile);
     apply();
