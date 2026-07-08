@@ -158,13 +158,12 @@ class _AlbumBody extends ConsumerWidget {
                       label: const Text('Edit'),
                     ),
                   ),
-                  // Only when the album folder has a PDF; nothing while
+                  // Only when the album folder has PDFs; nothing while
                   // loading / on error (house style).
-                  if (ref.watch(hasBookletProvider(album.id)).value ?? false)
+                  if (ref.watch(bookletsProvider(album.id)).value
+                      case final booklets? when booklets.isNotEmpty)
                     OutlinedButton.icon(
-                      onPressed: () => context.push(
-                        '/album/${Uri.encodeComponent(album.id)}/booklet',
-                      ),
+                      onPressed: () => _openBooklet(context, booklets),
                       icon: const Icon(Icons.menu_book_outlined, size: 16),
                       label: const Text('Booklet'),
                     ),
@@ -223,6 +222,37 @@ class _AlbumBody extends ConsumerWidget {
         icon: Icons.sync,
       ),
     ]);
+  }
+
+  /// One booklet opens straight away; several offer a sheet of names first.
+  void _openBooklet(BuildContext context, List<String> booklets) {
+    void view(String name) => context.push(
+      '/album/${Uri.encodeComponent(album.id)}'
+      '/booklet/${Uri.encodeComponent(name)}',
+    );
+    if (booklets.length == 1) {
+      view(booklets.first);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final name in booklets)
+              ListTile(
+                leading: const Icon(Icons.menu_book_outlined),
+                title: Text(name),
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  view(name);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ------------------------------------------------------- deep album data

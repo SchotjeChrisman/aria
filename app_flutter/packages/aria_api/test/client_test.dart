@@ -13,8 +13,8 @@ void main() {
       expect(c.baseUrl, 'http://box:3000');
       expect(c.streamUrl('abc123'), 'http://box:3000/api/stream/abc123');
       expect(c.artUrl('deadbeef'), 'http://box:3000/api/art/deadbeef');
-      expect(c.bookletUrl('deadbeef'),
-          'http://box:3000/api/albums/deadbeef/booklet');
+      expect(c.bookletUrl('deadbeef', 'liner notes.pdf'),
+          'http://box:3000/api/albums/deadbeef/booklet/liner%20notes.pdf');
     });
   });
 
@@ -106,21 +106,15 @@ void main() {
       expect(seen.single.url.path, '/api/artist/AC%2FDC');
     });
 
-    test('hasBooklet uses HEAD; 200 true, 404 false', () async {
-      late http.Request req;
-      AriaClient c(int code) => AriaClient(
-            baseUrl: 'http://box:3000',
-            httpClient: MockClient((r) async {
-              req = r;
-              return http.Response('', code);
-            }),
-          );
-      expect(await c(200).hasBooklet('deadbeef'), isTrue);
-      expect(req.method, 'HEAD');
-      expect(req.url.path, '/api/albums/deadbeef/booklet');
-      expect(await c(404).hasBooklet('deadbeef'), isFalse);
-      expect(() => c(500).hasBooklet('deadbeef'),
-          throwsA(isA<AriaApiException>()));
+    test('booklets returns the server name list', () async {
+      final c = client((_) => {'booklets': ['Booklet.PDF', 'scan.pdf']});
+      expect(await c.booklets('deadbeef'), ['Booklet.PDF', 'scan.pdf']);
+      expect(seen.single.url.path, '/api/albums/deadbeef/booklets');
+    });
+
+    test('booklets empty list when the album has no PDF', () async {
+      final c = client((_) => {'booklets': []});
+      expect(await c.booklets('deadbeef'), isEmpty);
     });
 
     test('404 lookups return null', () async {

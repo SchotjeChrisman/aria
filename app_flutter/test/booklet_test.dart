@@ -7,12 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// Fake at the client level — no HTTP; the pdfrx viewer itself is not
 /// widget-testable (native pdfium).
 class _FakeClient extends AriaClient {
-  _FakeClient(this._hasBooklet) : super(baseUrl: 'http://s');
+  _FakeClient(this._booklets) : super(baseUrl: 'http://s');
 
-  final Future<bool> Function(String) _hasBooklet;
+  final Future<List<String>> Function(String) _booklets;
 
   @override
-  Future<bool> hasBooklet(String albumId) => _hasBooklet(albumId);
+  Future<List<String>> booklets(String albumId) => _booklets(albumId);
 }
 
 void main() {
@@ -20,18 +20,22 @@ void main() {
     overrides: [apiClientProvider.overrideWithValue(c)],
   );
 
-  test('hasBookletProvider surfaces the server answer', () async {
-    final container = withClient(_FakeClient((id) async => id == 'yes'));
+  test('bookletsProvider surfaces the server list (non-empty shows the button)',
+      () async {
+    final container = withClient(
+      _FakeClient((id) async => id == 'yes' ? ['booklet.pdf', 'scan.pdf'] : []),
+    );
     addTearDown(container.dispose);
-    expect(await container.read(hasBookletProvider('yes').future), isTrue);
-    expect(await container.read(hasBookletProvider('no').future), isFalse);
+    expect(await container.read(bookletsProvider('yes').future),
+        ['booklet.pdf', 'scan.pdf']);
+    expect(await container.read(bookletsProvider('no').future), isEmpty);
   });
 
-  test('hasBookletProvider maps errors to false (button stays hidden)', () async {
+  test('bookletsProvider maps errors to [] (button stays hidden)', () async {
     final container = withClient(
       _FakeClient((_) => throw AriaApiException(500, 'boom')),
     );
     addTearDown(container.dispose);
-    expect(await container.read(hasBookletProvider('x').future), isFalse);
+    expect(await container.read(bookletsProvider('x').future), isEmpty);
   });
 }

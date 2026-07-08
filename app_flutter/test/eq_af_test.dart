@@ -21,10 +21,21 @@ void main() {
       'lowshelf=f=105:t=q:w=0.7:g=-1.4,'
       'highshelf=f=10000:t=q:w=0.7:g=2.25,'
       'highpass=f=20:p=2,'
+      'highpass=f=20:p=2,'
       'lowpass=f=18000:p=2,'
       'bandpass=f=1000:t=q:w=2,'
       'bandreject=f=60:t=q:w=4]',
     );
+  });
+
+  test('pass slopes: 6 dB/oct is one pole, steeper slopes cascade stages', () {
+    String af(double? slope) => eqToAf(EqProfile(bands: [
+          EqBand(type: 'low_pass', frequency: 18000, slope: slope),
+        ]));
+    expect(af(6), 'lavfi=[lowpass=f=18000:p=1]');
+    expect(af(null), 'lavfi=[lowpass=f=18000:p=2]');
+    expect(af(36), 'lavfi=[${List.filled(3, 'lowpass=f=18000:p=2').join(',')}]');
+    expect(af(99), af(36)); // clamped
   });
 
   test('zero preamp omits the volume element', () {

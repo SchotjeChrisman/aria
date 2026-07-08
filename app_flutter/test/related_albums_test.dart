@@ -44,6 +44,22 @@ void main() {
       expect(out.map((a) => a.id), ['b', 'd', 'a', 'c']);
     });
 
+    test('genre-tree parents relate cousins and outrank nothing shared', () {
+      const parents = {'Bebop': 'Jazz', 'Swing': 'Jazz', 'Jazz': null};
+      final out = relatedAlbums(
+        target,
+        [
+          // no exact overlap, but Swing and Bebop are both Jazz: kin only
+          album('cousin', 'X', ['Swing'], title: 'B'),
+          // exact Jazz match (3+1) beats the cousin (1)
+          album('exact', 'Y', ['Jazz'], title: 'A'),
+          album('none', 'Z', ['Metal']),
+        ],
+        parents: parents,
+      );
+      expect(out.map((a) => a.id), ['exact', 'cousin']);
+    });
+
     test('caps at 12', () {
       final out = relatedAlbums(target, [
         for (var i = 0; i < 20; i++) album('a$i', 'X$i', ['Jazz']),

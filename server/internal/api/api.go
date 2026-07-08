@@ -104,7 +104,9 @@ func gzipped(h http.Handler) http.Handler {
 			p == "/api/events" ||
 			strings.HasPrefix(p, "/api/stream/") ||
 			strings.HasPrefix(p, "/api/art/") ||
-			strings.HasSuffix(p, "/booklet") { // gzip breaks ServeContent Range
+			// gzip breaks ServeContent Range; also skips the tiny booklet
+			// name list, a non-loss.
+			strings.Contains(p, "/booklet") {
 			h.ServeHTTP(w, r)
 			return
 		}

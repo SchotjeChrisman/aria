@@ -20,19 +20,27 @@ String eqToAf(EqProfile p) {
     final f = _n(b.frequency.clamp(1, 96000));
     final q = _n((b.q ?? 1).clamp(0.1, double.infinity));
     final g = _n(b.gainDb.clamp(-30, 30));
-    // ponytail: ffmpeg low/highpass biquads max out at 2 poles — OPRA slope
-    // is clamped to 12 dB/oct.
+    // ffmpeg low/highpass biquads do at most 2 poles (12 dB/oct): slope 6 is
+    // a single pole, steeper slopes cascade round(slope/12) identical stages.
+    // ponytail: identical-Q stages droop ~3 dB per extra stage at the cutoff
+    // vs a true Butterworth; per-stage Q staging if anyone hears it.
+    List<String> pass(String name) {
+      final slope = (b.slope ?? 12).clamp(6, 36);
+      if (slope < 12) return ['$name=f=$f:p=1'];
+      return List.filled((slope / 12).round(), '$name=f=$f:p=2');
+    }
+
     final part = switch (b.type) {
-      'peak_dip' => 'equalizer=f=$f:t=q:w=$q:g=$g',
-      'low_shelf' => 'lowshelf=f=$f:t=q:w=$q:g=$g',
-      'high_shelf' => 'highshelf=f=$f:t=q:w=$q:g=$g',
-      'high_pass' => 'highpass=f=$f:p=2',
-      'low_pass' => 'lowpass=f=$f:p=2',
-      'band_pass' => 'bandpass=f=$f:t=q:w=$q',
-      'band_stop' => 'bandreject=f=$f:t=q:w=$q',
+      'peak_dip' => ['equalizer=f=$f:t=q:w=$q:g=$g'],
+      'low_shelf' => ['lowshelf=f=$f:t=q:w=$q:g=$g'],
+      'high_shelf' => ['highshelf=f=$f:t=q:w=$q:g=$g'],
+      'high_pass' => pass('highpass'),
+      'low_pass' => pass('lowpass'),
+      'band_pass' => ['bandpass=f=$f:t=q:w=$q'],
+      'band_stop' => ['bandreject=f=$f:t=q:w=$q'],
       _ => null,
     };
-    if (part != null) parts.add(part);
+    if (part != null) parts.addAll(part);
   }
   if (parts.isEmpty) return '';
   final pre = p.gainDb.clamp(-24, 24);

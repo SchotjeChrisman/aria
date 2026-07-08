@@ -51,17 +51,15 @@ class AriaClient {
   String artUrl(String albumId) =>
       '$baseUrl/api/art/${Uri.encodeComponent(albumId)}';
 
-  String bookletUrl(String albumId) =>
-      '$baseUrl/api/albums/${Uri.encodeComponent(albumId)}/booklet';
+  String bookletUrl(String albumId, String name) =>
+      '$baseUrl/api/albums/${Uri.encodeComponent(albumId)}'
+      '/booklet/${Uri.encodeComponent(name)}';
 
-  /// True when the album's directory has a booklet PDF — HEAD, no bytes move.
-  Future<bool> hasBooklet(String albumId) async {
-    final path = '/api/albums/${Uri.encodeComponent(albumId)}/booklet';
-    final r = await _timed(_http.head(_u(path)), path);
-    if (r.statusCode == 200) return true;
-    if (r.statusCode == 404) return false;
-    _throw(r, path);
-  }
+  /// Candidate booklet PDF names in the album's directory, best first;
+  /// empty when none. Each name feeds [bookletUrl].
+  Future<List<String>> booklets(String albumId) async => asStringList(asMap(
+          await _get('/api/albums/${Uri.encodeComponent(albumId)}/booklets'))[
+      'booklets']);
 
   // ---- plumbing
 

@@ -13,9 +13,10 @@ final detailRoutes = <RouteBase>[
     ),
   ),
   GoRoute(
-    path: '/album/:id/booklet',
+    path: '/album/:id/booklet/:name',
     builder: (context, state) => BookletScreen(
       albumId: decodeAlbumRouteParam(state.pathParameters['id'] ?? ''),
+      name: decodeAlbumRouteParam(state.pathParameters['name'] ?? ''),
     ),
   ),
 ];

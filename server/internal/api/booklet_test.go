@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func TestBooklet(t *testing.T) {
 	if err := os.MkdirAll(albumDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// scan.pdf is larger, but the "booklet" name must win
+	// scan.pdf is larger, but the "booklet" name must sort first
 	if err := os.WriteFile(filepath.Join(albumDir, "scan.pdf"), []byte("%PDF big scan file"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,8 @@ func TestBooklet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// multi-disc box set: booklet at the album root, tracks in CD1/CD2
+	// multi-disc box set: booklet at the album root, tracks in CD1/CD2, plus
+	// a same-named PDF in both disc dirs (de-dupe must keep the larger one)
 	boxDir := filepath.Join(music, "Artist", "Box")
 	for _, sub := range []string{"CD1", "CD2"} {
 		if err := os.MkdirAll(filepath.Join(boxDir, sub), 0o755); err != nil {
@@ -41,6 +43,12 @@ func TestBooklet(t *testing.T) {
 		}
 	}
 	if err := os.WriteFile(filepath.Join(boxDir, "booklet.pdf"), []byte("%PDF box booklet"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(boxDir, "CD1", "notes.pdf"), []byte("%PDF cd1 notes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(boxDir, "CD2", "notes.pdf"), []byte("%PDF cd2 notes, longer"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// a PDF at the music root must never be attributed to any album
@@ -68,13 +76,39 @@ func TestBooklet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	get := func(id string) *httptest.ResponseRecorder {
+	list := func(id string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
-		New(deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/albums/"+id+"/booklet", nil))
+		New(deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/albums/"+id+"/booklets", nil))
+		return rec
+	}
+	// name is inserted raw so traversal cases can pre-encode their own
+	get := func(id, name string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		New(deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/albums/"+id+"/booklet/"+name, nil))
 		return rec
 	}
 
-	rec := get(withPdf)
+	// list: booklet-named first, then size desc; JSON body from writeJSON
+	if rec := list(withPdf); rec.Code != 200 ||
+		strings.TrimSpace(rec.Body.String()) != `{"booklets":["Booklet.PDF","scan.pdf"]}` {
+		t.Errorf("list = %d %q, want Booklet.PDF then scan.pdf", rec.Code, rec.Body.String())
+	}
+	if rec := list(multiDisc); rec.Code != 200 ||
+		strings.TrimSpace(rec.Body.String()) != `{"booklets":["booklet.pdf","notes.pdf"]}` {
+		t.Errorf("multi-disc list = %d %q, want de-duped booklet.pdf + notes.pdf", rec.Code, rec.Body.String())
+	}
+	// no PDFs / only-unattributable-root PDFs: 200 with an empty list
+	for _, id := range []string{without, rootAlbum} {
+		if rec := list(id); rec.Code != 200 ||
+			strings.TrimSpace(rec.Body.String()) != `{"booklets":[]}` {
+			t.Errorf("list(%s) = %d %q, want 200 []", id[:1], rec.Code, rec.Body.String())
+		}
+	}
+	if rec := list("not-a-sha1"); rec.Code != 404 {
+		t.Errorf("list bad id = %d, want 404", rec.Code)
+	}
+
+	rec := get(withPdf, url.PathEscape("Booklet.PDF"))
 	if rec.Code != 200 || rec.Body.String() != "%PDF booklet" {
 		t.Errorf("booklet = %d %q, want 200 %%PDF booklet", rec.Code, rec.Body.String())
 	}
@@ -84,16 +118,27 @@ func TestBooklet(t *testing.T) {
 	if rec.Header().Get("Content-Encoding") != "" {
 		t.Errorf("booklet must bypass gzip, got encoding %q", rec.Header().Get("Content-Encoding"))
 	}
-	if rec := get(without); rec.Code != 404 {
-		t.Errorf("no-pdf album = %d, want 404", rec.Code)
+	if rec := get(withPdf, "scan.pdf"); rec.Code != 200 || rec.Body.String() != "%PDF big scan file" {
+		t.Errorf("scan.pdf = %d %q, want 200 the scan", rec.Code, rec.Body.String())
 	}
-	if rec := get(multiDisc); rec.Code != 200 || rec.Body.String() != "%PDF box booklet" {
+	// multi-disc: booklet at box root; duplicate basename serves the winner (larger CD2)
+	if rec := get(multiDisc, "booklet.pdf"); rec.Code != 200 || rec.Body.String() != "%PDF box booklet" {
 		t.Errorf("multi-disc booklet = %d %q, want 200 %%PDF box booklet", rec.Code, rec.Body.String())
 	}
-	if rec := get(rootAlbum); rec.Code != 404 {
+	if rec := get(multiDisc, "notes.pdf"); rec.Code != 200 || rec.Body.String() != "%PDF cd2 notes, longer" {
+		t.Errorf("deduped notes.pdf = %d %q, want the larger CD2 copy", rec.Code, rec.Body.String())
+	}
+	// unknown and traversal names never match a candidate
+	if rec := get(withPdf, "nope.pdf"); rec.Code != 404 {
+		t.Errorf("unknown name = %d, want 404", rec.Code)
+	}
+	if rec := get(withPdf, "..%2F..%2Frandom.pdf"); rec.Code != 404 {
+		t.Errorf("traversal name = %d, want 404", rec.Code)
+	}
+	if rec := get(rootAlbum, "random.pdf"); rec.Code != 404 {
 		t.Errorf("root-level album = %d, want 404 (root PDFs unattributable)", rec.Code)
 	}
-	if rec := get("not-a-sha1"); rec.Code != 404 {
+	if rec := get("not-a-sha1", "booklet.pdf"); rec.Code != 404 {
 		t.Errorf("bad id = %d, want 404", rec.Code)
 	}
 }

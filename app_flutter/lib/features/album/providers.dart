@@ -24,36 +24,52 @@ final albumInfoProvider = FutureProvider.family<AlbumInfo?, String>(
 /// name -> portrait URL, for the performer credit cards.
 final albumPeopleProvider = peopleProvider;
 
-/// True when the album's directory holds a booklet PDF; errors read as
+/// Booklet PDF names in the album's directory, best first; errors read as
 /// "no booklet" (cosmetic data, house pattern).
-final hasBookletProvider = FutureProvider.family<bool, String>((
+final bookletsProvider = FutureProvider.family<List<String>, String>((
   ref,
   albumId,
 ) async {
   try {
-    return await ref.watch(albumApiProvider).hasBooklet(albumId);
+    return await ref.watch(albumApiProvider).booklets(albumId);
   } catch (_) {
-    return false;
+    return const [];
   }
 });
 
 /// Up to [limit] albums sharing canonical genres with [target], never by the
 /// same artist — "relate on music, not on artist" (issue #7).
-/// score = 3 * shared genres + year proximity (+2 within 3y, +1 within 10y).
-// ponytail: exact-genre match only; genre-tree ancestor matching would need
-// /api/genres — add if results feel thin.
-List<Album> relatedAlbums(Album target, Iterable<Album> all, {int limit = 12}) {
+/// score = 3 * shared genres + 1 * shared genre families (a genre or its
+/// [parents] entry matching the other side) + year proximity (+2 within 3y,
+/// +1 within 10y). Pass an empty tree to fall back to exact matches only.
+List<Album> relatedAlbums(
+  Album target,
+  Iterable<Album> all, {
+  Map<String, String?> parents = const {},
+  int limit = 12,
+}) {
   Set<String> genresOf(Album a) => {for (final t in a.tracks) ...t.genres};
+  // Genres plus their parent categories: "Blues Rock" also counts as "Rock",
+  // so cousins in the taxonomy still relate when exact tags never overlap.
+  Set<String> familyOf(Set<String> genres) => {
+    ...genres,
+    for (final g in genres)
+      if (parents[g] case final String p) p,
+  };
   final targetGenres = genresOf(target);
   if (targetGenres.isEmpty) return const [];
+  final targetFamily = familyOf(targetGenres);
   final artist = target.albumArtist.toLowerCase();
 
   final scored = <(int, Album)>[];
   for (final a in all) {
     if (a.id == target.id || a.albumArtist.toLowerCase() == artist) continue;
-    final shared = genresOf(a).intersection(targetGenres).length;
-    if (shared == 0) continue;
-    var score = 3 * shared;
+    final genres = genresOf(a);
+    final shared = genres.intersection(targetGenres).length;
+    final kin = familyOf(genres).intersection(targetFamily).length;
+    if (kin == 0) continue;
+    // kin counts exact matches too, so exact overlap weighs 3+1=4 vs 1.
+    var score = 3 * shared + kin;
     if (target.year != null && a.year != null) {
       final d = (target.year! - a.year!).abs();
       score += d <= 3
@@ -78,5 +94,6 @@ final relatedAlbumsProvider = FutureProvider.family<List<Album>, String>((
   final byId = await ref.watch(albumsByIdProvider.future);
   final target = byId[albumId];
   if (target == null) return const [];
-  return relatedAlbums(target, byId.values);
+  final tree = await ref.watch(genreTreeProvider.future);
+  return relatedAlbums(target, byId.values, parents: tree.parents);
 });

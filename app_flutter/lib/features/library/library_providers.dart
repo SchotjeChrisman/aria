@@ -10,22 +10,12 @@ import '../../core/tags_providers.dart';
 // genreIndex()/tagsOf() in app/ui/app.js. Everything derives from core's
 // one /api/tracks cache; refresh with ref.invalidate(tracksProvider).
 
-export '../../core/library_providers.dart' show peopleProvider;
+export '../../core/library_providers.dart' show genreTreeProvider, peopleProvider;
 export '../../core/tags_providers.dart' show tagsProvider;
 
 /// The core library cache under its legacy browse-layer name — invalidating
 /// either name refreshes every feature.
 final tracksProvider = libraryTracksProvider;
-
-/// Canonical genre -> parent tree. Old/unreachable servers degrade to a flat
-/// genre list, exactly like the legacy loadLibrary() catch.
-final genreTreeProvider = FutureProvider<GenreTree>((ref) async {
-  try {
-    return await ref.watch(apiClientProvider).genres();
-  } catch (_) {
-    return const GenreTree({});
-  }
-});
 
 /// Per-track play counts. Only fetched once something watches it (the
 /// "Most played" sorts), mirroring legacy ensurePlayCounts() laziness.

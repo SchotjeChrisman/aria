@@ -22,6 +22,16 @@ final trackByIdProvider = Provider<Map<String, Track>>((ref) {
   return {for (final t in tracks) t.id: t};
 });
 
+/// Canonical genre -> parent tree. Old/unreachable servers degrade to a flat
+/// genre list, exactly like the legacy loadLibrary() catch.
+final genreTreeProvider = FutureProvider<GenreTree>((ref) async {
+  try {
+    return await ref.watch(apiClientProvider).genres();
+  } catch (_) {
+    return const GenreTree({});
+  }
+});
+
 /// Person name -> photo URL (server enrichment cache). Errors degrade to an
 /// empty map — portraits are progressive enhancement.
 final peopleProvider = FutureProvider<Map<String, String>>((ref) async {
