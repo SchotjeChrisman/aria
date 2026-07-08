@@ -198,6 +198,108 @@ void main() {
     expect(container.read(radioPlaybackProvider)?.id, 'r1');
   });
 
+  test('loop one queues the current track again and repeats gaplessly', () {
+    final q = container.read(queueProvider.notifier);
+    q.playQueue([track('t1'), track('t2')], 0);
+    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    player.debugPoll();
+
+    q.cycleLoop(); // off -> all
+    q.cycleLoop(); // all -> one
+    expect(container.read(queueProvider).loop, LoopMode.one);
+    // The queued t2 was removed and t1 queued in its place.
+    expect(fake.log, contains('cmd playlist-remove 1'));
+    expect(
+      fake.log
+          .where((l) => l == 'cmd loadfile ${streamUrl('t1')} append')
+          .length,
+      1,
+    );
+
+    // t1 ends, engine slides into the queued repeat of t1.
+    fake.events.addAll([endFileEof, startFile, prop('playlist-pos', 1)]);
+    player.debugPoll();
+
+    expect(container.read(queueProvider).index, 0); // still t1
+    // The next repeat is queued again — the loop keeps feeding itself.
+    expect(
+      fake.log
+          .where((l) => l == 'cmd loadfile ${streamUrl('t1')} append')
+          .length,
+      2,
+    );
+    // No reload — the repeat was gapless.
+    expect(fake.log.where((l) => l.contains('replace')).length, 1);
+  });
+
+  test('loop all on the last track queues track 0 and wraps gaplessly', () {
+    final q = container.read(queueProvider.notifier);
+    q.playQueue([track('t1'), track('t2')], 1); // last track
+    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    player.debugPoll();
+    expect(fake.log.where((l) => l.contains('append')), isEmpty);
+
+    q.cycleLoop(); // off -> all
+    expect(fake.log, contains('cmd loadfile ${streamUrl('t1')} append'));
+
+    // t2 ends, engine slides into the queued wrap to t1.
+    fake.events.addAll([endFileEof, startFile, prop('playlist-pos', 1)]);
+    player.debugPoll();
+
+    final state = container.read(queueProvider);
+    expect(state.index, 0);
+    expect(state.current!.id, 't1');
+    // And t2 is queued behind the wrapped t1.
+    expect(fake.log, contains('cmd loadfile ${streamUrl('t2')} append'));
+    expect(fake.log.where((l) => l.contains('replace')).length, 1);
+  });
+
+  test('manual next() on the last track wraps with loop all', () {
+    final q = container.read(queueProvider.notifier);
+    q.playQueue([track('t1'), track('t2')], 1);
+    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    player.debugPoll();
+
+    q.cycleLoop(); // off -> all
+    q.next();
+    expect(fake.log, contains('cmd loadfile ${streamUrl('t1')} replace'));
+    expect(container.read(queueProvider).index, 0);
+  });
+
+  test('manual next() on the last track with loop off stops as before', () {
+    final q = container.read(queueProvider.notifier);
+    q.playQueue([track('t1'), track('t2')], 1);
+    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    player.debugPoll();
+
+    q.next();
+    expect(fake.log, contains('cmd stop'));
+    expect(container.read(queueProvider).index, 1);
+  });
+
+  test('loop mode survives persist/restore', () {
+    final q = container.read(queueProvider.notifier);
+    q.playQueue([track('t1'), track('t2')], 0);
+    q.cycleLoop(); // off -> all
+    q.cycleLoop(); // all -> one
+
+    // Fresh container over the same prefs = app restart.
+    final c2 = ProviderContainer(
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(
+          container.read(sharedPrefsProvider),
+        ),
+        ariaPlayerProvider.overrideWithValue(player),
+        apiClientProvider.overrideWithValue(AriaClient(baseUrl: 'http://s')),
+      ],
+    );
+    addTearDown(c2.dispose);
+    final byId = {for (final id in ['t1', 't2']) id: track(id)};
+    c2.read(queueProvider.notifier).restore((id) => byId[id]);
+    expect(c2.read(queueProvider).loop, LoopMode.one);
+    expect(c2.read(queueProvider).index, 0);
+  });
+
   test('playing a track clears radio mode and its persistence', () {
     const st = RadioStation(id: 'r1', name: 'FIP', url: 'http://radio/fip');
     container.read(radioPlaybackProvider.notifier).play(st);

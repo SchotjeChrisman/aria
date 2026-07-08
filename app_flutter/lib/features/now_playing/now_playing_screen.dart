@@ -140,8 +140,8 @@ class _Meta extends ConsumerWidget {
 }
 
 /// Full-size transport for the expanded screen: seek with times, shuffle,
-/// prev / big play / next. The persistent bar stays on the shell; this
-/// replaces it here.
+/// prev / big play / next, repeat. The persistent bar stays on the shell;
+/// this replaces it here.
 class _Controls extends ConsumerWidget {
   const _Controls();
 
@@ -151,6 +151,7 @@ class _Controls extends ConsumerWidget {
     final playing =
         ref.watch(playbackStateProvider).value == PlaybackState.playing;
     final shuffle = ref.watch(queueProvider.select((q) => q.shuffle));
+    final loop = ref.watch(queueProvider.select((q) => q.loop));
     final queue = ref.read(queueProvider.notifier);
 
     return ConstrainedBox(
@@ -197,8 +198,15 @@ class _Controls extends ConsumerWidget {
                 onPressed: queue.next,
               ),
               const SizedBox(width: AriaSpace.s3),
-              // Symmetry slot for shuffle; volume lives on the shell bar.
-              const SizedBox(width: 40),
+              IconButton(
+                icon: Icon(
+                  loop == LoopMode.one ? Icons.repeat_one : Icons.repeat,
+                ),
+                iconSize: 24,
+                color: loop != LoopMode.off ? c.accent : c.fgDim,
+                tooltip: 'Repeat',
+                onPressed: queue.cycleLoop,
+              ),
             ],
           ),
         ],

@@ -65,11 +65,15 @@ final currentTrackProvider = Provider<Track?>(
   (ref) => ref.watch(queueProvider).current,
 );
 
+/// Declaration order is the cycle order: off -> all -> one -> off.
+enum LoopMode { off, all, one }
+
 class QueueState {
   const QueueState({
     this.tracks = const [],
     this.index = -1,
     this.shuffle = false,
+    this.loop = LoopMode.off,
   });
 
   final List<Track> tracks;
@@ -78,16 +82,22 @@ class QueueState {
   /// are "played history", after it are upcoming — legacy queue panel model.
   final int index;
   final bool shuffle;
+  final LoopMode loop;
 
   Track? get current =>
       index >= 0 && index < tracks.length ? tracks[index] : null;
 
-  QueueState copyWith({List<Track>? tracks, int? index, bool? shuffle}) =>
-      QueueState(
-        tracks: tracks ?? this.tracks,
-        index: index ?? this.index,
-        shuffle: shuffle ?? this.shuffle,
-      );
+  QueueState copyWith({
+    List<Track>? tracks,
+    int? index,
+    bool? shuffle,
+    LoopMode? loop,
+  }) => QueueState(
+    tracks: tracks ?? this.tracks,
+    index: index ?? this.index,
+    shuffle: shuffle ?? this.shuffle,
+    loop: loop ?? this.loop,
+  );
 }
 
 /// Play-queue semantics ported from legacy app.js (playQueue/queueNext/
@@ -102,8 +112,12 @@ class QueueNotifier extends Notifier<QueueState> {
   /// advances arrive as engine playlist positions (base + n).
   int _engineBase = 0;
 
-  /// Whether the engine currently holds a queued-next entry.
-  bool _enginePending = false;
+  /// App-queue index of the engine's queued-next entry, null when none.
+  /// Repeat-one/wrap make advances non-linear, so the mapping is recorded
+  /// instead of derived from base + n.
+  int? _pendingAppIndex;
+
+  bool get _enginePending => _pendingAppIndex != null;
 
   @override
   QueueState build() {
@@ -151,11 +165,14 @@ class QueueNotifier extends Notifier<QueueState> {
     _playCurrent();
   }
 
-  /// Advance; at the end of the queue just stop (legacy next()).
+  /// Advance; at the end of the queue wrap with loop all, else stop
+  /// (legacy next()).
   void next() {
     if (state.index < state.tracks.length - 1) {
       state = state.copyWith(index: state.index + 1);
       _playCurrent();
+    } else if (state.loop == LoopMode.all && state.tracks.isNotEmpty) {
+      playAt(0);
     } else {
       _player.stop();
       _persist();
@@ -245,7 +262,7 @@ class QueueNotifier extends Notifier<QueueState> {
   void clear() {
     state = state.copyWith(tracks: const [], index: -1);
     _player.stop();
-    _enginePending = false;
+    _pendingAppIndex = null;
     _persist();
   }
 
@@ -253,7 +270,7 @@ class QueueNotifier extends Notifier<QueueState> {
   /// station URL loads next (legacy playRadio queue=[]).
   void clearForRadio() {
     state = state.copyWith(tracks: const [], index: -1);
-    _enginePending = false;
+    _pendingAppIndex = null;
     _persist();
   }
 
@@ -263,6 +280,16 @@ class QueueNotifier extends Notifier<QueueState> {
   void toggleShuffle() {
     state = state.copyWith(shuffle: !state.shuffle);
     if (state.shuffle) _shuffleUpcoming();
+    _persist();
+    _syncEngineNext();
+  }
+
+  /// Repeat off -> all -> one -> off. The gapless queued-next depends on the
+  /// mode (repeat/wrap), so re-sync it.
+  void cycleLoop() {
+    state = state.copyWith(
+      loop: LoopMode.values[(state.loop.index + 1) % LoopMode.values.length],
+    );
     _persist();
     _syncEngineNext();
   }
@@ -284,7 +311,7 @@ class QueueNotifier extends Notifier<QueueState> {
     // Any normal track leaves radio mode (legacy playCurrent radio = null).
     ref.read(radioPlaybackProvider.notifier).trackPlaybackStarted();
     _engineBase = state.index;
-    _enginePending = false;
+    _pendingAppIndex = null;
     // Server tag meta seeds the format badge until mpv reports the real
     // decoded audio-params (legacy player.js meta handshake).
     _player.play(
@@ -301,40 +328,62 @@ class QueueNotifier extends Notifier<QueueState> {
   }
 
   /// Keep the engine's queued-next in step with the app queue so natural
-  /// transitions are gapless. No-op while the engine is idle.
+  /// transitions are gapless: the current track again on repeat-one, track 0
+  /// past the end on repeat-all. No-op while the engine is idle.
   void _syncEngineNext() {
-    final ni = state.index + 1;
+    final ni = switch (state.loop) {
+      LoopMode.one => state.index,
+      LoopMode.all when state.index == state.tracks.length - 1 => 0,
+      _ => state.index + 1,
+    };
     if (state.index >= 0 && ni < state.tracks.length) {
       final t = state.tracks[ni];
-      _enginePending = _player.queueNext(
+      final ok = _player.queueNext(
         ref.read(apiClientProvider).streamUrl(t.id),
       );
+      _pendingAppIndex = ok ? ni : null;
     } else {
       _player.clearQueueNext();
-      _enginePending = false;
+      _pendingAppIndex = null;
     }
   }
 
   /// Engine playlist position changed — a manual load starting (base) or a
-  /// gapless advance (base + n): move the app pointer without reloading.
+  /// gapless advance into the queued entry: move the app pointer without
+  /// reloading. The pending mapping outranks base + n because repeat-one and
+  /// wrap advance non-linearly.
   void _onTrackStarted(int enginePos) {
     final expected = _engineBase + enginePos;
     if (expected == state.index) return; // initial start of a manual load
-    if (expected < 0 || expected >= state.tracks.length) return;
-    state = state.copyWith(index: expected);
+    final pending = _pendingAppIndex;
+    if (pending != null) {
+      _engineBase = pending - enginePos;
+      _pendingAppIndex = null;
+      // Repeat-one lands on the same index; still persist and re-queue the
+      // next repeat.
+      state = state.copyWith(index: pending);
+    } else {
+      if (expected < 0 || expected >= state.tracks.length) return;
+      state = state.copyWith(index: expected);
+    }
     _persist();
     _syncEngineNext();
   }
 
-  /// End-file(eof). With gapless wired this only matters at the end of the
-  /// queue; mid-queue the queued entry starts and _onTrackStarted advances.
+  /// End-file(eof). With gapless wired the queued entry starts on its own and
+  /// _onTrackStarted advances; this is the no-gapless fallback and the true
+  /// end of the queue.
   void _onEnded() {
     // Stream drop is the radio notifier's business (one-shot reconnect).
     if (ref.read(radioPlaybackProvider) != null) return;
-    if (state.index >= state.tracks.length - 1) {
+    if (_enginePending) return;
+    if (state.loop == LoopMode.one) {
+      _playCurrent();
+    } else if (state.loop == LoopMode.off &&
+        state.index >= state.tracks.length - 1) {
       _persist(); // end of queue — the engine idles on its own
-    } else if (!_enginePending) {
-      next(); // no gapless entry was queued — hard advance as fallback
+    } else {
+      next(); // no gapless entry was queued — hard advance / loop-all wrap
     }
   }
 
@@ -351,6 +400,7 @@ class QueueNotifier extends Notifier<QueueState> {
             'ids': [for (final t in state.tracks) t.id],
             'i': state.index,
             'shuffle': state.shuffle,
+            'loop': state.loop.name,
           }),
         );
   }
@@ -380,6 +430,7 @@ class QueueNotifier extends Notifier<QueueState> {
       tracks: tracks,
       index: i,
       shuffle: saved['shuffle'] == true,
+      loop: LoopMode.values.asNameMap()[saved['loop']] ?? LoopMode.off,
     );
   }
 }
