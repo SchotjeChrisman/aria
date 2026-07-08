@@ -18,7 +18,7 @@ import (
 	"aria/internal/scanner"
 )
 
-const version = "2.2.0"
+const version = "2.3.0"
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe /healthz on localhost and exit 0/1 (container healthcheck)")
