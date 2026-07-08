@@ -22,7 +22,8 @@ services:
       start_period: 30s
 
   watchtower:
-    image: containrrr/watchtower
+    # fully qualified: podman enforces short-name resolution non-interactively
+    image: docker.io/containrrr/watchtower
     restart: unless-stopped
     volumes:
       # Podman host: systemctl enable --now podman.socket, then
