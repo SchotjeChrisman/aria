@@ -24,6 +24,19 @@ final albumInfoProvider = FutureProvider.family<AlbumInfo?, String>(
 /// name -> portrait URL, for the performer credit cards.
 final albumPeopleProvider = peopleProvider;
 
+/// True when the album's directory holds a booklet PDF; errors read as
+/// "no booklet" (cosmetic data, house pattern).
+final hasBookletProvider = FutureProvider.family<bool, String>((
+  ref,
+  albumId,
+) async {
+  try {
+    return await ref.watch(albumApiProvider).hasBooklet(albumId);
+  } catch (_) {
+    return false;
+  }
+});
+
 /// Up to [limit] albums sharing canonical genres with [target], never by the
 /// same artist — "relate on music, not on artist" (issue #7).
 /// score = 3 * shared genres + year proximity (+2 within 3y, +1 within 10y).

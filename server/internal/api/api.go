@@ -103,7 +103,8 @@ func gzipped(h http.Handler) http.Handler {
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") ||
 			p == "/api/events" ||
 			strings.HasPrefix(p, "/api/stream/") ||
-			strings.HasPrefix(p, "/api/art/") {
+			strings.HasPrefix(p, "/api/art/") ||
+			strings.HasSuffix(p, "/booklet") { // gzip breaks ServeContent Range
 			h.ServeHTTP(w, r)
 			return
 		}

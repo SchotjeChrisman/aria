@@ -220,6 +220,25 @@ paths:
               schema: { type: string, format: binary }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /api/albums/{albumId}/booklet:
+    get:
+      tags: [streaming]
+      summary: Album booklet PDF
+      description: |
+        Resolved on demand from the album's directory on disk: the PDF whose
+        name contains "booklet" (case-insensitive), else the largest PDF.
+        404 when the album has no PDF. HTTP Range supported.
+      operationId: getBooklet
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: PDF bytes.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ---- enrichment ------------------------------------------------------------
 
   /api/enrich:

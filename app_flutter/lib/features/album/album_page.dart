@@ -158,6 +158,16 @@ class _AlbumBody extends ConsumerWidget {
                       label: const Text('Edit'),
                     ),
                   ),
+                  // Only when the album folder has a PDF; nothing while
+                  // loading / on error (house style).
+                  if (ref.watch(hasBookletProvider(album.id)).value ?? false)
+                    OutlinedButton.icon(
+                      onPressed: () => context.push(
+                        '/album/${Uri.encodeComponent(album.id)}/booklet',
+                      ),
+                      icon: const Icon(Icons.menu_book_outlined, size: 16),
+                      label: const Text('Booklet'),
+                    ),
                   // Legacy albumCtx verbs: Play next / Add to queue /
                   // Add to playlist / Tags / Select.
                   Builder(

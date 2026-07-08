@@ -28,6 +28,7 @@ dependencies:
     path: packages/aria_player
 
   cupertino_icons: ^1.0.8
+  pdfrx: ^2.4.4
 
 dev_dependencies:
   flutter_test:
