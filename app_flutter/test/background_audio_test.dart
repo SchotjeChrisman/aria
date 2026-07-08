@@ -27,6 +27,18 @@ void main() {
     expect(stopped.processingState, AudioProcessingState.idle);
   });
 
+  test('stopped but resumable stays ready — headset keys keep routing to us', () {
+    final s = mapPlaybackState(
+      engine.PlaybackState.stopped,
+      0,
+      radio: false,
+      canResume: true,
+    );
+    expect(s.processingState, AudioProcessingState.ready);
+    expect(s.playing, false);
+    expect(s.controls[1].action, MediaAction.play);
+  });
+
   test('radio omits skip controls and seek', () {
     final s = mapPlaybackState(engine.PlaybackState.playing, 0, radio: true);
     expect(s.controls.map((c) => c.action), [MediaAction.pause]);

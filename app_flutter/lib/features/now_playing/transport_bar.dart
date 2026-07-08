@@ -9,6 +9,7 @@ import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
 import '../../widgets/format_badge.dart';
+import '../library/library_providers.dart' show queueRestoreProvider;
 import 'providers.dart';
 import 'seek_bar.dart';
 import 'signal_path.dart';
@@ -30,6 +31,10 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     // app's lifetime — this bar is always mounted.
     final init = ref.watch(playerInitProvider);
     ref.watch(playReporterProvider);
+    // The persisted queue must rehydrate no matter which tab the app opens
+    // on (it used to hang off LibraryScreen, so headset/notification play
+    // did nothing after a restart until the Library tab was visited).
+    ref.watch(queueRestoreProvider);
 
     // Audio output died (e.g. exclusive access denied because another app
     // holds the device) — the engine already stopped; tell the user why.

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +22,10 @@ class SettingsPage extends ConsumerWidget {
             Text('Settings', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: AriaSpace.s6),
             const _Section(title: 'Server', child: _ServerUrlField()),
-            const _Section(title: 'Playback', child: _ExclusiveToggle()),
+            // Exclusive access is a desktop-only mpv option (the engine
+            // no-ops it on Android) — a dead switch just misleads.
+            if (!Platform.isAndroid)
+              const _Section(title: 'Playback', child: _ExclusiveToggle()),
             const _Section(title: 'Scrobbling', child: _ListenBrainzField()),
             const _Section(title: 'Library', child: _LibraryTools()),
             const _Section(title: 'Profiles', child: ProfilesSection()),

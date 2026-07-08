@@ -52,6 +52,7 @@ PlaybackState mapPlaybackState(
   engine.PlaybackState s,
   double positionSeconds, {
   required bool radio,
+  bool canResume = false,
 }) {
   final playing = s == engine.PlaybackState.playing;
   final toggle = playing ? MediaControl.pause : MediaControl.play;
@@ -62,7 +63,11 @@ PlaybackState mapPlaybackState(
         : [MediaControl.skipToPrevious, toggle, MediaControl.skipToNext],
     systemActions: radio ? const {} : const {MediaAction.seek},
     androidCompactActionIndices: radio ? const [0] : const [0, 1, 2],
-    processingState: s == engine.PlaybackState.stopped
+    // Idle makes audio_service deactivate the MediaSession, after which
+    // Android hands headset play keys to whichever app was active before.
+    // Stopped-but-resumable (queue ended, audio error) must stay ready so
+    // the buttons keep routing to us.
+    processingState: s == engine.PlaybackState.stopped && !canResume
         ? AudioProcessingState.idle
         : AudioProcessingState.ready,
     playing: playing,
@@ -84,11 +89,10 @@ class AriaAudioHandler extends BaseAudioHandler {
           : 0.0;
       if ((pos - (_pushedPos + elapsed)).abs() > 1) _pushState();
     });
-    _c.listen(
-      currentTrackProvider,
-      (_, _) => _pushItem(),
-      fireImmediately: true,
-    );
+    _c.listen(currentTrackProvider, (_, _) {
+      _pushItem();
+      _pushState(); // canResume flips when a track (dis)appears while stopped
+    }, fireImmediately: true);
     _c.listen(radioPlaybackProvider, (_, _) {
       _pushItem();
       _pushState(); // the control set changes with radio mode
@@ -106,7 +110,13 @@ class AriaAudioHandler extends BaseAudioHandler {
     _pushedPos = _player.currentPosition;
     _pushedAt = DateTime.now();
     playbackState.add(
-      mapPlaybackState(_player.currentState, _pushedPos, radio: _radio),
+      mapPlaybackState(
+        _player.currentState,
+        _pushedPos,
+        radio: _radio,
+        // play() already resumes stopped-with-track / stopped-radio.
+        canResume: _c.read(currentTrackProvider) != null || _radio,
+      ),
     );
   }
 
