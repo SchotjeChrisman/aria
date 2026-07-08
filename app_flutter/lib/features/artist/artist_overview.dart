@@ -179,7 +179,10 @@ class ArtistOverview extends ConsumerWidget {
             onTap: () => context.push(albumPath(e.key)),
             borderRadius: BorderRadius.circular(AriaRadius.md),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AriaSpace.s3,
+                vertical: 10,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -200,7 +203,7 @@ class ArtistOverview extends ConsumerWidget {
                   const SizedBox(width: AriaSpace.s3),
                   Text(
                     e.value.join(', '),
-                    style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -381,7 +384,10 @@ class _TopTracks extends ConsumerWidget {
             ),
             borderRadius: BorderRadius.circular(AriaRadius.md),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AriaSpace.s3,
+                vertical: AriaSpace.s2,
+              ),
               child: Row(
                 children: [
                   SizedBox(
@@ -408,7 +414,7 @@ class _TopTracks extends ConsumerWidget {
                         ),
                         Text(
                           t.album ?? '',
-                          style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                          style: Theme.of(context).textTheme.bodySmall,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

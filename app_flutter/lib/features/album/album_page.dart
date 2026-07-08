@@ -137,14 +137,18 @@ class _AlbumBody extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: AriaSpace.s5),
-              Row(
+              // Wrap, not Row: next to 180px art on a 390px phone the
+              // remaining column is too narrow for three buttons in a line.
+              Wrap(
+                spacing: AriaSpace.s3,
+                runSpacing: AriaSpace.s2,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   FilledButton.icon(
                     onPressed: () => queue.playQueue(album.tracks, 0),
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Play album'),
                   ),
-                  const SizedBox(width: AriaSpace.s3),
                   Builder(
                     builder: (bctx) => OutlinedButton.icon(
                       onPressed: () => _editMenu(bctx, context, ref),
@@ -152,7 +156,6 @@ class _AlbumBody extends ConsumerWidget {
                       label: const Text('Edit'),
                     ),
                   ),
-                  const SizedBox(width: AriaSpace.s3),
                   // Legacy albumCtx verbs: Play next / Add to queue /
                   // Add to playlist / Tags / Select.
                   Builder(
@@ -235,7 +238,7 @@ class _AlbumBody extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (facts.isNotEmpty)
-                  Text(facts, style: TextStyle(fontSize: 12.5, color: c.fgDim)),
+                  Text(facts, style: Theme.of(context).textTheme.bodySmall),
                 if (d.blurb != null) ...[
                   const SizedBox(height: AriaSpace.s2),
                   Text(d.blurb!),
@@ -438,9 +441,13 @@ class _WorkHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, AriaSpace.s4, 12, AriaSpace.s1),
+      padding: const EdgeInsets.fromLTRB(
+        AriaSpace.s3,
+        AriaSpace.s4,
+        AriaSpace.s3,
+        AriaSpace.s1,
+      ),
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: AriaSpace.s2,
@@ -451,7 +458,7 @@ class _WorkHeader extends StatelessWidget {
               onTap: () => context.push(_artistPath(composer!)),
               child: Text(
                 composer!,
-                style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
         ],

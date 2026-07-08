@@ -207,9 +207,8 @@ class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
                   Expanded(
                     child: Text(
                       _error ?? '',
-                      style: TextStyle(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.error,
-                        fontSize: 12.5,
                       ),
                     ),
                   ),

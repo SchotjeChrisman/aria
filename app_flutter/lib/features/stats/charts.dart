@@ -144,7 +144,7 @@ class MiniList extends StatelessWidget {
                       width: 22,
                       child: Text(
                         '${i + 1}',
-                        style: TextStyle(color: c.fgDim, fontSize: 12.5),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
                     Expanded(
@@ -169,7 +169,7 @@ class MiniList extends StatelessWidget {
                     const SizedBox(width: AriaSpace.s2),
                     Text(
                       '${rows[i].n}',
-                      style: TextStyle(color: c.fgDim, fontSize: 12.5),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),

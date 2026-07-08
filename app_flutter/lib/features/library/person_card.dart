@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme.dart';
 import '../../widgets/artist_avatar.dart';
 
 /// Artist/composer grid tile (legacy .artist-card): round face filling the
@@ -26,7 +25,6 @@ class PersonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
     return GestureDetector(
       onTap: onTap,
       onSecondaryTapUp: onSecondary == null
@@ -63,7 +61,7 @@ class PersonCard extends StatelessWidget {
             if (subtitle != null && subtitle!.isNotEmpty)
               Text(
                 subtitle!,
-                style: TextStyle(fontSize: 12.5, height: 1.45, color: c.fgDim),
+                style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

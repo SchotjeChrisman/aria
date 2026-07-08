@@ -117,9 +117,6 @@ class AdaptiveShell extends StatelessWidget {
 
   final StatefulNavigationShell shell;
 
-  static const _railBreakpoint = 700.0;
-  static const _extendedBreakpoint = 1100.0;
-
   /// Branch index == position in this unfiltered list.
   static final _all = <AppDestination>[
     for (final e in featureEntries)
@@ -129,7 +126,8 @@ class AdaptiveShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= _railBreakpoint;
+    final band = AriaBreakpoint.fromWidth(width);
+    final wide = band != AriaBreakpoint.mobile;
     final c = AriaColors.of(context);
 
     final visible = [
@@ -188,10 +186,10 @@ class AdaptiveShell extends StatelessWidget {
       );
     }
 
-    // Sidebar tracks window width: compact icon rail from 700px, expanding
-    // to icons+labels past 1100px, with the extended width scaling with the
+    // Sidebar morphs per band: compact icon rail on tablet, expanding to
+    // icons+labels on desktop, with the extended width scaling with the
     // window.
-    final extended = width >= _extendedBreakpoint;
+    final extended = band == AriaBreakpoint.desktop;
     final rail = NavigationRail(
       selectedIndex: selected,
       onDestinationSelected: select,

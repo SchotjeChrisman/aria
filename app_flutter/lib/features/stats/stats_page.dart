@@ -70,6 +70,9 @@ class _StatsBody extends ConsumerWidget {
         if (albums[x.albumId] != null) (a: albums[x.albumId]!, c: x.count),
     ].take(20).toList();
     final topArtists = stats.topArtists.take(25).toList();
+    final charts = stats.history.isNotEmpty
+        ? _buildCharts(stats.history)
+        : null;
 
     return ListView(
       padding: const EdgeInsets.all(AriaSpace.s6),
@@ -96,33 +99,27 @@ class _StatsBody extends ConsumerWidget {
         ),
 
         // Listening charts from the raw 30-day history (legacy buildListening).
-        if (stats.history.isNotEmpty) ...[
+        if (charts != null) ...[
           const SizedBox(height: AriaSpace.s8),
           Text('Listening', style: h2),
           const SizedBox(height: AriaSpace.s3),
-          LayoutBuilder(
-            builder: (context, box) {
-              final charts = _buildCharts(stats.history);
-              final wide = box.maxWidth >= 640;
-              if (!wide) {
-                return Column(
-                  children: [
-                    charts.$1,
-                    const SizedBox(height: AriaSpace.s3),
-                    charts.$2,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: charts.$1),
-                  const SizedBox(width: AriaSpace.s3),
-                  Expanded(child: charts.$2),
-                ],
-              );
-            },
-          ),
+          if (AriaBreakpoint.of(context) == AriaBreakpoint.mobile)
+            Column(
+              children: [
+                charts.$1,
+                const SizedBox(height: AriaSpace.s3),
+                charts.$2,
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: charts.$1),
+                const SizedBox(width: AriaSpace.s3),
+                Expanded(child: charts.$2),
+              ],
+            ),
         ],
 
         if (topTracks.isNotEmpty) ...[
@@ -153,8 +150,8 @@ class _StatsBody extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(AriaRadius.md),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                    horizontal: AriaSpace.s3,
+                    vertical: AriaSpace.s2,
                   ),
                   child: Row(
                     children: [
@@ -190,7 +187,7 @@ class _StatsBody extends ConsumerWidget {
                               ].nonNulls.join(' · '),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
                         ),
@@ -198,7 +195,7 @@ class _StatsBody extends ConsumerWidget {
                       const SizedBox(width: AriaSpace.s3),
                       Text(
                         _plays(topTracks[i].c),
-                        style: TextStyle(color: c.fgDim, fontSize: 12.5),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),

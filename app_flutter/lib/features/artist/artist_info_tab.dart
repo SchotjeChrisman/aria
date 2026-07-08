@@ -67,10 +67,7 @@ class ArtistInfoTab extends ConsumerWidget {
                               ),
                               child: Text(
                                 meta,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: c.fgDim,
-                                ),
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
                           _Bio(name: name, summary: d.bio, url: d.url),

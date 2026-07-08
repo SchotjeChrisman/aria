@@ -184,7 +184,9 @@ class _QueueRow extends ConsumerWidget {
               ),
               Text(
                 trackSubLine(track),
-                style: TextStyle(fontSize: 12.5, color: dim),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall!.copyWith(color: dim),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -261,13 +263,15 @@ class _QueueRow extends ConsumerWidget {
       ),
       AriaMenuItem(
         'Go to album',
-        () => context.push(albumPath(track.albumId)),
+        // go, not push: see now_playing_screen — this screen is above the
+        // shell, the destinations are inside shell branches.
+        () => context.go(albumPath(track.albumId)),
         icon: Icons.album_outlined,
       ),
       if ((track.artist ?? '').isNotEmpty)
         AriaMenuItem(
           'Go to artist',
-          () => context.push(artistPath(track.artist!)),
+          () => context.go(artistPath(track.artist!)),
           icon: Icons.person_outline,
         ),
       AriaMenuItem(

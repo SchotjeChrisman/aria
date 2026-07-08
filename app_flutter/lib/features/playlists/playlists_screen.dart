@@ -70,19 +70,23 @@ class PlaylistsScreen extends ConsumerWidget {
                   'No playlists yet — make one, or pick "Add to playlist…" '
                   'on any track.',
             ),
-            AsyncData(:final value) => LayoutBuilder(
-              builder: (context, box) => GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: (box.maxWidth / 190).floor().clamp(2, 8),
-                  mainAxisSpacing: AriaSpace.s5,
-                  crossAxisSpacing: AriaSpace.s5,
-                  childAspectRatio: 0.78,
-                ),
-                itemCount: value.length,
-                itemBuilder: (context, i) => _PlaylistTile(playlist: value[i]),
+            AsyncData(:final value) => GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: AriaBreakpoint.of(context).gridColumns,
+                mainAxisSpacing: AriaSpace.s5,
+                crossAxisSpacing: AriaSpace.s5,
+                // Tablet-floor tiles (~103px at a 600px window) need a
+                // taller cell: the ~49px text block under the square art
+                // doesn't shrink with the tile.
+                childAspectRatio:
+                    AriaBreakpoint.of(context) == AriaBreakpoint.tablet
+                    ? 0.67
+                    : 0.72,
               ),
+              itemCount: value.length,
+              itemBuilder: (context, i) => _PlaylistTile(playlist: value[i]),
             ),
             AsyncError() => const EmptyState(message: 'Playlists unavailable.'),
             _ => const Padding(
@@ -180,7 +184,7 @@ class _PlaylistTile extends ConsumerWidget {
           else
             Text(
               '$n track${n == 1 ? '' : 's'}',
-              style: TextStyle(color: c.fgDim, fontSize: 12.5),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
         ],
       ),

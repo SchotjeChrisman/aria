@@ -84,10 +84,24 @@ class _StationGroups extends StatelessWidget {
         for (final g in keys) ...[
           Text(g, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AriaSpace.s3),
-          Wrap(
-            spacing: AriaSpace.s3,
-            runSpacing: AriaSpace.s3,
-            children: [for (final st in groups[g]!) _RadioCard(station: st)],
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              // Station cards were 260px-wide Wrap chips — meaningfully wider
+              // than album tiles, so they get their own fixed per-band counts
+              // instead of gridColumns.
+              crossAxisCount: switch (AriaBreakpoint.of(context)) {
+                AriaBreakpoint.mobile => 1,
+                AriaBreakpoint.tablet => 2,
+                AriaBreakpoint.desktop => 4,
+              },
+              mainAxisSpacing: AriaSpace.s3,
+              crossAxisSpacing: AriaSpace.s3,
+              mainAxisExtent: 80,
+            ),
+            itemCount: groups[g]!.length,
+            itemBuilder: (context, i) => _RadioCard(station: groups[g]![i]),
           ),
           const SizedBox(height: AriaSpace.s6),
         ],
@@ -112,7 +126,6 @@ class _RadioCard extends ConsumerWidget {
       onTap: () => ref.read(radioPlaybackProvider.notifier).play(station),
       borderRadius: BorderRadius.circular(AriaRadius.md),
       child: Container(
-        width: 260,
         padding: const EdgeInsets.all(AriaSpace.s4),
         decoration: BoxDecoration(
           color: c.bgRaised,
@@ -137,7 +150,7 @@ class _RadioCard extends ConsumerWidget {
                   Text(
                     '${station.builtin ? 'Built-in' : 'Custom'}'
                     '${flac ? ' · FLAC' : ''}',
-                    style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),

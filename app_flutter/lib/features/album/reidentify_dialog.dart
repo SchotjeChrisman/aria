@@ -113,7 +113,6 @@ class _ReidentifyDialogState extends State<_ReidentifyDialog> {
   }
 
   Widget _candidateRow(BuildContext context, AlbumCandidate cand) {
-    final c = AriaColors.of(context);
     final sub = [
       cand.artist,
       cand.date,
@@ -124,7 +123,10 @@ class _ReidentifyDialogState extends State<_ReidentifyDialog> {
       onTap: () => _pick(cand),
       borderRadius: BorderRadius.circular(AriaRadius.sm),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AriaSpace.s3,
+          vertical: AriaSpace.s2,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -132,7 +134,7 @@ class _ReidentifyDialogState extends State<_ReidentifyDialog> {
             if (sub.isNotEmpty)
               Text(
                 sub,
-                style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

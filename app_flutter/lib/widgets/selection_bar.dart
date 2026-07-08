@@ -44,7 +44,10 @@ class SelectionBar extends ConsumerWidget {
         children: [
           Text(
             '${sel.items.length} selected',
-            style: TextStyle(color: c.accent, fontSize: 12.5),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: c.accent),
           ),
           const SizedBox(width: AriaSpace.s3),
           Expanded(

@@ -145,7 +145,10 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
               setState(() => open ? _open.remove(work) : _open.add(work)),
           borderRadius: BorderRadius.circular(AriaRadius.md),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AriaSpace.s3,
+              vertical: 10,
+            ),
             child: Row(
               children: [
                 SizedBox(
@@ -165,7 +168,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
                 const SizedBox(width: 14),
                 Text(
                   '${recs.length} recording${recs.length == 1 ? '' : 's'}',
-                  style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(width: 14),
                 Text(formatDuration(secs), style: TextStyle(color: c.fgDim)),
@@ -238,13 +241,13 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
                     onTap: () => context.push(albumPath(album.id)),
                     child: Text(
                       album.title,
-                      style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   )
                 else if ((t0.album ?? '').isNotEmpty)
                   Text(
                     t0.album!,
-                    style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
               ],
             ),
@@ -315,7 +318,7 @@ class _ComposerHero extends ConsumerWidget {
                           padding: const EdgeInsets.only(bottom: AriaSpace.s2),
                           child: Text(
                             meta,
-                            style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
                       if (d.bio != null) Text(d.bio!),

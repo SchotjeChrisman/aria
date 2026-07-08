@@ -91,16 +91,20 @@ class _NewReleaseCard extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: item.cover == null
                 ? Center(child: Icon(Icons.album_outlined, color: c.fgDim))
-                : Image.network(
-                    item.cover!,
-                    fit: BoxFit.cover,
-                    // Cards are Shelf.itemWidth (168) wide — decode at that
+                : LayoutBuilder(
+                    // Band-sized cards have no fixed extent (wide windows go
+                    // well past 190 logical px) — decode at the laid-out
                     // size instead of the full remote cover.
-                    cacheWidth:
-                        (168 * MediaQuery.devicePixelRatioOf(context)).round(),
-                    gaplessPlayback: true,
-                    errorBuilder: (_, _, _) => Center(
-                      child: Icon(Icons.album_outlined, color: c.fgDim),
+                    builder: (context, box) => Image.network(
+                      item.cover!,
+                      fit: BoxFit.cover,
+                      cacheWidth: (box.maxWidth *
+                              MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                      gaplessPlayback: true,
+                      errorBuilder: (_, _, _) => Center(
+                        child: Icon(Icons.album_outlined, color: c.fgDim),
+                      ),
                     ),
                   ),
           ),
@@ -116,7 +120,7 @@ class _NewReleaseCard extends StatelessWidget {
           sub,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12.5, color: c.fgDim),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         Text('Not in library', style: TextStyle(fontSize: 11, color: c.fgDim)),
       ],

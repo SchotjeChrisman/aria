@@ -114,11 +114,17 @@ class ArtistDiscography extends ConsumerWidget {
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 180,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: AriaBreakpoint.of(context).gridColumns,
                 mainAxisSpacing: AriaSpace.s5,
                 crossAxisSpacing: AriaSpace.s5,
-                childAspectRatio: 0.74,
+                // Tablet-floor tiles (~103px at a 600px window) need a
+                // taller cell: the ~49px text block under the square art
+                // doesn't shrink with the tile.
+                childAspectRatio:
+                    AriaBreakpoint.of(context) == AriaBreakpoint.tablet
+                    ? 0.67
+                    : 0.72,
               ),
               itemCount: groups[ty]!.length,
               itemBuilder: (context, i) {

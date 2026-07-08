@@ -90,7 +90,7 @@ class TagScreen extends ConsumerWidget {
           const SizedBox(height: AriaSpace.s1),
           Text(
             tagPath(all, tag),
-            style: TextStyle(color: c.fgDim, fontSize: 12.5),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
         if (kids.isNotEmpty) ...[

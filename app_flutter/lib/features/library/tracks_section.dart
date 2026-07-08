@@ -162,7 +162,7 @@ class TracksSection extends ConsumerWidget {
               const Spacer(),
               Text(
                 '${list.length} tracks',
-                style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -217,27 +217,23 @@ class _Cells extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, box) {
-        final narrow = box.maxWidth < 760;
-        Widget cell(String key) => builder(key, narrow);
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s6),
-          child: Row(
-            children: [
-              SizedBox(width: 34, child: cell('no')),
-              Expanded(flex: 3, child: cell('title')),
-              Expanded(flex: 2, child: cell('artist')),
-              Expanded(flex: 2, child: cell('album')),
-              if (!narrow) Expanded(flex: 2, child: cell('genre')),
-              if (!narrow) SizedBox(width: 48, child: cell('year')),
-              SizedBox(width: 52, child: cell('duration')),
-              SizedBox(width: 92, child: cell('format')),
-              if (!narrow) SizedBox(width: 46, child: cell('plays')),
-            ],
-          ),
-        );
-      },
+    final narrow = AriaBreakpoint.of(context) == AriaBreakpoint.mobile;
+    Widget cell(String key) => builder(key, narrow);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s6),
+      child: Row(
+        children: [
+          SizedBox(width: 34, child: cell('no')),
+          Expanded(flex: 3, child: cell('title')),
+          Expanded(flex: 2, child: cell('artist')),
+          Expanded(flex: 2, child: cell('album')),
+          if (!narrow) Expanded(flex: 2, child: cell('genre')),
+          if (!narrow) SizedBox(width: 48, child: cell('year')),
+          SizedBox(width: 52, child: cell('duration')),
+          SizedBox(width: 92, child: cell('format')),
+          if (!narrow) SizedBox(width: 46, child: cell('plays')),
+        ],
+      ),
     );
   }
 }

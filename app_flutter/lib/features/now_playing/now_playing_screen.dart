@@ -124,7 +124,10 @@ class _Meta extends ConsumerWidget {
           child: AspectRatio(
             aspectRatio: 1,
             child: GestureDetector(
-              onTap: () => context.push(albumPath(track.albumId)),
+              // go, not push: this screen sits above the shell and the album/
+              // artist routes live inside shell branches — pushing across that
+              // boundary corrupts the root navigator (duplicate shell pages).
+              onTap: () => context.go(albumPath(track.albumId)),
               child: MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: ArtImage(
@@ -149,7 +152,7 @@ class _Meta extends ConsumerWidget {
         GestureDetector(
           onTap: (track.artist ?? '').isEmpty
               ? null
-              : () => context.push(artistPath(track.artist!)),
+              : () => context.go(artistPath(track.artist!)),
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: Text(

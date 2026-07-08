@@ -119,22 +119,17 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         minimum: const EdgeInsets.only(bottom: AriaSpace.s2),
         child: SizedBox(
           height: 84,
-          child: LayoutBuilder(
-            builder: (context, box) {
-              final w = box.maxWidth;
-              final showSignal = w >= 1000;
-              // Signal path replaces the badge at 1000; below that the badge
-              // needs the right slice (~30% of width) to have room next to the
-              // volume slider and buttons.
-              final showBadge = w >= 900;
+          child: Builder(
+            builder: (context) {
+              final bp = AriaBreakpoint.of(context);
 
-              // Below 820 the three-column layout is too cramped: seek and meta
-              // each get squeezed into a third of the bar. Stack instead —
-              // full-width seek strip on top, meta + core controls in one row
-              // below, with time labels and the format badge joining as width
-              // allows.
-              if (w < 820) {
-                final roomy = w >= 640;
+              // Below the desktop band the three-column layout is too
+              // cramped: seek and meta each get squeezed into a third of the
+              // bar. Stack instead — full-width seek strip on top, meta +
+              // core controls in one row below, with time labels and the
+              // format badge joining above the mobile band.
+              if (bp != AriaBreakpoint.desktop) {
+                final roomy = bp != AriaBreakpoint.mobile;
                 return Column(
                   children: [
                     SizedBox(
@@ -213,33 +208,10 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        if (showSignal) ...[
-                          const Flexible(child: SignalPath()),
-                          const SizedBox(width: AriaSpace.s3),
-                        ] else if (showBadge && radio != null) ...[
-                          Text(
-                            'STREAM',
-                            style: TextStyle(
-                              fontSize: 11,
-                              letterSpacing: 1,
-                              color: c.fgDim,
-                            ),
-                          ),
-                          const SizedBox(width: AriaSpace.s3),
-                        ] else if (showBadge && track != null) ...[
-                          // Actual decoded format from mpv when available,
-                          // tagged format until then — the bit-perfect badge.
-                          Flexible(
-                            child: FormatBadge(
-                              format: track.format,
-                              bitsPerSample:
-                                  fmt?.bitDepth ?? track.bitsPerSample,
-                              sampleRate: fmt?.sampleRate ?? track.sampleRate,
-                              lossless: track.lossless,
-                            ),
-                          ),
-                          const SizedBox(width: AriaSpace.s3),
-                        ],
+                        // Signal path is the desktop-band flourish; the
+                        // stacked layout shows the format badge instead.
+                        const Flexible(child: SignalPath()),
+                        const SizedBox(width: AriaSpace.s3),
                         SizedBox(
                           width: 130,
                           child: Row(
@@ -305,8 +277,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                   '${player.unavailableReason ?? 'libmpv could not be loaded'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.5,
+                  style: Theme.of(context).textTheme.bodySmall!.copyWith(
                     color: Theme.of(context).colorScheme.error,
                   ),
                 ),
@@ -348,7 +319,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
               ),
               Text(
                 'Internet Radio',
-                style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -393,7 +364,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                 ),
                 Text(
                   trackSubLine(track),
-                  style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                  style: Theme.of(context).textTheme.bodySmall,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

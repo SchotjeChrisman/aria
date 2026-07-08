@@ -64,7 +64,10 @@ class TrackRow extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AriaSpace.s3,
+                vertical: 10,
+              ),
               child: Row(
                 children: [
                   SizedBox(
@@ -91,11 +94,10 @@ class TrackRow extends StatelessWidget {
                         if (subtitle != null && subtitle!.isNotEmpty)
                           Text(
                             subtitle!,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              height: 1.45,
-                              color: dim,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: dim),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

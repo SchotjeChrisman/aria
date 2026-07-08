@@ -114,7 +114,7 @@ class _TagRow extends ConsumerWidget {
       hoverColor: c.bgHover,
       child: Padding(
         padding: EdgeInsets.only(
-          left: 12 + depth * 26.0,
+          left: AriaSpace.s3 + depth * 26.0,
           right: AriaSpace.s2,
           top: AriaSpace.s1,
           bottom: AriaSpace.s1,
@@ -131,7 +131,7 @@ class _TagRow extends ConsumerWidget {
             ),
             Text(
               '$sub item${sub == 1 ? '' : 's'}',
-              style: TextStyle(color: c.fgDim, fontSize: 12.5),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(width: AriaSpace.s2),
             _mini(

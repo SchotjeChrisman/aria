@@ -16,20 +16,32 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AriaSpace.s6),
-          children: [
-            Text('Settings', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: AriaSpace.s6),
-            const _Section(title: 'Server', child: _ServerUrlField()),
-            // Exclusive access is a desktop-only mpv option (the engine
-            // no-ops it on Android) — a dead switch just misleads.
-            if (!Platform.isAndroid)
-              const _Section(title: 'Playback', child: _ExclusiveToggle()),
-            const _Section(title: 'Scrobbling', child: _ListenBrainzField()),
-            const _Section(title: 'Library', child: _LibraryTools()),
-            const _Section(title: 'Profiles', child: ProfilesSection()),
-          ],
+        child: Center(
+          child: ConstrainedBox(
+            // Readable measure on tablet/desktop; no-op on mobile.
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.all(AriaSpace.s6),
+              children: [
+                Text(
+                  'Settings',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: AriaSpace.s6),
+                const _Section(title: 'Server', child: _ServerUrlField()),
+                // Exclusive access is a desktop-only mpv option (the engine
+                // no-ops it on Android) — a dead switch just misleads.
+                if (!Platform.isAndroid)
+                  const _Section(title: 'Playback', child: _ExclusiveToggle()),
+                const _Section(
+                  title: 'Scrobbling',
+                  child: _ListenBrainzField(),
+                ),
+                const _Section(title: 'Library', child: _LibraryTools()),
+                const _Section(title: 'Profiles', child: ProfilesSection()),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -110,7 +122,7 @@ class _ServerUrlFieldState extends ConsumerState<_ServerUrlField> {
 
   @override
   Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -136,9 +148,8 @@ class _ServerUrlFieldState extends ConsumerState<_ServerUrlField> {
             padding: const EdgeInsets.only(top: AriaSpace.s2),
             child: Text(
               _note!,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: _failed ? Theme.of(context).colorScheme.error : c.fgDim,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _failed ? theme.colorScheme.error : null,
               ),
             ),
           ),
@@ -246,7 +257,7 @@ class _LibraryTools extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scan = ref.watch(scanControllerProvider);
     final enrich = ref.watch(enrichStatusProvider).value;
-    final c = AriaColors.of(context);
+    final theme = Theme.of(context);
 
     final enrichBusy = enrich != null && enrich.phase != 'idle';
 
@@ -276,7 +287,7 @@ class _LibraryTools extends ConsumerWidget {
                     const SizedBox(width: AriaSpace.s2),
                     Text(
                       scan.total > 0 ? '${scan.done}/${scan.total}' : '…',
-                      style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                      style: theme.textTheme.bodySmall,
                     ),
                   ],
                 ),
@@ -285,16 +296,14 @@ class _LibraryTools extends ConsumerWidget {
               Expanded(
                 child: Text(
                   'Scan failed.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error),
                 ),
               )
             else if (scan.lastTracks != null)
               Text(
                 '${scan.lastTracks} tracks.',
-                style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                style: theme.textTheme.bodySmall,
               ),
           ],
         ),
@@ -319,7 +328,7 @@ class _LibraryTools extends ConsumerWidget {
               enrichBusy
                   ? '✨ ${enrich.phase} ${enrich.done}/${enrich.total}'
                   : 'Enrichment idle.',
-              style: TextStyle(fontSize: 12.5, color: c.fgDim),
+              style: theme.textTheme.bodySmall,
             ),
           ],
         ),

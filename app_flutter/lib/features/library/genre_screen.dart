@@ -56,7 +56,6 @@ class _GenreBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = AriaColors.of(context);
     final api = ref.watch(apiClientProvider);
     final idx = ref.watch(genreIndexProvider);
     final parents = ref.watch(genreParentsProvider);
@@ -136,7 +135,7 @@ class _GenreBody extends ConsumerWidget {
                       cursor: SystemMouseCursors.click,
                       child: Text(
                         '$parent ›',
-                        style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
                   ),
@@ -146,7 +145,7 @@ class _GenreBody extends ConsumerWidget {
                   '${countLabel(artistNames.length, 'artist')} · '
                   '${countLabel(albumIds.length, 'album')} · '
                   '${countLabel(trs.length, 'track')}',
-                  style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (kids.isNotEmpty) ...[
                   const SizedBox(height: AriaSpace.s3),
@@ -189,11 +188,17 @@ class _GenreBody extends ConsumerWidget {
             AriaSpace.s6,
           ),
           sliver: SliverGrid.builder(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 190,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: AriaBreakpoint.of(context).gridColumns,
               mainAxisSpacing: AriaSpace.s5,
               crossAxisSpacing: AriaSpace.s5,
-              childAspectRatio: 0.72,
+              // Tablet-floor tiles (~103px at a 600px window) need a taller
+              // cell: the ~49px text block under the square art doesn't
+              // shrink with the tile.
+              childAspectRatio:
+                  AriaBreakpoint.of(context) == AriaBreakpoint.tablet
+                  ? 0.67
+                  : 0.72,
             ),
             itemCount: albums.length,
             itemBuilder: (context, i) {

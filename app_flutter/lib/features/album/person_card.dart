@@ -21,7 +21,6 @@ class CreditCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AriaRadius.md),
@@ -40,7 +39,7 @@ class CreditCard extends StatelessWidget {
           if (subtitle != null && subtitle!.isNotEmpty)
             Text(
               subtitle!,
-              style: TextStyle(fontSize: 12.5, color: c.fgDim),
+              style: Theme.of(context).textTheme.bodySmall,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,

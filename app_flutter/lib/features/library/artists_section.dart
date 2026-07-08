@@ -113,11 +113,17 @@ class _ArtistsSectionState extends ConsumerState<ArtistsSection> {
               AriaSpace.s6,
               AriaSpace.s6,
             ),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 170,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: AriaBreakpoint.of(context).gridColumns,
               mainAxisSpacing: AriaSpace.s5,
               crossAxisSpacing: AriaSpace.s5,
-              childAspectRatio: 0.72,
+              // Tablet-floor tiles (~103px at a 600px window) need a taller
+              // cell: the ~49px text block under the square art doesn't
+              // shrink with the tile.
+              childAspectRatio:
+                  AriaBreakpoint.of(context) == AriaBreakpoint.tablet
+                  ? 0.67
+                  : 0.72,
             ),
             itemCount: list.length,
             itemBuilder: (context, i) {

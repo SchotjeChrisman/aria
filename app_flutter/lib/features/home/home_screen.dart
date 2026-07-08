@@ -186,7 +186,7 @@ class _StatStrip extends StatelessWidget {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-          Text(label, style: TextStyle(fontSize: 12.5, color: c.fgDim)),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
@@ -372,7 +372,7 @@ class _ChartBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: 12.5, color: c.fgDim)),
+          Text(title, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: AriaSpace.s3),
           SizedBox(
             height: 64,
@@ -423,7 +423,7 @@ class _MiniList extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: 12.5, color: c.fgDim)),
+          Text(title, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: AriaSpace.s2),
           if (rows.isEmpty)
             Text('—', style: TextStyle(color: c.fgDim))
@@ -433,14 +433,14 @@ class _MiniList extends StatelessWidget {
                 onTap: r.onTap,
                 borderRadius: BorderRadius.circular(AriaRadius.sm),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: AriaSpace.s1),
                   child: Row(
                     children: [
                       SizedBox(
                         width: 18,
                         child: Text(
                           '${i + 1}',
-                          style: TextStyle(color: c.fgDim, fontSize: 12.5),
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
                       Expanded(
@@ -457,14 +457,14 @@ class _MiniList extends StatelessWidget {
                                 r.sub!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 12, color: c.fgDim),
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                           ],
                         ),
                       ),
                       Text(
                         '${r.n}',
-                        style: TextStyle(color: c.fgDim, fontSize: 12.5),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),

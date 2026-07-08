@@ -95,7 +95,6 @@ class GenreCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = AriaColors.of(context);
     final idx = ref.watch(genreIndexProvider);
     final parents = ref.watch(genreParentsProvider);
 
@@ -121,7 +120,7 @@ class GenreCard extends ConsumerWidget {
             ),
             Text(
               '${countLabel(artistCount, 'artist')} · ${countLabel(albumIds.length, 'album')}',
-              style: TextStyle(fontSize: 12.5, height: 1.45, color: c.fgDim),
+              style: Theme.of(context).textTheme.bodySmall,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -157,7 +156,10 @@ class GenrePill extends StatelessWidget {
     return GestureDetector(
       onTap: () => context.push('/library/genres/${Uri.encodeComponent(genre)}'),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: AriaSpace.s1,
+        ),
         decoration: BoxDecoration(
           border: Border.all(color: c.line),
           borderRadius: BorderRadius.circular(AriaRadius.pill),

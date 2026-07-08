@@ -76,6 +76,34 @@ class AriaColors extends ThemeExtension<AriaColors> {
   }
 }
 
+/// Window size bands (Material 3 canonical cuts). Layouts morph only at
+/// band switches and scale proportionally within a band — every width
+/// check in the app routes through this so phones of different sizes get
+/// the same layout structure.
+enum AriaBreakpoint {
+  mobile,
+  tablet,
+  desktop;
+
+  static AriaBreakpoint of(BuildContext context) =>
+      fromWidth(MediaQuery.sizeOf(context).width);
+
+  static AriaBreakpoint fromWidth(double width) => width < 600
+      ? mobile
+      : width < 1240
+          ? tablet
+          : desktop;
+
+  /// Grid columns for card grids (albums, artists, genres…). Fixed per band
+  /// so a 360px and a 428px phone render the identical layout, tiles just
+  /// scale.
+  int get gridColumns => switch (this) {
+        mobile => 2,
+        tablet => 4,
+        desktop => 6,
+      };
+}
+
 /// Spacing scale — 4px base, same steps as the legacy --sp-* vars.
 abstract final class AriaSpace {
   static const double s1 = 4;

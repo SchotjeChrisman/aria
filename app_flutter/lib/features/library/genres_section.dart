@@ -48,8 +48,14 @@ class GenresSection extends ConsumerWidget {
         AriaSpace.s6,
         AriaSpace.s6,
       ),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 260,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        // Genre cards are wider than album tiles (legacy 260px extent), so
+        // they get their own band counts instead of the shared 2/4/6.
+        crossAxisCount: switch (AriaBreakpoint.of(context)) {
+          AriaBreakpoint.mobile => 2,
+          AriaBreakpoint.tablet => 3,
+          AriaBreakpoint.desktop => 5,
+        },
         mainAxisSpacing: AriaSpace.s5,
         crossAxisSpacing: AriaSpace.s5,
         childAspectRatio: 0.78,

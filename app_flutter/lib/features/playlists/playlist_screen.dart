@@ -57,7 +57,6 @@ class PlaylistScreen extends ConsumerWidget {
     String? currentId,
   ) {
     if (pl == null) return const EmptyState(message: 'Playlist not found.');
-    final c = AriaColors.of(context);
     final list = tracksAsync.value;
 
     return ListView(
@@ -88,7 +87,7 @@ class PlaylistScreen extends ConsumerWidget {
           Text(
             '${list.length} track${list.length == 1 ? '' : 's'} · '
             '${formatDuration(list.fold<double>(0, (s, t) => s + (t.duration ?? 0)))}',
-            style: TextStyle(color: c.fgDim, fontSize: 12.5),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
         const SizedBox(height: AriaSpace.s4),

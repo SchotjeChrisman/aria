@@ -106,7 +106,6 @@ class _LibraryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = AriaColors.of(context);
     final trackCount = ref.watch(loadedTracksProvider).length;
 
     return Column(
@@ -131,7 +130,7 @@ class _LibraryBody extends ConsumerWidget {
               // legacy #lib-count
               Text(
                 '$trackCount tracks',
-                style: TextStyle(fontSize: 12.5, color: c.fgDim),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
