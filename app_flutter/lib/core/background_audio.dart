@@ -28,9 +28,25 @@ Future<void> initBackgroundAudio(ProviderContainer container) async {
   session.becomingNoisyEventStream.listen(
     (_) => container.read(ariaPlayerProvider).pause(),
   );
-  // Calls/assistants: pause on interruption begin, never auto-resume.
+  // Calls/assistants: pause on interruption begin, resume when it ends if
+  // the interruption (not the user) paused us — standard player UX. Duck
+  // events keep playing: they're short prompts, pausing for them reads as
+  // a bug.
+  // ponytail: a user pause DURING the call still auto-resumes at its end —
+  // telling the two apart needs pause-source plumbing; add if reported.
+  var pausedByInterruption = false;
   session.interruptionEventStream.listen((e) {
-    if (e.begin) container.read(ariaPlayerProvider).pause();
+    final player = container.read(ariaPlayerProvider);
+    if (e.begin) {
+      if (e.type != AudioInterruptionType.duck &&
+          player.currentState == engine.PlaybackState.playing) {
+        pausedByInterruption = true;
+        player.pause();
+      }
+    } else if (pausedByInterruption) {
+      pausedByInterruption = false;
+      player.resume();
+    }
   });
   // audio_session only registers the noisy receiver and the focus-change
   // listener inside requestAudioFocus — configure() alone wires nothing, so
