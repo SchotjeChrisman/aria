@@ -6,6 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/connection.dart';
 import '../../core/player_providers.dart';
 import '../../core/profiles_providers.dart';
+import '../artist/providers.dart' show artistStatsProvider;
+import '../home/home_providers.dart' show homeStatsProvider;
+import '../library/library_providers.dart' show playCountsProvider;
+import '../stats/stats_providers.dart' show statsProvider;
 import 'lrc.dart';
 
 // Providers that belong to now-playing but sit on top of core's player/queue
@@ -95,6 +99,12 @@ final playReporterProvider = Provider<void>((ref) {
       await ref
           .read(apiClientProvider)
           .recordPlay(trackId: t.id, profileId: profileId);
+      // The play is in the DB — refetch everything that renders play data,
+      // so stats/most-played update live instead of on the next app start.
+      ref.invalidate(statsProvider);
+      ref.invalidate(homeStatsProvider);
+      ref.invalidate(artistStatsProvider);
+      ref.invalidate(playCountsProvider);
     } catch (_) {
       // best-effort, like legacy fetch(...).catch(() => {})
     }
