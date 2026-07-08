@@ -17,12 +17,10 @@ Up at `http://localhost:3001`. First boot scans `./music` into SQLite on the
 `aria-data` volume; later boots rescan incrementally (only changed files are
 re-read). Volume mounts use `:z` SELinux labels for Fedora-style hosts.
 
-Auto-updates: the bundled watchtower service checks `ghcr.io` daily and
-restarts aria on new releases. On podman, enable the socket first
-(`systemctl enable --now podman.socket`) and start compose with
-`DOCKER_SOCKET=/run/podman/podman.sock`. Local dev builds:
-`docker compose up --build` (watchtower will pull the release image over a
-local build — stop the watchtower service while developing).
+Updating to a new release:
+`podman-compose pull && podman-compose up -d --force-recreate aria`
+(library data lives on the `aria-data` volume and survives recreates).
+Local dev builds: `docker compose up --build`.
 
 - ~24 MB distroless image, static Go binary, non-root.
 - Healthcheck built in (`/aria -healthcheck`); graceful shutdown on SIGTERM.
