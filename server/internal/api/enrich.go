@@ -52,6 +52,7 @@ func registerEnrich(mux *http.ServeMux, d *Deps) {
 			if err := d.Enricher.Run(ctx); err != nil {
 				log.Printf("enrich: %v", err)
 			}
+			d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
 		})
 		writeJSON(w, http.StatusOK, d.Enricher.Status())
 	})
