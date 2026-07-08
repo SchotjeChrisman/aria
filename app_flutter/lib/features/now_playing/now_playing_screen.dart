@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:aria_api/aria_api.dart';
 import 'package:aria_player/aria_player.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
+import '../../core/formats.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
@@ -51,47 +54,73 @@ class NowPlayingScreen extends ConsumerWidget {
       body: track == null
           ? const EmptyState(message: 'Nothing playing.')
           : SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(AriaSpace.s5),
-                        child: _Meta(track: track),
+              child: LayoutBuilder(
+                builder: (context, box) => Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(AriaSpace.s5),
+                          child: _Meta(
+                            track: track,
+                            artEdge: nowPlayingArtEdge(box.biggest),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      AriaSpace.s5,
-                      0,
-                      AriaSpace.s5,
-                      AriaSpace.s5,
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        AriaSpace.s5,
+                        0,
+                        AriaSpace.s5,
+                        AriaSpace.s5,
+                      ),
+                      child: _Controls(),
                     ),
-                    child: _Controls(),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
     );
   }
 }
 
+/// Hero-art edge for the expanded screen: fill the width on phones, but
+/// leave ~340px for the text block + controls so nothing scrolls on a
+/// normal portrait screen. Fixed clamp bounds keep tiny/huge windows sane
+/// (the parent width constraint still wins below 220).
+double nowPlayingArtEdge(Size body) =>
+    math.min(body.width - AriaSpace.s5 * 2, body.height - 340).clamp(220, 560);
+
 class _Meta extends ConsumerWidget {
-  const _Meta({required this.track});
+  const _Meta({required this.track, required this.artEdge});
 
   final Track track;
+  final double artEdge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
     final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId);
+    // "3 of 12" only when there is an actual queue to navigate.
+    final queuePos = ref.watch(
+      queueProvider.select(
+        (q) => q.tracks.length > 1 ? '${q.index + 1} of ${q.tracks.length}' : null,
+      ),
+    );
+    final genre = track.genres.isNotEmpty ? track.genres.first : track.genre;
+    final infoLine = [
+      if (track.year != null) '${track.year}',
+      if ((genre ?? '').isNotEmpty) genre!,
+      if (track.duration != null) formatDuration(track.duration),
+      if (queuePos != null) 'Track $queuePos',
+    ].join(' · ');
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 340, maxHeight: 340),
+          constraints: BoxConstraints(maxWidth: artEdge, maxHeight: artEdge),
           child: AspectRatio(
             aspectRatio: 1,
             child: GestureDetector(
@@ -101,7 +130,7 @@ class _Meta extends ConsumerWidget {
                 child: ArtImage(
                   url: artUrl,
                   fallbackText: track.album,
-                  decodeSize: 340, // hero art is capped at 340 logical px
+                  decodeSize: artEdge,
                   borderRadius: AriaRadius.lg,
                 ),
               ),
@@ -132,6 +161,16 @@ class _Meta extends ConsumerWidget {
             ),
           ),
         ),
+        if (infoLine.isNotEmpty) ...[
+          const SizedBox(height: AriaSpace.s2),
+          Text(
+            infoLine,
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
         const SizedBox(height: AriaSpace.s4),
         const SignalPath(),
       ],
@@ -161,48 +200,46 @@ class _Controls extends ConsumerWidget {
         children: [
           // Position/duration live inside SeekBar so time-pos ticks don't
           // rebuild the controls block.
-          const SeekBar(thumbRadius: 7),
+          const SeekBar(thumbRadius: 9),
           const SizedBox(height: AriaSpace.s2),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            // Spread across the (480-capped) width: on phones the gaps grow
+            // with the screen, so neighbouring targets are hard to mis-hit.
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               IconButton(
                 icon: const Icon(Icons.shuffle),
-                iconSize: 24,
+                iconSize: 28,
                 color: shuffle ? c.accent : c.fgDim,
                 tooltip: 'Shuffle',
                 onPressed: queue.toggleShuffle,
               ),
-              const SizedBox(width: AriaSpace.s3),
               IconButton(
                 icon: const Icon(Icons.skip_previous),
-                iconSize: 40,
+                iconSize: 44,
                 color: c.fg,
                 tooltip: 'Previous',
                 onPressed: queue.prev,
               ),
-              const SizedBox(width: AriaSpace.s3),
               IconButton.filled(
                 icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                iconSize: 40,
-                padding: const EdgeInsets.all(AriaSpace.s3),
+                iconSize: 44,
+                padding: const EdgeInsets.all(AriaSpace.s4),
                 tooltip: 'Play/Pause',
                 onPressed: queue.togglePlay,
               ),
-              const SizedBox(width: AriaSpace.s3),
               IconButton(
                 icon: const Icon(Icons.skip_next),
-                iconSize: 40,
+                iconSize: 44,
                 color: c.fg,
                 tooltip: 'Next',
                 onPressed: queue.next,
               ),
-              const SizedBox(width: AriaSpace.s3),
               IconButton(
                 icon: Icon(
                   loop == LoopMode.one ? Icons.repeat_one : Icons.repeat,
                 ),
-                iconSize: 24,
+                iconSize: 28,
                 color: loop != LoopMode.off ? c.accent : c.fgDim,
                 tooltip: 'Repeat',
                 onPressed: queue.cycleLoop,

@@ -25,7 +25,7 @@ class SeekBar extends ConsumerStatefulWidget {
   /// Radio stream: disabled slider, nothing watched — live has no seek.
   final bool live;
 
-  /// 6 on the transport bar, 7 on the expanded now-playing screen.
+  /// 6 on the transport bar, 9 on the expanded now-playing screen.
   final double thumbRadius;
 
   @override
