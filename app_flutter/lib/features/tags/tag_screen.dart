@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
+import '../../core/downloads.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/album_card.dart';
@@ -221,6 +222,9 @@ class TagScreen extends ConsumerWidget {
                 bitsPerSample: t.bitsPerSample,
                 sampleRate: t.sampleRate,
                 lossless: t.lossless,
+                downloaded: ref.watch(
+                  downloadsProvider.select((s) => s.index.containsKey(t.id)),
+                ),
                 isCurrent: t.id == currentId,
                 onTap: () {
                   if (selectionTapHandled(ref, trackSelectionItem(t))) return;

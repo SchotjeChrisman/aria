@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/background_audio.dart';
 import 'core/connection.dart';
+import 'core/log.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 
@@ -17,8 +19,27 @@ Future<void> main() async {
     ..maximumSizeBytes = 400 << 20 // ~400MB
     ..maximumSize = 4000;
   final prefs = await SharedPreferences.getInstance();
+  final support = await getApplicationSupportDirectory();
+  await Log.init(Directory('${support.path}/logs'), prefs: prefs);
+  // Uncaught errors land in the log. PlatformDispatcher.onError (not
+  // runZonedGuarded) — no zone mismatch with the async work above.
+  FlutterError.onError = (details) {
+    Log.e('flutter', details.exceptionAsString(), details.stack);
+    FlutterError.presentError(details);
+  };
+  WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+    Log.e('platform', '$error', stack);
+    return true;
+  };
+  Log.i('app', 'start', {
+    'version': appVersion,
+    'platform': Platform.operatingSystem,
+  });
   final container = ProviderContainer(
-    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      appSupportDirProvider.overrideWithValue(support),
+    ],
   );
   // Android: media session + foreground service so playback survives
   // backgrounding, and losing the output device pauses. Desktop needs

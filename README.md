@@ -17,10 +17,32 @@ Up at `http://localhost:3001`. First boot scans `./music` into SQLite on the
 `aria-data` volume; later boots rescan incrementally (only changed files are
 re-read). Volume mounts use `:z` SELinux labels for Fedora-style hosts.
 
-Updating to a new release:
-`podman-compose pull && podman-compose up -d --force-recreate aria`
-(library data lives on the `aria-data` volume and survives recreates).
 Local dev builds: `docker compose up --build`.
+
+### Updating
+
+`:latest` only moves on stable (non-prerelease) releases, so it is a safe
+auto-update target. Library data lives on the `aria-data` volume and survives
+recreates. Two automatic paths:
+
+- **Podman (rootless):** compose stays the single source of truth, but
+  `podman auto-update` can only restart a container owned by a real systemd
+  unit — so run the project through the template unit
+  [`deploy/podman-compose@.service`](deploy/podman-compose@.service) (put your
+  `compose.yaml` in `~/podman/<name>/`, then
+  `systemctl --user enable --now podman-compose@<name>`). The compose service
+  must carry the `io.containers.autoupdate: registry` label (already set
+  below), and the unit runs with `--in-pod=false` so the container — not a pod
+  — is the auto-update target. Then enable the timer:
+  `systemctl --user enable --now podman-auto-update.timer`; for 15-minute
+  checks instead of daily, install
+  [`deploy/podman-auto-update-override.conf`](deploy/podman-auto-update-override.conf).
+- **Docker:** start the bundled watchtower service:
+  `docker compose --profile watchtower up -d` (checks hourly, updates only
+  labeled containers, prunes old images).
+
+Manual fallback:
+`podman-compose pull && podman-compose up -d --force-recreate aria`.
 
 - ~24 MB distroless image, static Go binary, non-root.
 - Healthcheck built in (`/aria -healthcheck`); graceful shutdown on SIGTERM.

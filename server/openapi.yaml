@@ -28,6 +28,7 @@ tags:
   - name: radio
   - name: settings
   - name: eq
+  - name: logs
 
 paths:
   /healthz:
@@ -869,6 +870,89 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  # ---- logs ----------------------------------------------------------------------
+
+  /api/logs:
+    post:
+      tags: [logs]
+      summary: Batch-upload client (app) log entries (v2 addition)
+      description: |
+        Devices buffer NDJSON log lines locally and upload them in batches
+        (max 1000 entries and 1 MiB per request). Stored entries are pruned
+        server-side: older than 30 days, or beyond the newest 200000 rows.
+      operationId: postLogs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device, entries]
+              properties:
+                device:
+                  type: string
+                  description: 'Stable device label, e.g. "linux-a1b2c3".'
+                entries:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required: [ts, level, tag, msg]
+                    properties:
+                      ts: { type: string, description: ISO timestamp from the device clock. }
+                      level: { type: string, description: 'debug | info | warn | error (not validated).' }
+                      tag: { type: string }
+                      msg: { type: string }
+                      extra: { description: Arbitrary JSON context; stored as text. }
+      responses:
+        '200':
+          description: Entries stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stored]
+                properties:
+                  stored: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    get:
+      tags: [logs]
+      summary: Recent client log entries (debugging)
+      operationId: getLogs
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 200, maximum: 2000 }
+        - name: level
+          in: query
+          required: false
+          schema: { type: string }
+        - name: device
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Matching entries, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, device, ts, level, tag, msg, receivedAt]
+                  properties:
+                    id: { type: integer }
+                    device: { type: string }
+                    ts: { type: string }
+                    level: { type: string }
+                    tag: { type: string }
+                    msg: { type: string }
+                    extra: { type: string, description: JSON context as text; omitted when absent. }
+                    receivedAt: { type: string }
+
   # ---- plays & stats -------------------------------------------------------------
 
   /api/plays:
@@ -887,6 +971,9 @@ paths:
               properties:
                 trackId: { $ref: '#/components/schemas/Sha1' }
                 profileId: { type: string }
+                at:
+                  type: string
+                  description: Optional client timestamp ("2026-07-08T12:00:00.000Z", JS toISOString) for plays recorded while offline; defaults to the server clock.
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '400': { $ref: '#/components/responses/BadRequest' }

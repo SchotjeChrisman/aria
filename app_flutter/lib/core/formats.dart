@@ -48,3 +48,16 @@ String formatBadgeText({String? format, int? bitsPerSample, int? sampleRate}) {
 /// Hi-res per the usual definition: beyond CD bit depth or beyond 48 kHz.
 bool isHiRes({int? bitsPerSample, int? sampleRate}) =>
     (bitsPerSample ?? 0) > 16 || (sampleRate ?? 0) > 48000;
+
+/// "512 B", "3.4 MB", "1.2 GB" — download sizes, decimal units.
+String formatBytes(int bytes) {
+  if (bytes < 1000) return '$bytes B';
+  const units = ['kB', 'MB', 'GB', 'TB'];
+  var v = bytes.toDouble();
+  var u = -1;
+  while (v >= 1000 && u < units.length - 1) {
+    v /= 1000;
+    u++;
+  }
+  return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[u]}';
+}

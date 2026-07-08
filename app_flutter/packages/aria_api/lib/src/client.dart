@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -45,8 +46,19 @@ class AriaClient {
 
   // ---- URL builders (consumed directly by the native player / image cache)
 
-  String streamUrl(String trackId) =>
-      '$baseUrl/api/stream/${Uri.encodeComponent(trackId)}';
+  /// [tier] is the server transcode tier wire value (`high`/`low`); pass null
+  /// (or `original`) for the raw byte-for-byte file — the param is OMITTED
+  /// then so the URL and its caching are identical to the historical path.
+  /// The app layer maps its QualityTier enum → wire; the client stays
+  /// Riverpod-free and takes a plain string.
+  String streamUrl(String trackId, {String? tier}) {
+    final url = '$baseUrl/api/stream/${Uri.encodeComponent(trackId)}';
+    return _tierQuery(tier) == null ? url : '$url?tier=$tier';
+  }
+
+  /// Null / empty / `original` → no query param; only `high`/`low` append.
+  static String? _tierQuery(String? tier) =>
+      (tier == null || tier.isEmpty || tier == 'original') ? null : tier;
 
   String artUrl(String albumId) =>
       '$baseUrl/api/art/${Uri.encodeComponent(albumId)}';
@@ -143,6 +155,13 @@ class AriaClient {
   /// isolate copy, which is much cheaper than parsing on the main thread.
   /// Small endpoints stay on the calling isolate.
   Future<List<Track>> tracks({int? limit, int? offset}) async {
+    final bytes = await tracksBytes(limit: limit, offset: offset);
+    return Isolate.run(() => decodeTracks(bytes));
+  }
+
+  /// Raw `/api/tracks` payload bytes — the app persists these for offline
+  /// startup and decodes them (and the disk cache) with [decodeTracks].
+  Future<Uint8List> tracksBytes({int? limit, int? offset}) async {
     const path = '/api/tracks';
     final r = await _timed(
         _http.get(_u(path, {
@@ -151,10 +170,13 @@ class AriaClient {
         })),
         path);
     if (r.statusCode < 200 || r.statusCode >= 300) _throw(r, path);
-    final bytes = r.bodyBytes;
-    return Isolate.run(
-        () => _list(jsonDecode(utf8.decode(bytes)), Track.fromJson));
+    return r.bodyBytes;
   }
+
+  /// Decoder for a `/api/tracks` payload; static so [Isolate.run] closures
+  /// only capture the bytes.
+  static List<Track> decodeTracks(List<int> bytes) =>
+      _list(jsonDecode(utf8.decode(bytes)), Track.fromJson);
 
   Future<GenreTree> genres() async =>
       GenreTree.fromJson(asMap(await _get('/api/genres')));
@@ -312,9 +334,16 @@ class AriaClient {
 
   // ---- plays / stats
 
+  /// [at] (JS-toISOString format, e.g. "2026-07-08T12:00:00.000Z") backdates
+  /// the play — used when flushing plays queued while offline; the server
+  /// defaults to its own clock when omitted.
   Future<void> recordPlay(
-          {required String trackId, required String profileId}) =>
-      _post('/api/plays', {'trackId': trackId, 'profileId': profileId});
+          {required String trackId, required String profileId, String? at}) =>
+      _post('/api/plays', {
+        'trackId': trackId,
+        'profileId': profileId,
+        if (at != null) 'at': at,
+      });
 
   /// `counts: true` adds full per-track play counts (played/never filters).
   Future<Stats> stats({String? profileId, bool counts = false}) async =>
@@ -390,6 +419,42 @@ class AriaClient {
   /// OPRA headphone EQ database (server-cached weekly).
   Future<List<OpraProduct>> eqOpra() async => _list(
       asMap(await _get('/api/eq/opra'))['products'], OpraProduct.fromJson);
+
+  // ---- logs
+
+  /// Batch-upload device log entries ({ts, level, tag, msg, extra?} maps);
+  /// returns the stored count. Server caps: 1000 entries / 1 MiB per request.
+  Future<int> uploadLogs(
+          String device, List<Map<String, dynamic>> entries) async =>
+      asInt(asMap(await _post('/api/logs', {
+        'device': device,
+        'entries': entries,
+      }))['stored']) ??
+      0;
+
+  // ---- downloads (offline copies; the stream endpoint serves the exact
+  // original bytes, so a completed download is bit-perfect by construction)
+
+  /// Streamed GET of a track's original file. No request timeout — large
+  /// lossless files legitimately take minutes. Throws [AriaApiException] on
+  /// non-2xx.
+  Future<http.StreamedResponse> download(String trackId, {String? tier}) {
+    final path = '/api/stream/${Uri.encodeComponent(trackId)}';
+    final q = _tierQuery(tier);
+    return _download(q == null ? path : '$path?tier=$q');
+  }
+
+  /// Streamed GET of an album's cover art (same contract as [download]).
+  Future<http.StreamedResponse> downloadArt(String albumId) =>
+      _download('/api/art/${Uri.encodeComponent(albumId)}');
+
+  Future<http.StreamedResponse> _download(String path) async {
+    final res = await _http.send(http.Request('GET', _u(path)));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw AriaApiException(res.statusCode, 'download failed', path: path);
+    }
+    return res;
+  }
 
   // ---- events (SSE): scan / enrich progress
 

@@ -11,6 +11,9 @@ RUN mkdir -p /out/empty
 FROM gcr.io/distroless/static:nonroot
 
 ENV PORT=3000 MUSIC_DIR=/music DATA_DIR=/data
+# fully-static ffmpeg for the high/low transcode tiers; runs on distroless/static
+# as nonroot. Only /ffmpeg needed (no ffprobe: duration is in the DB).
+COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /ffmpeg
 COPY --from=build /out/aria /aria
 COPY --from=build --chown=nonroot:nonroot /out/empty /data
 COPY --from=build /out/empty /music

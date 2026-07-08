@@ -1,20 +1,99 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection.dart';
+import 'log.dart';
 
 // The ONE whole-library cache. Every feature derives from these providers;
 // mutations (rescan, enrichment, metadata edits) invalidate them here and
 // every view refreshes — legacy loadLibrary() semantics.
 
 /// Whole library, one fetch (legacy loadLibrary: full /api/tracks refetch,
-/// fine below ~100k tracks). Refresh with [invalidateLibrary].
-final libraryTracksProvider = FutureProvider<List<Track>>(
-  (ref) => ref.watch(apiClientProvider).tracks(),
-);
+/// fine below ~100k tracks). Refresh with [invalidateLibrary]. A successful
+/// fetch is mirrored to disk so an unreachable server degrades to the last
+/// known library (browsable offline, playable where downloaded).
+final libraryTracksProvider = FutureProvider<List<Track>>((ref) async {
+  final client = ref.watch(apiClientProvider);
+  // One shared fetch: a slow/offline server falls back to the disk cache
+  // after 3s instead of the full API timeout, while the original request
+  // keeps running to refresh the cache if the server eventually answers.
+  final fetch = client.tracksBytes();
+  try {
+    Uint8List bytes;
+    try {
+      bytes = await fetch.timeout(const Duration(seconds: 3));
+    } on TimeoutException {
+      final cached = await _readTracksCache(ref);
+      if (cached == null) {
+        bytes = await fetch; // no offline copy — wait out the real fetch
+      } else {
+        unawaited(_refreshCacheWhenDone(ref, fetch));
+        final tracks =
+            await Isolate.run(() => AriaClient.decodeTracks(cached));
+        Log.i('library',
+            'loaded ${tracks.length} tracks from offline cache (slow server)');
+        return tracks;
+      }
+    }
+    // Same decoder + isolate as AriaClient.tracks() — 100k rows never parse
+    // on the UI isolate.
+    final tracks = await Isolate.run(() => AriaClient.decodeTracks(bytes));
+    Log.i('library', 'loaded ${tracks.length} tracks from server');
+    unawaited(_writeTracksCache(ref, bytes)); // fire-and-forget
+    return tracks;
+  } catch (e) {
+    Log.w('library', 'load failed', e);
+    final cached = await _readTracksCache(ref);
+    if (cached == null) rethrow;
+    final tracks = await Isolate.run(() => AriaClient.decodeTracks(cached));
+    Log.i('library', 'loaded ${tracks.length} tracks from offline cache');
+    return tracks;
+  }
+});
+
+/// After a cache fallback, mirror the (late) server response to disk when it
+/// eventually arrives; errors are swallowed — the fallback already served.
+/// A named helper, not an inline `.then` closure: closures capturing `ref`
+/// inside the provider body poison the `Isolate.run` context chain
+/// (unsendable riverpod internals).
+Future<void> _refreshCacheWhenDone(Ref ref, Future<Uint8List> fetch) async {
+  try {
+    await _writeTracksCache(ref, await fetch);
+  } catch (_) {
+    // server stayed away — the cache fallback already served the UI
+  }
+}
+
+File _tracksCacheFile(Ref ref) =>
+    File('${ref.read(appSupportDirProvider).path}/cache/tracks.json');
+
+Future<void> _writeTracksCache(Ref ref, Uint8List bytes) async {
+  try {
+    final f = _tracksCacheFile(ref);
+    await f.parent.create(recursive: true);
+    // .part + rename: a crash mid-write must not corrupt the only offline copy
+    final tmp = File('${f.path}.part');
+    await tmp.writeAsBytes(bytes);
+    await tmp.rename(f.path);
+  } catch (e) {
+    Log.w('library', 'offline cache write failed', e);
+  }
+}
+
+/// Raw cached payload, or null when there is none (also: no support dir).
+Future<Uint8List?> _readTracksCache(Ref ref) async {
+  try {
+    return await _tracksCacheFile(ref).readAsBytes();
+  } catch (_) {
+    return null;
+  }
+}
 
 /// trackId -> Track (legacy byId map). Empty until the library loads.
 final trackByIdProvider = Provider<Map<String, Track>>((ref) {
@@ -27,7 +106,8 @@ final trackByIdProvider = Provider<Map<String, Track>>((ref) {
 final genreTreeProvider = FutureProvider<GenreTree>((ref) async {
   try {
     return await ref.watch(apiClientProvider).genres();
-  } catch (_) {
+  } catch (e) {
+    Log.w('library', 'genres load failed', e);
     return const GenreTree({});
   }
 });
@@ -37,7 +117,8 @@ final genreTreeProvider = FutureProvider<GenreTree>((ref) async {
 final peopleProvider = FutureProvider<Map<String, String>>((ref) async {
   try {
     return await ref.watch(apiClientProvider).people();
-  } catch (_) {
+  } catch (e) {
+    Log.w('library', 'people load failed', e);
     return const {};
   }
 });
@@ -71,6 +152,7 @@ final enrichRefreshProvider = Provider<void>((ref) {
   var wasBusy = false;
 
   void seen(bool busy) {
+    if (wasBusy != busy) Log.i('enrich', busy ? 'pass started' : 'pass finished');
     if (wasBusy && !busy) invalidateLibrary(ref);
     wasBusy = busy;
   }

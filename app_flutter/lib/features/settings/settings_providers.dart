@@ -6,11 +6,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection.dart';
 import '../../core/library_providers.dart';
+import '../../core/log.dart';
 
 // The exclusive-access toggle lives in core so playerInitProvider can apply
 // the persisted flag right after engine init (bit-perfect survives restarts).
 export '../../core/player_providers.dart'
     show AudioExclusiveNotifier, audioExclusiveProvider;
+
+// Data-usage settings live in core so playback (and later downloads) can
+// gate on the network kind at play time.
+export '../../core/data_usage.dart'
+    show DataUsage, DataUsageNotifier, NetKind, dataUsageProvider,
+        networkKindProvider;
+
+// Downloads live in core so playback resolves local sources at play time.
+export '../../core/downloads.dart'
+    show DownloadEntry, DownloadsNotifier, DownloadsState, downloadsProvider;
 
 /// Server-side settings (ListenBrainz token). Refresh after save.
 final serverSettingsProvider = FutureProvider<Settings>(
@@ -90,6 +101,7 @@ class ScanController extends Notifier<ScanState> {
   Future<void> start() async {
     if (state.running) return;
     final client = ref.read(apiClientProvider);
+    Log.i('scan', 'started');
     state = const ScanState(running: true);
 
     _sub = client.events().listen(
@@ -113,12 +125,14 @@ class ScanController extends Notifier<ScanState> {
 
     try {
       final tracks = await client.scan();
+      Log.i('scan', 'finished: $tracks tracks');
       state = ScanState(lastTracks: tracks);
       // New/changed files: refresh everything derived from the track list —
       // the core cache feeds library/album/artist/search/playlists/tags.
       invalidateLibrary(ref);
       ref.invalidate(serverStatusProvider);
     } catch (e) {
+      Log.w('scan', 'failed', e);
       state = ScanState(error: e.toString());
     } finally {
       await _sub?.cancel();

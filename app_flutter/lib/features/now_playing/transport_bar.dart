@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
+import '../../core/log_sync.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../core/library_providers.dart' show enrichRefreshProvider;
@@ -39,6 +40,17 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     // Server-side enrichment finishing must refresh the app from anywhere,
     // not just while the Settings page happens to be open.
     ref.watch(enrichRefreshProvider);
+    // Log uploads run for the app's lifetime, same trick.
+    ref.watch(logSyncProvider);
+
+    // Playback notices (e.g. streaming blocked by the data-usage settings)
+    // ride the same SnackBar pathway as audio errors.
+    ref.listen(playbackNoticeProvider, (_, notice) {
+      if (notice == null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(notice.message)));
+    });
 
     // Audio output died (e.g. exclusive access denied because another app
     // holds the device) — the engine already stopped; tell the user why.

@@ -6,16 +6,22 @@ class ServerStatus {
     required this.tracks,
     required this.musicDir,
     required this.version,
+    this.transcode = false,
   });
 
   final int tracks;
   final String musicDir;
   final String version;
 
+  /// Whether the server has ffmpeg and can serve `?tier=high|low`. Absent on
+  /// older servers → false, so the app offers only the original tier.
+  final bool transcode;
+
   factory ServerStatus.fromJson(Map<String, dynamic> j) => ServerStatus(
         tracks: asInt(j['tracks']) ?? 0,
         musicDir: asString(j['musicDir']) ?? '',
         version: asString(j['version']) ?? '',
+        transcode: asBool(j['transcode']),
       );
 }
 

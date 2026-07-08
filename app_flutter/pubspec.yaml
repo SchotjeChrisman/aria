@@ -3,7 +3,7 @@ description: "Aria v2 — self-hosted lossless music player (Flutter client)."
 publish_to: 'none'
 
 # build number tracks release count — Android needs it rising to update in place
-version: 2.4.0+5
+version: 2.5.0+6
 
 environment:
   sdk: ^3.12.0
@@ -15,6 +15,10 @@ dependencies:
   flutter_riverpod: ^3.0.0
   go_router: ^16.0.0
   shared_preferences: ^2.5.0
+  # App-support dir for the NDJSON log file (core/log.dart).
+  path_provider: ^2.1.0
+  # Wifi/cellular detection for the data-usage gates (core/data_usage.dart).
+  connectivity_plus: ^7.2.0
 
   # Android only: media session + foreground service (background playback)
   # and becoming-noisy handling. audio_service 0.18 needs audio_session 0.1.
@@ -34,6 +38,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # Tests only: MockClient for the download worker (already transitive via
+  # aria_api — declared so test imports are honest, not a new runtime dep).
+  http: ^1.2.0
 
 flutter:
   uses-material-design: true

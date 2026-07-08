@@ -18,6 +18,7 @@ class TrackRow extends StatelessWidget {
     this.bitsPerSample,
     this.sampleRate,
     this.lossless = false,
+    this.downloaded = false,
     this.isCurrent = false,
     this.onTap,
     this.onSecondary,
@@ -35,6 +36,10 @@ class TrackRow extends StatelessWidget {
   final int? bitsPerSample;
   final int? sampleRate;
   final bool lossless;
+
+  /// Shows a small offline-available check. Callers watch the downloads
+  /// index with `select` so only the affected row rebuilds.
+  final bool downloaded;
 
   final bool isCurrent;
   final VoidCallback? onTap;
@@ -104,6 +109,10 @@ class TrackRow extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (downloaded) ...[
+                    const SizedBox(width: 14),
+                    Icon(Icons.download_done, size: 14, color: dim),
+                  ],
                   const SizedBox(width: 14),
                   FormatBadge(
                     format: format,

@@ -4,6 +4,8 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection.dart';
+import '../../core/log.dart';
+import '../../core/pending_plays.dart';
 import '../../core/player_providers.dart';
 import '../../core/profiles_providers.dart';
 import '../artist/providers.dart' show artistStatsProvider;
@@ -40,7 +42,10 @@ final playbackDurationProvider = StreamProvider<double>(
 /// Audio-output failures (engine already stopped playback). TransportBar
 /// listens and shows a snackbar.
 final audioErrorProvider = StreamProvider<String>(
-  (ref) => ref.watch(ariaPlayerProvider).audioError,
+  (ref) => ref.watch(ariaPlayerProvider).audioError.map((detail) {
+    Log.e('playback', 'audio error', detail);
+    return detail;
+  }),
 );
 
 /// Engine-reported duration when valid, else the track's tagged duration
@@ -87,28 +92,45 @@ final playReporterProvider = Provider<void>((ref) {
     final d = (t.duration ?? 0) > 0 ? t.duration! : 60.0;
     if (p < min(30.0, d / 2)) return;
     unreportedId = null; // latch before the awaits — one report per track
-    try {
+    final at = isoTimestamp(DateTime.now()); // play time, not flush time
+    String? profileId = ref.read(activeProfileIdProvider);
+    if (profileId == null) {
       // Core's reactive id: switching profiles re-attributes immediately
-      // (legacy switchProfile). Wait for profiles once on cold start.
-      await ref.read(profilesProvider.future);
-      final profileId = ref.read(activeProfileIdProvider);
-      if (profileId == null) {
-        // No profile yet (cold start): re-arm so the play isn't lost — but
-        // only if the track hasn't changed and re-armed the latch meanwhile.
-        unreportedId ??= t.id;
-        return;
-      }
+      // (legacy switchProfile). Wait for profiles once on cold start; an
+      // unreachable server (offline) leaves it null.
+      try {
+        await ref.read(profilesProvider.future);
+      } catch (_) {}
+      // Offline cold start: the profiles fetch fails and the reactive id
+      // stays null, but the id persisted from the last session still
+      // attributes the play — it reaches PendingPlays with its original
+      // timestamp instead of being silently dropped.
+      profileId =
+          ref.read(activeProfileIdProvider) ?? ref.read(savedProfileIdProvider);
+    }
+    if (profileId == null) {
+      // No profile yet (cold start): re-arm so the play isn't lost — but
+      // only if the track hasn't changed and re-armed the latch meanwhile.
+      unreportedId ??= t.id;
+      return;
+    }
+    try {
       await ref
           .read(apiClientProvider)
-          .recordPlay(trackId: t.id, profileId: profileId);
+          .recordPlay(trackId: t.id, profileId: profileId, at: at);
       // The play is in the DB — refetch everything that renders play data,
       // so stats/most-played update live instead of on the next app start.
       ref.invalidate(statsProvider);
       ref.invalidate(homeStatsProvider);
       ref.invalidate(artistStatsProvider);
       ref.invalidate(playCountsProvider);
-    } catch (_) {
-      // best-effort, like legacy fetch(...).catch(() => {})
+    } catch (e) {
+      // Offline (or a flaky server): buffer the play; the log-sync tick
+      // flushes it with its original timestamp once reachable.
+      Log.w('plays', 'record failed — queued for retry', e);
+      ref
+          .read(pendingPlaysProvider)
+          .add(trackId: t.id, profileId: profileId, at: at);
     }
   });
 });

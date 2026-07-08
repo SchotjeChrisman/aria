@@ -15,9 +15,16 @@ type Plays struct{ db *sql.DB }
 
 func NewPlays(db *sql.DB) *Plays { return &Plays{db} }
 
+// Add is idempotent on the exact (trackId, profileId, at) triple: an offline
+// client replays a queued play after a timeout the server may have already
+// committed. `at` has millisecond precision, so two legitimate plays of the
+// same track can only collide within the same millisecond — applying the
+// dedupe universally (server-clock plays included) is fine.
 func (r *Plays) Add(ctx context.Context, p Play) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO plays (trackId, profileId, at) VALUES (?,?,?)`,
-		p.TrackID, p.ProfileID, p.At)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO plays (trackId, profileId, at)
+		SELECT ?,?,? WHERE NOT EXISTS
+		(SELECT 1 FROM plays WHERE trackId = ? AND profileId = ? AND at = ?)`,
+		p.TrackID, p.ProfileID, p.At, p.TrackID, p.ProfileID, p.At)
 	return err
 }
 

@@ -6,7 +6,11 @@ import 'package:aria_player/aria_player.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection.dart';
+import 'data_usage.dart';
+import 'downloads.dart';
 import 'eq.dart';
+import 'log.dart';
+import 'quality.dart';
 
 const _prefsKeyQueue = 'aria.queue';
 const _prefsKeyRadio = 'aria.radio';
@@ -38,6 +42,7 @@ class AudioExclusiveNotifier extends Notifier<bool> {
       ref.read(sharedPrefsProvider).getBool(_prefsKeyExclusive) ?? false;
 
   Future<void> set(bool on) async {
+    Log.i('settings', 'exclusive audio ${on ? 'on' : 'off'}');
     state = on;
     ref.read(ariaPlayerProvider).setAudioExclusive(on);
     await ref.read(sharedPrefsProvider).setBool(_prefsKeyExclusive, on);
@@ -69,13 +74,15 @@ class EqNotifier extends Notifier<EqState> {
         enabled: j['enabled'] == true,
         profile: j['name'] == null ? null : EqProfile.fromJson(j),
       );
-    } catch (_) {
+    } catch (e) {
+      Log.w('settings', 'corrupt eq prefs', e);
       return const EqState(); // corrupt entry — start clean
     }
   }
 
   /// Select a profile (enables it); null turns the EQ off entirely.
   void select(EqProfile? p) {
+    Log.i('settings', 'eq ${p == null ? 'off' : 'profile "${p.name}"'}');
     state = EqState(enabled: p != null, profile: p);
     apply();
     _persist();
@@ -90,6 +97,7 @@ class EqNotifier extends Notifier<EqState> {
   }
 
   void setEnabled(bool on) {
+    Log.i('settings', 'eq ${on ? 'enabled' : 'disabled'}');
     state = EqState(enabled: on, profile: state.profile);
     apply();
     _persist();
@@ -161,6 +169,28 @@ final queueProvider = NotifierProvider<QueueNotifier, QueueState>(
   QueueNotifier.new,
 );
 
+/// One-shot user-facing playback notices (e.g. "Streaming disabled on
+/// cellular"). TransportBar listens and shows a SnackBar — the same pathway
+/// as audio errors. Each notice is a fresh instance (identity equality) so
+/// repeating the same message still notifies.
+final playbackNoticeProvider =
+    NotifierProvider<PlaybackNoticeNotifier, PlaybackNotice?>(
+      PlaybackNoticeNotifier.new,
+    );
+
+class PlaybackNotice {
+  PlaybackNotice(this.message);
+
+  final String message;
+}
+
+class PlaybackNoticeNotifier extends Notifier<PlaybackNotice?> {
+  @override
+  PlaybackNotice? build() => null;
+
+  void show(String message) => state = PlaybackNotice(message);
+}
+
 /// Convenience: the playing (or paused) track, null when idle.
 final currentTrackProvider = Provider<Track?>(
   (ref) => ref.watch(queueProvider).current,
@@ -211,7 +241,7 @@ class QueueState {
 class QueueNotifier extends Notifier<QueueState> {
   /// App-queue index that the engine's playlist entry 0 maps to; gapless
   /// advances arrive as engine playlist positions (base + n).
-  int _engineBase = 0;
+  int _engineBase = -1;
 
   /// App-queue index of the engine's queued-next entry, null when none.
   /// Repeat-one/wrap make advances non-linear, so the mapping is recorded
@@ -227,6 +257,22 @@ class QueueNotifier extends Notifier<QueueState> {
     final startSub = player.trackStarted.listen(_onTrackStarted);
     ref.onDispose(endSub.cancel);
     ref.onDispose(startSub.cancel);
+    // Keep the connectivity stream live so the data-usage gate reads a real
+    // network kind (listen, not watch — network flips must not rebuild the
+    // queue; an unlistened provider is paused in Riverpod 3). Network flips
+    // re-evaluate the gapless queued-next, which is gated on data usage.
+    ref.listen(networkKindProvider, (_, _) => _syncEngineNext());
+    // A streaming-tier change re-drives the queued-next so the engine
+    // prefetches the newly-selected tier (mirrors the networkKindProvider
+    // listen — the tier is chosen by network kind at play time).
+    ref.listen(qualityProvider, (_, _) => _syncEngineNext());
+    // Downloads completing or being deleted flip a track between local and
+    // stream — re-resolve the queued-next URL so it never points at a
+    // deleted file (or keeps streaming a track that finished downloading).
+    ref.listen(
+      downloadsProvider.select((s) => s.index),
+      (_, _) => _syncEngineNext(),
+    );
     return const QueueState();
   }
 
@@ -275,6 +321,7 @@ class QueueNotifier extends Notifier<QueueState> {
     } else if (state.loop == LoopMode.all && state.tracks.isNotEmpty) {
       playAt(0);
     } else {
+      Log.i('playback', 'stop (end of queue)');
       _player.stop();
       _persist();
     }
@@ -409,14 +456,45 @@ class QueueNotifier extends Notifier<QueueState> {
   void _playCurrent() {
     final t = state.current;
     if (t == null) return;
+    // Data-usage gate: local downloads always play; streaming asks the
+    // data-usage settings for the current network kind. Blocked = stay put
+    // paused (never auto-skip through the queue burning data checks).
+    final local = ref.read(localSourceResolverProvider)(t.id);
+    final kind = ref.read(networkKindProvider).value ?? NetKind.other;
+    if (local == null && !ref.read(dataUsageProvider).allowsStream(kind)) {
+      Log.i('playback', 'stream blocked on ${kind.name} by data usage', t.id);
+      ref
+          .read(playbackNoticeProvider.notifier)
+          .show(
+            'Streaming disabled on '
+            '${kind == NetKind.wifi ? 'Wi-Fi' : 'cellular'}',
+          );
+      _player.pause();
+      // Callers advance state.index BEFORE calling; roll back to the track
+      // the engine is still on so audio and UI agree (togglePlay would
+      // otherwise resume the old track under the new title), and drop the
+      // stale queued-next so the engine can't slide past the gate.
+      if (_engineBase >= 0 && _engineBase < state.tracks.length) {
+        state = state.copyWith(index: _engineBase);
+      }
+      _player.clearQueueNext();
+      _pendingAppIndex = null;
+      _persist();
+      return;
+    }
+    Log.i('playback', 'start ${t.title ?? t.id}', t.id);
     // Any normal track leaves radio mode (legacy playCurrent radio = null).
     ref.read(radioPlaybackProvider.notifier).trackPlaybackStarted();
     _engineBase = state.index;
     _pendingAppIndex = null;
     // Server tag meta seeds the format badge until mpv reports the real
     // decoded audio-params (legacy player.js meta handshake).
+    final tier = ref
+        .read(qualityProvider)
+        .streamTierFor(kind)
+        .clamp(ref.read(transcodeAvailableProvider));
     _player.play(
-      ref.read(apiClientProvider).streamUrl(t.id),
+      local ?? ref.read(apiClientProvider).streamUrl(t.id, tier: tier.wire),
       meta: TrackMeta(
         duration: t.duration,
         sampleRate: t.sampleRate,
@@ -439,8 +517,22 @@ class QueueNotifier extends Notifier<QueueState> {
     };
     if (state.index >= 0 && ni < state.tracks.length) {
       final t = state.tracks[ni];
+      final local = ref.read(localSourceResolverProvider)(t.id);
+      // Same data-usage gate as _playCurrent: never pre-queue a stream the
+      // gate would block. The advance then falls through _onEnded -> next()
+      // -> _playCurrent, which blocks and shows the notice.
+      final kind = ref.read(networkKindProvider).value ?? NetKind.other;
+      if (local == null && !ref.read(dataUsageProvider).allowsStream(kind)) {
+        _player.clearQueueNext();
+        _pendingAppIndex = null;
+        return;
+      }
+      final tier = ref
+          .read(qualityProvider)
+          .streamTierFor(kind)
+          .clamp(ref.read(transcodeAvailableProvider));
       final ok = _player.queueNext(
-        ref.read(apiClientProvider).streamUrl(t.id),
+        local ?? ref.read(apiClientProvider).streamUrl(t.id, tier: tier.wire),
       );
       _pendingAppIndex = ok ? ni : null;
     } else {
@@ -518,7 +610,8 @@ class QueueNotifier extends Notifier<QueueState> {
     Map<String, dynamic> saved;
     try {
       saved = jsonDecode(raw) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e) {
+      Log.w('queue', 'restore failed: corrupt prefs', e);
       return;
     }
     final ids = (saved['ids'] as List?)?.cast<String>() ?? const [];
@@ -527,6 +620,7 @@ class QueueNotifier extends Notifier<QueueState> {
     final i = ((saved['i'] as num?)?.toInt() ?? 0)
         .clamp(0, tracks.length - 1)
         .toInt();
+    Log.i('queue', 'restored ${tracks.length} of ${ids.length} tracks');
     state = QueueState(
       tracks: tracks,
       index: i,
@@ -569,8 +663,8 @@ class RadioPlaybackNotifier extends Notifier<RadioStation?> {
           name: j['name'] as String,
           url: j['url'] as String,
         );
-      } catch (_) {
-        // corrupt entry — start clean
+      } catch (e) {
+        Log.w('radio', 'corrupt station prefs', e);
       }
     }
     return null;

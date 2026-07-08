@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -56,7 +57,52 @@ func New(d *Deps) http.Handler {
 	for _, f := range registrars {
 		f(mux, d)
 	}
-	return gzipped(mux)
+	return gzipped(logged(mux))
+}
+
+// statusRecorder captures the status code for the access log.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// ReadFrom re-exposes the wrapped writer's io.ReaderFrom (sendfile for
+// /api/stream, /api/art and booklet ServeContent), which the embedded
+// interface hides. Status is already recorded: ServeContent calls
+// WriteHeader before copying.
+func (s *statusRecorder) ReadFrom(r io.Reader) (int64, error) {
+	if rf, ok := s.ResponseWriter.(io.ReaderFrom); ok {
+		return rf.ReadFrom(r)
+	}
+	return io.Copy(s.ResponseWriter, r)
+}
+
+// logged writes one access-log line per request. /healthz probes are skipped
+// (container healthcheck noise); /api/events is logged on connect because the
+// SSE stream never completes.
+func logged(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			h.ServeHTTP(w, r)
+			return
+		case "/api/events":
+			log.Printf("http: %s %q connect", r.Method, r.URL.Path)
+			h.ServeHTTP(w, r) // raw writer — the handler needs http.Flusher
+			return
+		}
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		h.ServeHTTP(rec, r)
+		// %q escapes control chars: the decoded path is attacker-controlled and
+		// would otherwise allow log-line forgery / terminal ANSI injection
+		log.Printf("http: %s %q %d %s", r.Method, r.URL.Path, rec.status, time.Since(start))
+	})
 }
 
 // gzipRW starts compressing lazily on the first write so handlers that set

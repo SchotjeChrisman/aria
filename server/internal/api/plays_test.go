@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,121 @@ import (
 	"aria/internal/db"
 	"aria/internal/repo"
 )
+
+// POST /api/plays: the optional client timestamp `at` backdates the play
+// (offline replay); omitted = server clock; junk = 400.
+func TestRecordPlayAt(t *testing.T) {
+	d, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	deps := NewDeps(d, config.Config{}, "test")
+	ctx := context.Background()
+
+	if err := deps.Profiles.EnsureDefault(ctx); err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := deps.Profiles.List(ctx)
+	if err != nil || len(profiles) == 0 {
+		t.Fatalf("profiles: %v", err)
+	}
+	pid := profiles[0].ID
+	if err := deps.Tracks.UpsertAll(ctx, []repo.Track{{
+		ID: "t1", Path: "t1", Title: "One", AlbumID: "al1",
+		AddedAt: "2026-01-01T00:00:00.000Z",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	post := func(body string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/api/plays", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		New(deps).ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	before := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	if code := post(`{"trackId":"t1","profileId":"` + pid + `"}`); code != 200 {
+		t.Fatalf("no at = %d, want 200", code)
+	}
+	if code := post(`{"trackId":"t1","profileId":"` + pid + `","at":"2026-07-01T10:00:00.000Z"}`); code != 200 {
+		t.Fatalf("with at = %d, want 200", code)
+	}
+	if code := post(`{"trackId":"t1","profileId":"` + pid + `","at":"yesterday"}`); code != 400 {
+		t.Fatalf("junk at = %d, want 400", code)
+	}
+	if code := post(`{"trackId":"t1","profileId":"` + pid + `","at":"9999-12-31T23:59:59.999Z"}`); code != 400 {
+		t.Fatalf("future at = %d, want 400", code)
+	}
+	if code := post(`{"trackId":"t1","profileId":"` + pid + `","at":"2026-07-01T10:00:00Z"}`); code != 400 {
+		t.Fatalf("wrong-layout at = %d, want 400", code)
+	}
+
+	plays, err := deps.Plays.List(ctx, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plays) != 2 {
+		t.Fatalf("plays = %d, want 2", len(plays))
+	}
+	if plays[0].At < before {
+		t.Errorf("server-clock at = %q, want >= %q", plays[0].At, before)
+	}
+	if _, err := time.Parse("2006-01-02T15:04:05.000Z", plays[0].At); err != nil {
+		t.Errorf("server-clock at layout: %v", err)
+	}
+	if plays[1].At != "2026-07-01T10:00:00.000Z" {
+		t.Errorf("client at = %q, want 2026-07-01T10:00:00.000Z", plays[1].At)
+	}
+}
+
+// A pending-plays replay after a timed-out-but-committed request retries the
+// identical (trackId, profileId, at) triple — it must not double-count.
+func TestRecordPlayIdempotent(t *testing.T) {
+	d, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	deps := NewDeps(d, config.Config{}, "test")
+	ctx := context.Background()
+
+	if err := deps.Profiles.EnsureDefault(ctx); err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := deps.Profiles.List(ctx)
+	if err != nil || len(profiles) == 0 {
+		t.Fatalf("profiles: %v", err)
+	}
+	pid := profiles[0].ID
+	if err := deps.Tracks.UpsertAll(ctx, []repo.Track{{
+		ID: "t1", Path: "t1", Title: "One", AlbumID: "al1",
+		AddedAt: "2026-01-01T00:00:00.000Z",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := `{"trackId":"t1","profileId":"` + pid + `","at":"2026-07-01T10:00:00.000Z"}`
+	for i := 0; i < 2; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/api/plays", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		New(deps).ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("post %d = %d, want 200", i, rec.Code)
+		}
+	}
+
+	plays, err := deps.Plays.List(ctx, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plays) != 1 {
+		t.Fatalf("plays = %d, want 1 (duplicate replay must dedupe)", len(plays))
+	}
+}
 
 // Smoke test for the SQL-aggregated /api/stats: totals, tops, windows,
 // stale-track handling, and profile scoping.

@@ -1,5 +1,6 @@
 import 'package:aria/core/connection.dart';
 import 'package:aria/core/library_providers.dart';
+import 'package:aria/core/log_sync.dart';
 import 'package:aria/core/player_providers.dart';
 import 'package:aria/core/playlists_providers.dart';
 import 'package:aria/core/router.dart';
@@ -44,6 +45,10 @@ void main() {
         // Inert: the real one keeps an SSE-reconnect timer alive, which
         // trips the pending-timer invariant at test teardown.
         enrichRefreshProvider.overrideWith((ref) {}),
+        // Same invariant: the real one runs a 5-min upload timer.
+        logSyncProvider.overrideWith(
+          (ref) => LogSync(prefs: prefs, file: () => null, upload: (_) async {}),
+        ),
         // No server in tests: the real fetch fails and riverpod's retry
         // timer trips the pending-timer invariant at teardown.
         libraryTracksProvider.overrideWith((ref) async => const []),

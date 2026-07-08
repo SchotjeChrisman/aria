@@ -41,6 +41,7 @@ func registerPlays(mux *http.ServeMux, d *Deps) {
 		var b struct {
 			TrackID   json.RawMessage `json:"trackId"`
 			ProfileID json.RawMessage `json:"profileId"`
+			At        json.RawMessage `json:"at"`
 		}
 		if err := readJSON(w, r, &b); err != nil {
 			httpError(w, http.StatusBadRequest, "invalid json")
@@ -50,6 +51,19 @@ func registerPlays(mux *http.ServeMux, d *Deps) {
 		profileID, _ := asStr(b.ProfileID)
 		if trackID == "" || profileID == "" {
 			httpError(w, http.StatusBadRequest, "trackId and profileId required")
+			return
+		}
+		// optional client timestamp: offline clients replay queued plays with
+		// their original time; must stay in the lexicographically-comparable
+		// isoNow() layout or the stats window cutoffs break
+		at, _ := asStr(b.At)
+		if at == "" {
+			at = isoNow()
+		} else if ts, err := time.Parse("2006-01-02T15:04:05.000Z", at); err != nil ||
+			// past is fine (offline replay can be days old); future beyond small
+			// clock skew would sort as newest-forever and corrupt recency stats
+			ts.After(time.Now().UTC().Add(5*time.Minute)) {
+			httpError(w, http.StatusBadRequest, "invalid at")
 			return
 		}
 		if p, err := d.Profiles.ByID(r.Context(), profileID); err != nil {
@@ -68,7 +82,7 @@ func registerPlays(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusBadRequest, "unknown track")
 			return
 		}
-		if err := d.Plays.Add(r.Context(), repo.Play{TrackID: trackID, ProfileID: profileID, At: isoNow()}); err != nil {
+		if err := d.Plays.Add(r.Context(), repo.Play{TrackID: trackID, ProfileID: profileID, At: at}); err != nil {
 			fail(w, err)
 			return
 		}

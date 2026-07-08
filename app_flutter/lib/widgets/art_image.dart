@@ -1,13 +1,30 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/downloads.dart';
 import '../core/formats.dart';
 import '../core/theme.dart';
 
-/// Album/artist art with the legacy fallback chain: network image → tinted
-/// square showing initials of [fallbackText] (legacy .art .initials).
-/// Uses Flutter's in-memory ImageCache; server art is immutable per albumId
-/// so no disk cache layer is needed yet.
-class ArtImage extends StatelessWidget {
+/// albumId from a server art URL ("…/api/art/{albumId}"), null for anything
+/// else (external covers, no URL).
+/// ponytail: parsed from the URL so 15+ call sites don't grow an albumId
+/// param — if art ever needs auth/query strings, pass the id explicitly.
+String? _artAlbumId(String url) {
+  final segs = Uri.tryParse(url)?.pathSegments;
+  if (segs == null || segs.length < 3) return null;
+  return segs[segs.length - 2] == 'art' && segs[segs.length - 3] == 'api'
+      ? segs.last
+      : null;
+}
+
+/// Album/artist art with the legacy fallback chain: network image → locally
+/// downloaded cover (offline) → tinted square showing initials of
+/// [fallbackText] (legacy .art .initials). Uses Flutter's in-memory
+/// ImageCache; server art is immutable per albumId so no disk cache layer is
+/// needed yet.
+class ArtImage extends ConsumerWidget {
   const ArtImage({
     super.key,
     this.url,
@@ -31,9 +48,10 @@ class ArtImage extends StatelessWidget {
   final BoxFit fit;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
     final decodeEdge = size ?? decodeSize;
+    final localArtOf = ref.watch(localArtResolverProvider);
 
     final fallback = Center(
       child: Text(
@@ -69,7 +87,19 @@ class ArtImage extends StatelessWidget {
                   : (decodeEdge * MediaQuery.devicePixelRatioOf(context))
                         .round(),
               gaplessPlayback: true,
-              errorBuilder: (_, _, _) => fallback,
+              // Network failed (offline?): downloaded cover, then initials.
+              // The file stat runs only on error, never on the happy path.
+              errorBuilder: (_, _, _) {
+                final albumId = _artAlbumId(url!);
+                final local = albumId == null ? null : localArtOf(albumId);
+                return local == null
+                    ? fallback
+                    : Image.file(
+                        File(local),
+                        fit: fit,
+                        errorBuilder: (_, _, _) => fallback,
+                      );
+              },
               frameBuilder: (_, child, frame, wasSync) => wasSync
                   ? child
                   : AnimatedOpacity(

@@ -5,6 +5,13 @@ services:
     image: ghcr.io/schotjechrisman/aria:latest
     build: .
     restart: unless-stopped
+    labels:
+      # Auto-update opt-in. Podman: labels alone aren't enough — `podman
+      # auto-update` needs a real systemd unit to restart, so run this compose
+      # via deploy/podman-compose@.service (keeps compose as the single source
+      # of truth). Docker: start the watchtower profile below.
+      io.containers.autoupdate: registry
+      com.centurylinklabs.watchtower.enable: "true"
     ports:
       - "3001:3000"
     volumes:
@@ -18,6 +25,22 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  # DOCKER-only auto-updater. Not started by default; opt in with:
+  #   docker compose --profile watchtower up -d
+  # Podman deployments should use the Quadlet + podman-auto-update.timer
+  # (see deploy/ and README "Updating") — watchtower is unreliable against
+  # podman's docker-compat socket.
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    profiles: ["watchtower"]
+    volumes:
+      # SECURITY: the docker socket is root-equivalent on the host — anything
+      # that can reach it controls Docker entirely. That's inherent to how
+      # watchtower works; only enable this profile on a host you fully trust.
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --cleanup --interval 3600
 
 volumes:
   aria-data:

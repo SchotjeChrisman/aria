@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,7 +20,7 @@ import (
 	"aria/internal/scanner"
 )
 
-const version = "2.4.0"
+const version = "2.5.0"
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe /healthz on localhost and exit 0/1 (container healthcheck)")
@@ -44,6 +46,18 @@ func main() {
 
 	deps := api.NewDeps(sqlDB, cfg, version)
 	deps.Bg = ctx // background scan/enrich stop on SIGTERM, drained via WaitBg
+	if _, err := exec.LookPath(cfg.FFmpegPath); err == nil {
+		deps.CanTranscode = true
+		log.Printf("transcoding enabled: %s", cfg.FFmpegPath)
+	}
+	// Reap orphaned transcode temp files left by a crash/OOM mid-encode; boot
+	// is the safe point (no active encode can be mid-write) and sweepCache
+	// neither counts nor deletes .part files.
+	if parts, _ := filepath.Glob(filepath.Join(cfg.DataDir, "tc", "*.part")); parts != nil {
+		for _, m := range parts {
+			os.Remove(m)
+		}
+	}
 	deps.Scanner = scanner.New(cfg.MusicDir, cfg.DataDir, deps.Tracks, deps.Albums, func(done, total int) {
 		deps.Events.Publish("scan", map[string]int{"done": done, "total": total})
 	})

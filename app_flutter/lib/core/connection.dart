@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'log.dart';
 import 'theme.dart';
 
 const kDefaultServerUrl = 'http://localhost:3000';
@@ -10,6 +13,12 @@ const _prefsKeyServerUrl = 'aria.serverUrl';
 
 /// Overridden with a real instance in main() before runApp.
 final sharedPrefsProvider = Provider<SharedPreferences>(
+  (ref) => throw UnimplementedError('overridden in main()'),
+);
+
+/// App-support directory (path_provider), overridden in main() before runApp
+/// like [sharedPrefsProvider]. Home of logs/, downloads/ and cache/.
+final appSupportDirProvider = Provider<Directory>(
   (ref) => throw UnimplementedError('overridden in main()'),
 );
 
@@ -25,6 +34,7 @@ class ServerUrlNotifier extends Notifier<String?> {
 
   Future<void> set(String url) async {
     final normalized = normalizeServerUrl(url);
+    Log.i('conn', 'server URL set', normalized);
     state = normalized;
     await ref
         .read(sharedPrefsProvider)

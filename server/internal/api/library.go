@@ -421,6 +421,7 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"tracks": n, "musicDir": d.Cfg.MusicDir, "version": d.Version,
+			"transcode": d.CanTranscode,
 		})
 	})
 

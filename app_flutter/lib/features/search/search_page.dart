@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
+import '../../core/downloads.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/artist_avatar.dart';
@@ -360,6 +361,11 @@ class _ResultsList extends ConsumerWidget {
                 bitsPerSample: results.tracks[i].bitsPerSample,
                 sampleRate: results.tracks[i].sampleRate,
                 lossless: results.tracks[i].lossless,
+                downloaded: ref.watch(
+                  downloadsProvider.select(
+                    (s) => s.index.containsKey(results.tracks[i].id),
+                  ),
+                ),
                 isCurrent: current?.id == results.tracks[i].id,
                 onTap: () {
                   if (selectionTapHandled(

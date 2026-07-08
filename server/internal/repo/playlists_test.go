@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -82,12 +83,14 @@ func TestPlaysTrimAndCounts(t *testing.T) {
 	if err := profiles.EnsureDefault(ctx); err != nil {
 		t.Fatalf("default: %v", err)
 	}
+	// distinct at per play: Add dedupes exact (trackId, profileId, at) triples
+	// (offline-replay idempotency), and real plays never share a millisecond
 	for i := 0; i < 5; i++ {
-		if err := plays.Add(ctx, Play{TrackID: "t1", ProfileID: "default", At: "t"}); err != nil {
+		if err := plays.Add(ctx, Play{TrackID: "t1", ProfileID: "default", At: fmt.Sprintf("t%d", i)}); err != nil {
 			t.Fatalf("add: %v", err)
 		}
 	}
-	if err := plays.Add(ctx, Play{TrackID: "t2", ProfileID: "default", At: "t"}); err != nil {
+	if err := plays.Add(ctx, Play{TrackID: "t2", ProfileID: "default", At: "t5"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	counts, err := plays.CountsFor(ctx, "default")

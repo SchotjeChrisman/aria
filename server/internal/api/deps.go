@@ -30,6 +30,10 @@ type Deps struct {
 	Cfg     config.Config
 	Version string
 
+	// CanTranscode is set at startup when cfg.FFmpegPath resolves to an
+	// executable; gates the high/low stream tiers (501 otherwise).
+	CanTranscode bool
+
 	Tracks      *repo.Tracks
 	Albums      *repo.Albums
 	Tags        *repo.Tags
@@ -40,6 +44,7 @@ type Deps struct {
 	EnrichCache *repo.Enrich
 	Settings    *repo.Settings
 	Radio       *repo.Radio
+	Logs        *repo.Logs
 
 	Scanner  Scanner
 	Enricher Enricher
@@ -112,6 +117,7 @@ func NewDeps(db *sql.DB, cfg config.Config, version string) *Deps {
 		EnrichCache: repo.NewEnrich(db),
 		Settings:    repo.NewSettings(db),
 		Radio:       repo.NewRadio(db),
+		Logs:        repo.NewLogs(db),
 
 		Events: NewHub(),
 	}

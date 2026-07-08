@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/downloads.dart';
 import '../core/player_providers.dart';
 import '../core/playlists_providers.dart';
 import '../core/selection.dart';
@@ -125,6 +126,28 @@ SelectionItem albumSelectionItem(String albumId, List<Track> tracks) =>
 SelectionItem artistSelectionItem(String name, List<Track> tracks) =>
     SelectionItem(kind: 'artist', key: name, tracks: tracks);
 
+// ------------------------------------------------------------ downloads
+
+/// "Download" until every track in [tracks] is downloaded, then
+/// "Remove download". Queueing dedupes, so partial album downloads resume.
+AriaMenuItem downloadMenuItem(WidgetRef ref, List<Track> tracks) {
+  final index = ref.read(downloadsProvider).index;
+  final all =
+      tracks.isNotEmpty && tracks.every((t) => index.containsKey(t.id));
+  final downloads = ref.read(downloadsProvider.notifier);
+  return all
+      ? AriaMenuItem('Remove download', () {
+          for (final t in tracks) {
+            downloads.remove(t.id);
+          }
+        }, icon: Icons.file_download_off_outlined)
+      : AriaMenuItem(
+          'Download',
+          () => downloads.downloadTracks(tracks),
+          icon: Icons.download_outlined,
+        );
+}
+
 // ---------------------------------------------------------------- menus
 
 /// Legacy trackCtx: Play / Play next / Add to queue / Add to playlist… /
@@ -160,6 +183,7 @@ List<AriaMenuItem> trackMenuItems(
       () => showTagPicker(context, kind: 'track', key: t.id),
       icon: Icons.sell_outlined,
     ),
+    downloadMenuItem(ref, [t]),
     if (goToAlbum)
       AriaMenuItem(
         'Go to album',
@@ -218,6 +242,7 @@ List<AriaMenuItem> albumMenuItems(
       () => showTagPicker(context, kind: 'album', key: albumId),
       icon: Icons.sell_outlined,
     ),
+    downloadMenuItem(ref, tracks),
     if (artistName != null && artistName.isNotEmpty)
       AriaMenuItem(
         'Go to artist',

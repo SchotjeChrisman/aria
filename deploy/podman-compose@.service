@@ -1,0 +1,34 @@
+# Runs a podman-compose project as a real systemd unit, so `podman auto-update`
+# has something to restart after it pulls a new image. The instance name is the
+# project dir under ~/podman/, e.g. `podman-compose@aria` -> ~/podman/aria.
+#
+# podman-compose stamps every container it starts with the label
+# PODMAN_SYSTEMD_UNIT=podman-compose@<project>.service; this unit makes that
+# label point at something real, which is the whole trick.
+#
+# Install (rootless, lingering enabled):
+#   cp podman-compose@.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now podman-compose@aria
+#   systemctl --user enable --now podman-auto-update.timer
+[Unit]
+Description=podman-compose project %i
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/podman/%i
+# --in-pod=false: run services as standalone containers, NOT inside a compose
+# pod. `podman auto-update` restarts the container's own systemd unit via its
+# PODMAN_SYSTEMD_UNIT label; a pod has no such label and auto-update errors
+# ("pod has no infra container"). No pod = auto-update works.
+# down (removes the old container) then up (recreates from the freshly-pulled
+# local image) — the down is what guarantees the new image is picked up.
+ExecStart=/usr/local/bin/podman-compose --in-pod=false up -d
+ExecStop=/usr/local/bin/podman-compose --in-pod=false down
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

@@ -16,6 +16,18 @@ void main() {
       expect(c.bookletUrl('deadbeef', 'liner notes.pdf'),
           'http://box:3000/api/albums/deadbeef/booklet/liner%20notes.pdf');
     });
+
+    test('streamUrl appends ?tier only for high/low, omits for original', () {
+      expect(c.streamUrl('t1'), 'http://box:3000/api/stream/t1');
+      expect(c.streamUrl('t1', tier: null), 'http://box:3000/api/stream/t1');
+      expect(c.streamUrl('t1', tier: ''), 'http://box:3000/api/stream/t1');
+      expect(c.streamUrl('t1', tier: 'original'),
+          'http://box:3000/api/stream/t1');
+      expect(
+          c.streamUrl('t1', tier: 'high'), 'http://box:3000/api/stream/t1?tier=high');
+      expect(
+          c.streamUrl('t1', tier: 'low'), 'http://box:3000/api/stream/t1?tier=low');
+    });
   });
 
   group('endpoints', () {
@@ -143,6 +155,20 @@ void main() {
       );
     });
 
+    test('uploadLogs posts device+entries and returns stored count', () async {
+      final c = client((_) => {'stored': 2});
+      final n = await c.uploadLogs('linux-a1b2c3', [
+        {'ts': 't0', 'level': 'info', 'tag': 'app', 'msg': 'start'},
+        {'ts': 't1', 'level': 'error', 'tag': 'playback', 'msg': 'boom'},
+      ]);
+      expect(n, 2);
+      expect(seen.single.method, 'POST');
+      expect(seen.single.url.path, '/api/logs');
+      final sent = jsonDecode(seen.single.body) as Map<String, dynamic>;
+      expect(sent['device'], 'linux-a1b2c3');
+      expect((sent['entries'] as List), hasLength(2));
+    });
+
     test('recordPlay posts trackId+profileId', () async {
       final c = client((_) => {'ok': true});
       await c.recordPlay(trackId: 't1', profileId: 'default');
@@ -150,6 +176,75 @@ void main() {
       expect(seen.single.url.path, '/api/plays');
       expect(jsonDecode(seen.single.body),
           {'trackId': 't1', 'profileId': 'default'});
+    });
+
+    test('recordPlay includes at only when supplied', () async {
+      final c = client((_) => {'ok': true});
+      await c.recordPlay(
+          trackId: 't1', profileId: 'default', at: '2026-07-08T12:00:00.000Z');
+      expect(jsonDecode(seen.single.body), {
+        'trackId': 't1',
+        'profileId': 'default',
+        'at': '2026-07-08T12:00:00.000Z',
+      });
+    });
+
+    test('download streams the original bytes from /api/stream', () async {
+      final c = client((_) => null); // unused — raw handler below
+      final raw = AriaClient(
+        baseUrl: 'http://box:3000',
+        httpClient: MockClient((req) async {
+          expect(req.url.path, '/api/stream/t%201');
+          return http.Response.bytes([1, 2, 3], 200,
+              headers: {'content-type': 'audio/flac', 'etag': '"e1"'});
+        }),
+      );
+      final res = await raw.download('t 1');
+      expect(res.headers['etag'], '"e1"');
+      expect(await res.stream.toBytes(), [1, 2, 3]);
+      c.close();
+    });
+
+    test('download appends ?tier=low, omits it for original/null', () async {
+      final seen = <Uri>[];
+      final raw = AriaClient(
+        baseUrl: 'http://box:3000',
+        httpClient: MockClient((req) async {
+          seen.add(req.url);
+          return http.Response.bytes([1], 200);
+        }),
+      );
+      await raw.download('t1', tier: 'low');
+      await raw.download('t1');
+      await raw.download('t1', tier: 'original');
+      expect(seen[0].toString(), 'http://box:3000/api/stream/t1?tier=low');
+      expect(seen[1].toString(), 'http://box:3000/api/stream/t1');
+      expect(seen[2].toString(), 'http://box:3000/api/stream/t1');
+    });
+
+    test('download/downloadArt throw AriaApiException on non-2xx', () async {
+      final raw = AriaClient(
+        baseUrl: 'http://box:3000',
+        httpClient: MockClient((_) async => http.Response('Not Found', 404)),
+      );
+      await expectLater(
+        raw.download('nope'),
+        throwsA(isA<AriaApiException>()
+            .having((e) => e.statusCode, 'statusCode', 404)),
+      );
+      await expectLater(raw.downloadArt('nope'),
+          throwsA(isA<AriaApiException>()));
+    });
+
+    test('tracksBytes returns the raw payload; decodeTracks parses it',
+        () async {
+      final c = client((_) => [
+            {'id': 't1', 'albumId': 'al1', 'title': 'One'},
+          ]);
+      final bytes = await c.tracksBytes();
+      final tracks = AriaClient.decodeTracks(bytes);
+      expect(tracks.single.id, 't1');
+      expect(tracks.single.title, 'One');
     });
 
     test('scan returns track count', () async {
