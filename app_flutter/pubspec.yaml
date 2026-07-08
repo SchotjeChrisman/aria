@@ -15,6 +15,11 @@ dependencies:
   go_router: ^16.0.0
   shared_preferences: ^2.5.0
 
+  # Android only: media session + foreground service (background playback)
+  # and becoming-noisy handling. audio_service 0.18 needs audio_session 0.1.
+  audio_service: ^0.18.15
+  audio_session: ^0.1.25
+
   # Local packages.
   aria_api:
     path: packages/aria_api

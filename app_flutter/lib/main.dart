@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/background_audio.dart';
 import 'core/connection.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
@@ -14,11 +17,15 @@ Future<void> main() async {
     ..maximumSizeBytes = 400 << 20 // ~400MB
     ..maximumSize = 4000;
   final prefs = await SharedPreferences.getInstance();
+  final container = ProviderContainer(
+    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+  );
+  // Android: media session + foreground service so playback survives
+  // backgrounding, and losing the output device pauses. Desktop needs
+  // neither — the mpv engine already handles ao errors there.
+  if (Platform.isAndroid) await initBackgroundAudio(container);
   runApp(
-    ProviderScope(
-      overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
-      child: const AriaApp(),
-    ),
+    UncontrolledProviderScope(container: container, child: const AriaApp()),
   );
 }
 
