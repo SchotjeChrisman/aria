@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'exceptions.dart';
 import 'json.dart';
 import 'models/enrichment.dart';
+import 'models/eq.dart';
 import 'models/misc.dart';
 import 'models/playlist.dart';
 import 'models/profile.dart';
@@ -373,6 +374,12 @@ class AriaClient {
 
   Future<void> deleteRadioStation(String id) =>
       _delete('/api/radio/${Uri.encodeComponent(id)}');
+
+  // ---- eq
+
+  /// OPRA headphone EQ database (server-cached weekly).
+  Future<List<OpraProduct>> eqOpra() async => _list(
+      asMap(await _get('/api/eq/opra'))['products'], OpraProduct.fromJson);
 
   // ---- events (SSE): scan / enrich progress
 

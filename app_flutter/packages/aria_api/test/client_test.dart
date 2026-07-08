@@ -153,6 +153,36 @@ void main() {
       expect(g.childrenOf('Jazz'), ['Swing']);
     });
 
+    test('eqOpra parses products with eqs and bands', () async {
+      final c = client((_) => {
+            'products': [
+              {
+                'vendor': 'Sennheiser',
+                'product': 'HD 650',
+                'eqs': [
+                  {
+                    'author': 'oratory1990',
+                    'gainDb': -6.8,
+                    'bands': [
+                      {'type': 'peak_dip', 'frequency': 105, 'gainDb': 3.1, 'q': 0.7},
+                      {'type': 'low_pass', 'frequency': 18000, 'slope': 12},
+                    ],
+                  },
+                ],
+              },
+            ],
+          });
+      final products = await c.eqOpra();
+      expect(seen.single.url.path, '/api/eq/opra');
+      final eq = products.single.eqs.single;
+      expect(products.single.vendor, 'Sennheiser');
+      expect(eq.author, 'oratory1990');
+      expect(eq.gainDb, -6.8);
+      expect(eq.bands.first.q, 0.7);
+      expect(eq.bands.last.slope, 12);
+      expect(eq.bands.last.q, isNull);
+    });
+
     test('reidentify posts mbid (null allowed for fresh search)', () async {
       final c = client((_) => <String, dynamic>{});
       await c.reidentifyAlbum('A', mbid: null);

@@ -24,6 +24,19 @@ func (r *Enrich) Get(ctx context.Context, kind, key string) (json.RawMessage, bo
 	return json.RawMessage(s), true, nil
 }
 
+// GetFetched is Get plus the fetchedAt timestamp, for TTL checks.
+func (r *Enrich) GetFetched(ctx context.Context, kind, key string) (json.RawMessage, string, bool, error) {
+	var s, at string
+	err := r.db.QueryRowContext(ctx, `SELECT json, fetchedAt FROM enrich_cache WHERE kind = ? AND key = ?`, kind, key).Scan(&s, &at)
+	if err == sql.ErrNoRows {
+		return nil, "", false, nil
+	}
+	if err != nil {
+		return nil, "", false, err
+	}
+	return json.RawMessage(s), at, true, nil
+}
+
 func (r *Enrich) Put(ctx context.Context, kind, key string, doc json.RawMessage, fetchedAt string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO enrich_cache (kind, key, json, fetchedAt) VALUES (?,?,?,?)
 		ON CONFLICT(kind, key) DO UPDATE SET json = excluded.json, fetchedAt = excluded.fetchedAt`,

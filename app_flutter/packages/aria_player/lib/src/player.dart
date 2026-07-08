@@ -325,6 +325,12 @@ class AriaPlayer {
     _raw!.setPropertyDouble(_handle, 'volume', volume.clamp(0, 100));
   }
 
+  /// Replace the mpv audio filter chain ('' clears it) — the EQ hook.
+  void setAudioFilter(String af) {
+    if (!isAvailable) return;
+    _raw!.setPropertyString(_handle, 'af', af);
+  }
+
   /// Runtime toggle for exclusive device access (desktop).
   void setAudioExclusive(bool on) {
     if (!isAvailable || Platform.isAndroid) return;

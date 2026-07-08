@@ -114,6 +114,7 @@ void main() {
       player.stop();
       player.seek(10);
       player.setVolume(50);
+      player.setAudioFilter('lavfi=[volume=-6dB]');
       player.setAudioExclusive(true);
       player.debugPoll();
       await player.dispose();
@@ -258,6 +259,18 @@ void main() {
       player.seek(-3);
       expect(fake.log, contains('cmd seek 12.5 absolute'));
       expect(fake.log, contains('cmd seek 0.0 absolute'));
+      await player.dispose();
+    });
+
+    test('setAudioFilter writes the af property', () async {
+      final (player, fake) = await makePlayer();
+      player.setAudioFilter('lavfi=[volume=-6dB,equalizer=f=105:t=q:w=0.7:g=3.1]');
+      expect(
+        fake.log,
+        contains('propstr af=lavfi=[volume=-6dB,equalizer=f=105:t=q:w=0.7:g=3.1]'),
+      );
+      player.setAudioFilter(''); // clears the chain
+      expect(fake.log, contains('propstr af='));
       await player.dispose();
     });
 

@@ -6,10 +6,13 @@ import 'package:aria_player/aria_player.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection.dart';
+import 'eq.dart';
 
 const _prefsKeyQueue = 'aria.queue';
 const _prefsKeyRadio = 'aria.radio';
 const _prefsKeyExclusive = 'aria.audioExclusive';
+const _prefsKeyEq = 'aria.eq';
+const _prefsKeyEqCustom = 'aria.eq.custom';
 
 /// Single engine instance for the app's lifetime. The persisted exclusive
 /// flag is passed to the constructor so --audio-exclusive is set before
@@ -38,6 +41,96 @@ class AudioExclusiveNotifier extends Notifier<bool> {
     state = on;
     ref.read(ariaPlayerProvider).setAudioExclusive(on);
     await ref.read(sharedPrefsProvider).setBool(_prefsKeyExclusive, on);
+  }
+}
+
+/// Headphone EQ selection (OPRA or custom preset), persisted and pushed to
+/// the engine as an mpv `af` chain. Re-applied after init by
+/// playerInitProvider, same as volume/exclusive.
+final eqProvider = NotifierProvider<EqNotifier, EqState>(EqNotifier.new);
+
+class EqState {
+  const EqState({this.enabled = false, this.profile});
+
+  final bool enabled;
+  final EqProfile? profile;
+
+  bool get active => enabled && profile != null;
+}
+
+class EqNotifier extends Notifier<EqState> {
+  @override
+  EqState build() {
+    final raw = ref.read(sharedPrefsProvider).getString(_prefsKeyEq);
+    if (raw == null) return const EqState();
+    try {
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      return EqState(
+        enabled: j['enabled'] == true,
+        profile: j['name'] == null ? null : EqProfile.fromJson(j),
+      );
+    } catch (_) {
+      return const EqState(); // corrupt entry — start clean
+    }
+  }
+
+  /// Select a profile (enables it); null turns the EQ off entirely.
+  void select(EqProfile? p) {
+    state = EqState(enabled: p != null, profile: p);
+    apply();
+    _persist();
+  }
+
+  void setEnabled(bool on) {
+    state = EqState(enabled: on, profile: state.profile);
+    apply();
+    _persist();
+  }
+
+  /// Push the current chain to the engine (also called post-init).
+  void apply() {
+    final p = state.profile;
+    ref
+        .read(ariaPlayerProvider)
+        .setAudioFilter(state.enabled && p != null ? eqToAf(p) : '');
+  }
+
+  void _persist() {
+    // {enabled} + flattened profile fields (name, gainDb, bands).
+    ref.read(sharedPrefsProvider).setString(
+          _prefsKeyEq,
+          jsonEncode({'enabled': state.enabled, ...?state.profile?.toJson()}),
+        );
+  }
+}
+
+/// User-authored EQ presets (aria.eq.custom); editing UI lives in settings.
+final customEqPresetsProvider =
+    NotifierProvider<CustomEqPresetsNotifier, List<EqProfile>>(
+      CustomEqPresetsNotifier.new,
+    );
+
+class CustomEqPresetsNotifier extends Notifier<List<EqProfile>> {
+  @override
+  List<EqProfile> build() {
+    final raw = ref.read(sharedPrefsProvider).getString(_prefsKeyEqCustom);
+    if (raw == null) return const [];
+    try {
+      return [
+        for (final j in jsonDecode(raw) as List)
+          if (j is Map<String, dynamic>) EqProfile.fromJson(j),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  void set(List<EqProfile> presets) {
+    state = presets;
+    ref.read(sharedPrefsProvider).setString(
+          _prefsKeyEqCustom,
+          jsonEncode([for (final p in presets) p.toJson()]),
+        );
   }
 }
 

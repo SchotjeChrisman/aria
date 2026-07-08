@@ -18,14 +18,17 @@ class SignalPath extends ConsumerWidget {
     if (track == null && radio == null) return const SizedBox.shrink();
     final fmt = ref.watch(playbackFormatProvider).value;
     final c = AriaColors.of(context);
+    // An active EQ filter means the samples are processed — the path shows
+    // the EQ leg and the dot stops claiming bit-perfect.
+    final eqActive = ref.watch(eqProvider).active;
 
     final String text;
-    final bool lossless;
+    bool lossless;
     if (radio != null) {
       // Legacy updateSignalPath radio branch: the stream codec is opaque;
       // FLAC in the URL is the honest tell.
       lossless = radio.url.toLowerCase().contains('flac');
-      text = 'STREAM → mpv';
+      text = eqActive ? 'STREAM → EQ → mpv' : 'STREAM → mpv';
     } else {
       final src = formatBadgeText(
         format: track!.format,
@@ -43,8 +46,10 @@ class SignalPath extends ConsumerWidget {
         out = '$bits$k → mpv';
       }
       lossless = track.lossless;
-      text = '${src.isEmpty ? 'AUDIO' : src} → $mid → $out';
+      final eq = eqActive ? 'EQ → ' : '';
+      text = '${src.isEmpty ? 'AUDIO' : src} → $mid → $eq$out';
     }
+    if (eqActive) lossless = false;
 
     return Row(
       mainAxisSize: MainAxisSize.min,

@@ -27,6 +27,7 @@ tags:
   - name: plays
   - name: radio
   - name: settings
+  - name: eq
 
 paths:
   /healthz:
@@ -772,6 +773,56 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ---- eq ------------------------------------------------------------------------
+
+  /api/eq/opra:
+    get:
+      tags: [eq]
+      summary: OPRA headphone EQ database (compacted)
+      description: |
+        The OPRA (Open Parametric EQ Repository, CC-BY-SA, Roon Labs) dataset,
+        joined into products with their parametric EQs. Cached server-side for
+        7 days; a stale copy is served when a refetch fails.
+      operationId: getEqOpra
+      responses:
+        '200':
+          description: Products with headphone-specific parametric EQs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [products]
+                properties:
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      required: [vendor, product, eqs]
+                      properties:
+                        vendor: { type: string }
+                        product: { type: string }
+                        eqs:
+                          type: array
+                          items:
+                            type: object
+                            required: [author, gainDb, bands]
+                            properties:
+                              author: { type: string }
+                              gainDb: { type: number, description: Preamp gain in dB. }
+                              bands:
+                                type: array
+                                items:
+                                  type: object
+                                  additionalProperties: true
+                                  description: >
+                                    type, frequency, gainDb, plus q (biquads)
+                                    or slope in dB/oct (low/high_pass).
+        '502':
+          description: No cached copy and the upstream fetch failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   # ---- plays & stats -------------------------------------------------------------
 

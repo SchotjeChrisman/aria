@@ -4,7 +4,10 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../core/connection.dart';
+import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../profiles/profiles_section.dart';
 import 'settings_providers.dart';
@@ -29,10 +32,18 @@ class SettingsPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: AriaSpace.s6),
                 const _Section(title: 'Server', child: _ServerUrlField()),
-                // Exclusive access is a desktop-only mpv option (the engine
-                // no-ops it on Android) — a dead switch just misleads.
-                if (!Platform.isAndroid)
-                  const _Section(title: 'Playback', child: _ExclusiveToggle()),
+                _Section(
+                  title: 'Playback',
+                  child: Column(
+                    children: [
+                      // Exclusive access is a desktop-only mpv option (the
+                      // engine no-ops it on Android) — a dead switch just
+                      // misleads.
+                      if (!Platform.isAndroid) const _ExclusiveToggle(),
+                      const _EqTile(),
+                    ],
+                  ),
+                ),
                 const _Section(
                   title: 'Scrobbling',
                   child: _ListenBrainzField(),
@@ -173,6 +184,29 @@ class _ExclusiveToggle extends ConsumerWidget {
       ),
       value: on,
       onChanged: (v) => ref.read(audioExclusiveProvider.notifier).set(v),
+    );
+  }
+}
+
+/// Active headphone-EQ profile + on/off switch; the picker is /settings/eq.
+class _EqTile extends ConsumerWidget {
+  const _EqTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eq = ref.watch(eqProvider);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Headphone EQ'),
+      subtitle: Text(eq.profile?.name ?? 'Off'),
+      trailing: Switch(
+        value: eq.enabled,
+        // No profile selected: nothing to enable.
+        onChanged: eq.profile == null
+            ? null
+            : (v) => ref.read(eqProvider.notifier).setEnabled(v),
+      ),
+      onTap: () => context.push('/settings/eq'),
     );
   }
 }

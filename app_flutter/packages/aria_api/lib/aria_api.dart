@@ -5,6 +5,7 @@ export 'src/client.dart' show AriaClient, unset;
 export 'src/exceptions.dart';
 export 'src/models/album.dart';
 export 'src/models/enrichment.dart';
+export 'src/models/eq.dart';
 export 'src/models/misc.dart';
 export 'src/models/playlist.dart';
 export 'src/models/profile.dart';

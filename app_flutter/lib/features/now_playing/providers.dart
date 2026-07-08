@@ -27,6 +27,8 @@ final playerInitProvider = FutureProvider<void>((ref) async {
   // Constructor already set the option pre-init; re-assert the persisted
   // flag as a property so the engine and the Settings switch always agree.
   player.setAudioExclusive(ref.read(audioExclusiveProvider));
+  // Persisted EQ chain is a runtime `af` property — re-apply like volume.
+  ref.read(eqProvider.notifier).apply();
 });
 
 /// Duration as reported by mpv once decode starts (core only exposes
