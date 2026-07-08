@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/library_cards.dart';
 import '../../widgets/selection_highlight.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/tag_picker.dart';
@@ -83,6 +84,7 @@ class _AlbumBody extends ConsumerWidget {
         ..._trackRows(context, ref, currentId, queue),
         ..._creditsLine(context),
         ..._performerShelf(context),
+        ..._relatedShelf(context, ref),
       ],
     );
   }
@@ -389,6 +391,31 @@ class _AlbumBody extends ConsumerWidget {
     }
     if (roles.isEmpty) return const [];
     return [const SizedBox(height: AriaSpace.s6), _CreditsShelf(roles: roles)];
+  }
+
+  List<Widget> _relatedShelf(BuildContext context, WidgetRef ref) {
+    // Same-genre albums by other artists; nothing while loading (house style).
+    final related =
+        ref.watch(relatedAlbumsProvider(album.id)).value ?? const <Album>[];
+    if (related.isEmpty) return const [];
+    return [
+      const SizedBox(height: AriaSpace.s6),
+      Shelf(
+        title: 'Related Albums',
+        height: 236,
+        itemCount: related.length,
+        itemBuilder: (context, i) {
+          final a = related[i];
+          return AlbumGridCard(
+            albumId: a.id,
+            title: a.title,
+            artistName: a.albumArtist,
+            tracks: a.tracks,
+            hasArt: a.hasArt,
+          );
+        },
+      ),
+    ];
   }
 }
 
