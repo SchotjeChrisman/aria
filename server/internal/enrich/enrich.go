@@ -151,6 +151,11 @@ type Enricher struct {
 	oo   *OpenOpus
 	lrc  *LRCLib
 
+	// Notify, when set (before the server starts), is called after every
+	// status change; main wires it to the SSE hub's `enrich` event so
+	// clients see progress and completion without polling.
+	Notify func(status any)
+
 	mu      sync.Mutex
 	running bool
 	phase   string
@@ -203,12 +208,21 @@ func (e *Enricher) setPhase(phase string, total int) {
 	e.mu.Lock()
 	e.phase, e.total, e.done = phase, total, 0
 	e.mu.Unlock()
+	e.notify()
 }
 
 func (e *Enricher) step() {
 	e.mu.Lock()
 	e.done++
 	e.mu.Unlock()
+	e.notify()
+}
+
+// notify runs outside the mutex: Status() takes it.
+func (e *Enricher) notify() {
+	if e.Notify != nil {
+		e.Notify(e.Status())
+	}
 }
 
 var (
@@ -227,10 +241,12 @@ func (e *Enricher) Run(ctx context.Context) error {
 	}
 	e.running = true
 	e.mu.Unlock()
+	e.notify()
 	defer func() {
 		e.mu.Lock()
 		e.running, e.phase = false, "idle"
 		e.mu.Unlock()
+		e.notify() // the idle frame is what tells clients to refresh
 	}()
 
 	tracks, err := e.tracks.ListAll(ctx)

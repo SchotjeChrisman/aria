@@ -47,7 +47,9 @@ func main() {
 	deps.Scanner = scanner.New(cfg.MusicDir, cfg.DataDir, deps.Tracks, deps.Albums, func(done, total int) {
 		deps.Events.Publish("scan", map[string]int{"done": done, "total": total})
 	})
-	deps.Enricher = enrich.New(ctx, deps.Tracks, deps.EnrichCache, cfg.DataDir)
+	enr := enrich.New(ctx, deps.Tracks, deps.EnrichCache, cfg.DataDir)
+	enr.Notify = func(status any) { deps.Events.Publish("enrich", status) }
+	deps.Enricher = enr
 
 	if err := deps.Profiles.EnsureDefault(ctx); err != nil {
 		log.Fatalf("profiles: %v", err)

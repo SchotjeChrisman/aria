@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/connection.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
+import '../../core/library_providers.dart' show enrichRefreshProvider;
 import '../../widgets/art_image.dart';
 import '../../widgets/format_badge.dart';
 import '../library/library_providers.dart' show queueRestoreProvider;
@@ -35,6 +36,9 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     // on (it used to hang off LibraryScreen, so headset/notification play
     // did nothing after a restart until the Library tab was visited).
     ref.watch(queueRestoreProvider);
+    // Server-side enrichment finishing must refresh the app from anywhere,
+    // not just while the Settings page happens to be open.
+    ref.watch(enrichRefreshProvider);
 
     // Audio output died (e.g. exclusive access denied because another app
     // holds the device) — the engine already stopped; tell the user why.

@@ -18,8 +18,8 @@ final serverSettingsProvider = FutureProvider<Settings>(
 );
 
 /// Enrichment progress, polled every 5s while watched (legacy watchEnrich).
-/// When a pass finishes (busy -> idle) the library caches are refreshed so
-/// new credits/faces land without a manual reload.
+/// Display only — the cache refresh when a pass finishes lives app-wide in
+/// core's enrichRefreshProvider, not on this page.
 final enrichStatusProvider = StreamProvider.autoDispose<EnrichStatus>((
   ref,
 ) async* {
@@ -28,15 +28,10 @@ final enrichStatusProvider = StreamProvider.autoDispose<EnrichStatus>((
   // guards ref use) when disposal happens mid-await.
   var disposed = false;
   ref.onDispose(() => disposed = true);
-  var wasBusy = false;
   while (!disposed) {
     try {
       final s = await client.enrichStatus();
       if (disposed) break;
-      final busy = s.phase != 'idle';
-      // New credits/faces land in every feature — the caches are core-owned.
-      if (wasBusy && !busy) invalidateLibrary(ref);
-      wasBusy = busy;
       yield s;
     } catch (_) {
       // server away — keep polling quietly, legacy did the same
