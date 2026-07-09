@@ -86,6 +86,8 @@ void main() {
 
     router.go('/settings/data');
     await tester.pumpAndSettle();
+    // The quality sections above push the tile below the fold.
+    await tester.scrollUntilVisible(find.text('Downloads'), 200);
     await tester.tap(find.text('Downloads'));
     await tester.pumpAndSettle();
     expect(find.byType(DownloadsScreen), findsOneWidget);

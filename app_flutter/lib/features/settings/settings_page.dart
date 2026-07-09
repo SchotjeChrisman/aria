@@ -29,13 +29,13 @@ class SettingsPage extends ConsumerWidget {
                 const _SettingsTile(
                   icon: Icons.play_circle_outline,
                   title: 'Playback',
-                  subtitle: 'Exclusive output, EQ, streaming quality',
+                  subtitle: 'Exclusive output, EQ',
                   slug: 'playback',
                 ),
                 const _SettingsTile(
                   icon: Icons.data_usage,
                   title: 'Data & Downloads',
-                  subtitle: 'Network limits, download quality, offline tracks',
+                  subtitle: 'Network limits, streaming & download quality, offline tracks',
                   slug: 'data',
                 ),
                 const _SettingsTile(

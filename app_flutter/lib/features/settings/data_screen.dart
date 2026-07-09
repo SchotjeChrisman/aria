@@ -7,8 +7,8 @@ import '../../core/theme.dart';
 import 'settings_providers.dart';
 import 'quality_selector.dart';
 
-/// Data & Downloads settings: per-network stream/download gates, the download
-/// quality tier, and the offline-downloads entry.
+/// Data & Downloads settings: per-network stream/download gates, streaming
+/// and download quality tiers, and the offline-downloads entry.
 class DataScreen extends ConsumerWidget {
   const DataScreen({super.key});
 
@@ -24,6 +24,21 @@ class DataScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(AriaSpace.s6),
         children: [
           const _DataUsageSection(),
+          const SizedBox(height: AriaSpace.s6),
+          Text('Streaming quality', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AriaSpace.s2),
+          QualitySelector(
+            label: 'Wi-Fi',
+            value: quality.tierWifi,
+            onChanged: (t) =>
+                notifier.set(quality.copyWith(tierWifi: t)),
+          ),
+          QualitySelector(
+            label: 'Cellular',
+            value: quality.tierCellular,
+            onChanged: (t) =>
+                notifier.set(quality.copyWith(tierCellular: t)),
+          ),
           const SizedBox(height: AriaSpace.s6),
           Text('Download quality', style: theme.textTheme.titleMedium),
           const SizedBox(height: AriaSpace.s2),
