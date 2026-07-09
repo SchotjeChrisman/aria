@@ -576,5 +576,47 @@ void main() {
       expect(player.currentState, PlaybackState.playing);
       await player.dispose();
     });
+
+    test(
+      'no-audio race stops instead of blowing through the queue',
+      () async {
+        final (player, fake) = await makePlayer();
+        final errors = <String>[];
+        var endedCount = 0;
+        final states = <PlaybackState>[];
+        player.audioError.listen(errors.add);
+        player.ended.listen((_) => endedCount++);
+        player.state.listen(states.add);
+
+        player.play('http://x/t.flac');
+        // Two files EOF with no time-pos advance: the ao is producing no sound.
+        fake.events.addAll([startFile, endFileEof, startFile, endFileEof]);
+        player.debugPoll();
+
+        expect(errors, isNotEmpty);
+        // First EOF emits ended once; the second (streak==2) stops instead of
+        // emitting a 2nd ended — the queue does not blow through.
+        expect(endedCount, 1);
+        expect(states.last, PlaybackState.stopped);
+        expect(fake.log, contains('cmd stop'));
+        await player.dispose();
+      },
+    );
+
+    test('a normally-playing track still ends cleanly', () async {
+      final (player, fake) = await makePlayer();
+      final errors = <String>[];
+      var endedCount = 0;
+      player.audioError.listen(errors.add);
+      player.ended.listen((_) => endedCount++);
+
+      player.play('http://x/t.flac');
+      fake.events.addAll([startFile, prop('time-pos', 3.0), endFileEof]);
+      player.debugPoll();
+
+      expect(endedCount, 1);
+      expect(errors, isEmpty);
+      await player.dispose();
+    });
   });
 }

@@ -112,6 +112,18 @@ class AriaPlayer {
   /// One [audioError] per load: mpv retries a failed audio output in a tight
   /// loop, logging the same error each time.
   bool _aoErrorNotified = false;
+
+  // No-sound safety net: an ao that fails to init makes mpv EOF straight
+  // through the queue with no playback. Track the furthest position reached
+  // per file; back-to-back sub-0.5s EOFs mean nothing is actually playing.
+  double _maxPosThisFile = 0;
+  int _deadEofStreak = 0;
+  String? _lastErrorText;
+
+  /// User's desired exclusive-output state, tracked so setAudioFilter can
+  /// force it off while an EQ filter is active (desktop only) and restore it.
+  bool _exclusiveIntent = false;
+
   TrackMeta? _meta;
   int? _fmtRate;
   int? _fmtChannels;
@@ -221,6 +233,7 @@ class AriaPlayer {
     // Surface audio-output failures (see [audioError]).
     raw.requestLogMessages(handle, 'error');
 
+    _exclusiveIntent = audioExclusive;
     _raw = raw;
     _handle = handle;
     _syncPollRate();
@@ -249,6 +262,7 @@ class AriaPlayer {
     _loadPending = true;
     _syncPollRate(); // back to the fast poll before START_FILE arrives
     _aoErrorNotified = false;
+    _deadEofStreak = 0;
     _fmtRate = null;
     _fmtChannels = null;
     _fmtSampleFormat = null;
@@ -308,6 +322,7 @@ class AriaPlayer {
   void stop() {
     if (!isAvailable) return;
     _loadPending = false; // an explicit stop outranks any in-flight load
+    _deadEofStreak = 0;
     _raw!.command(_handle, ['stop']);
     _setState(PlaybackState.stopped);
   }
@@ -329,10 +344,21 @@ class AriaPlayer {
   void setAudioFilter(String af) {
     if (!isAvailable) return;
     _raw!.setPropertyString(_handle, 'af', af);
+    // EQ and bit-perfect exclusive output are mutually exclusive: an active
+    // filter forces exclusive off; clearing it restores the user's intent.
+    // Desktop-only — audio-exclusive is a no-op on Android.
+    if (!Platform.isAndroid) {
+      _raw!.setPropertyString(
+        _handle,
+        'audio-exclusive',
+        af.isNotEmpty ? 'no' : (_exclusiveIntent ? 'yes' : 'no'),
+      );
+    }
   }
 
   /// Runtime toggle for exclusive device access (desktop).
   void setAudioExclusive(bool on) {
+    _exclusiveIntent = on;
     if (!isAvailable || Platform.isAndroid) return;
     _raw!.setPropertyString(_handle, 'audio-exclusive', on ? 'yes' : 'no');
   }
@@ -377,9 +403,28 @@ class AriaPlayer {
       case MpvEventId.startFile:
         _fileActive = true;
         _loadPending = false;
+        _maxPosThisFile = 0;
         _setState(_pausedProp ? PlaybackState.paused : PlaybackState.playing);
       case MpvEventId.endFile:
         if (ev.endFileReason == MpvEndFileReason.eof) {
+          // No-sound safety net: a file that never reached 0.5s never played.
+          // ponytail: 0.5s / 2-in-a-row is a heuristic — real music tracks
+          // are never sub-0.5s back-to-back. Tighten only on a false stop.
+          if (_maxPosThisFile < 0.5) {
+            _deadEofStreak++;
+          } else {
+            _deadEofStreak = 0;
+          }
+          if (_deadEofStreak >= 2) {
+            stop();
+            _audioErrorCtrl.add(
+              _lastErrorText?.isNotEmpty == true
+                  ? _lastErrorText!
+                  : 'Audio output produced no sound — playback stopped.',
+            );
+            _deadEofStreak = 0;
+            return;
+          }
           _endedCtrl.add(null);
         }
       case MpvEventId.logMessage:
@@ -408,6 +453,9 @@ class AriaPlayer {
   /// error while a file is active means the output is broken; stop instead of
   /// letting mpv race through the queue silently.
   void _handleLogMessage(String? prefix, String? text) {
+    // Remember the last error text regardless of prefix so the no-sound
+    // safety net can surface the real mpv error (see endFile eof handling).
+    _lastErrorText = (text ?? '').trim();
     if (prefix == null || !prefix.startsWith('ao')) return;
     if (_aoErrorNotified || (!_fileActive && !_loadPending)) return;
     _aoErrorNotified = true;
@@ -420,6 +468,7 @@ class AriaPlayer {
       case 'time-pos':
         if (value is double) {
           _position = value;
+          if (value > _maxPosThisFile) _maxPosThisFile = value;
           _positionCtrl.add(value);
         }
       case 'duration':
