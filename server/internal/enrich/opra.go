@@ -38,9 +38,10 @@ type OpraBand struct {
 }
 
 type OpraEq struct {
-	Author string     `json:"author"`
-	GainDB float64    `json:"gainDb"`
-	Bands  []OpraBand `json:"bands"`
+	Author  string     `json:"author"`
+	Details string     `json:"details,omitempty"`
+	GainDB  float64    `json:"gainDb"`
+	Bands   []OpraBand `json:"bands"`
 }
 
 type OpraProduct struct {
@@ -74,6 +75,7 @@ func (o *Opra) Fetch(ctx context.Context) (json.RawMessage, error) {
 			VendorID   string `json:"vendor_id"`
 			ProductID  string `json:"product_id"`
 			Author     string `json:"author"`
+			Details    string `json:"details"`
 			Parameters struct {
 				GainDB float64 `json:"gain_db"`
 				Bands  []struct {
@@ -107,7 +109,7 @@ func (o *Opra) Fetch(ctx context.Context) (json.RawMessage, error) {
 		case "product":
 			products[l.ID] = prod{l.Data.Name, l.Data.VendorID}
 		case "eq":
-			eq := OpraEq{Author: l.Data.Author, GainDB: l.Data.Parameters.GainDB}
+			eq := OpraEq{Author: l.Data.Author, Details: l.Data.Details, GainDB: l.Data.Parameters.GainDB}
 			for _, b := range l.Data.Parameters.Bands {
 				eq.Bands = append(eq.Bands, OpraBand{
 					Type: b.Type, Frequency: b.Frequency, GainDB: b.GainDB, Q: b.Q, Slope: b.Slope,

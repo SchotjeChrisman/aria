@@ -23,7 +23,7 @@ func TestEqOpraServesCache(t *testing.T) {
 
 	payload := `{"products":[{"vendor":"Sennheiser","product":"HD 650","eqs":[{"author":"oratory1990","gainDb":-6.8,"bands":[{"type":"peak_dip","frequency":105,"gainDb":3.1,"q":0.7}]}]}]}`
 	at := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	if err := deps.EnrichCache.Put(ctx, "opra", "db", json.RawMessage(payload), at); err != nil {
+	if err := deps.EnrichCache.Put(ctx, "opra", "db2", json.RawMessage(payload), at); err != nil {
 		t.Fatal(err)
 	}
 

@@ -855,6 +855,7 @@ paths:
                             required: [author, gainDb, bands]
                             properties:
                               author: { type: string }
+                              details: { type: string, description: Measurement/source note distinguishing same-author EQs. }
                               gainDb: { type: number, description: Preamp gain in dB. }
                               bands:
                                 type: array
