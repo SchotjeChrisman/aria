@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
-import 'multi_select.dart';
+import '../../widgets/multi_select_field.dart';
 import 'providers.dart';
 import 'smart_filter.dart';
 
@@ -141,8 +141,10 @@ class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
                     children: [
                       for (final (field, label) in filterStringFields) ...[
                         MultiSelectField(
-                          field: field,
                           label: label,
+                          options:
+                              ref.watch(smartFieldValuesProvider(field)).value ??
+                              const [],
                           state: _st.strings[field]!,
                         ),
                         const SizedBox(height: AriaSpace.s4),

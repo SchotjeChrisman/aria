@@ -1,25 +1,11 @@
 import 'package:aria_api/aria_api.dart';
 
-/// The one filter form model, ported from legacy app.js (FILTER_STRINGS /
-/// newFilterState / smartForm / collectSmartRules). String fields are
-/// multi-selects, the rest scalars.
-const filterStringFields = <(String, String)>[
-  ('artist', 'Artist'),
-  ('albumArtist', 'Album artist'),
-  ('credited', 'Credited artist'),
-  ('genre', 'Genre'),
-  ('composer', 'Composer'),
-  ('format', 'Format'),
-  ('tag', 'Tag'),
-];
+import '../../widgets/multi_select_field.dart';
 
-const releaseTypes = ['Album', 'EP', 'Single', 'Compilation', 'Live'];
-
-/// One multi-select: picked values plus any/all combinator.
-class MultiSelectState {
-  final List<String> vals = [];
-  String mode = 'any'; // any = OR, all = AND
-}
+// The smart-playlist form model, ported from legacy app.js (newFilterState /
+// smartForm / collectSmartRules). String multi-selects + field list live in
+// widgets/multi_select_field.dart (shared with the library Tracks filter); this
+// file owns turning the picks into server [SmartRules] and back.
 
 class SmartFilterState {
   SmartFilterState()

@@ -1,31 +1,55 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme.dart';
-import 'providers.dart';
-import 'smart_filter.dart';
+import '../core/theme.dart';
 
-/// Legacy multiSelect(): chips for picks, searchable option list (shown while
+// Shared filter primitives for the library Tracks filter and the smart-playlist
+// editor — both render the same string multi-selects (legacy FILTER_STRINGS /
+// multiSelect). The two forms differ in what they DO with the picks (live
+// client-side filtering vs. serialized server rules), so only the UI pieces and
+// field list live here.
+
+/// The string multi-select fields, in display order.
+const filterStringFields = <(String, String)>[
+  ('albumArtist', 'Primary artist'),
+  ('credited', 'Performer'), // artist + conductor + orchestra + performers
+  ('genre', 'Genre'),
+  ('tag', 'Tag'),
+  ('composer', 'Composer'),
+  ('format', 'Format'),
+];
+
+const releaseTypes = ['Album', 'EP', 'Single', 'Compilation', 'Live'];
+
+/// One multi-select's mutable draft: picked values plus any/all combinator.
+/// The enclosing form owns persisting/serializing it.
+class MultiSelectState {
+  MultiSelectState({List<String>? vals, this.mode = 'any'}) : vals = [...?vals];
+
+  final List<String> vals;
+  String mode; // any = OR, all = AND
+}
+
+/// Legacy multiSelect(): chips for picks, a searchable option list (shown while
 /// the search box is focused or has text, capped at 200 hits — the search box
-/// is how you narrow down), AND/OR toggle at 2+ picks. Mutates [state] in
-/// place; the enclosing form owns saving.
-class MultiSelectField extends ConsumerStatefulWidget {
+/// is how you narrow down), AND/OR toggle at 2+ picks. Mutates [state] in place;
+/// [options] is resolved by the caller so the widget stays provider-agnostic.
+class MultiSelectField extends StatefulWidget {
   const MultiSelectField({
     super.key,
-    required this.field,
     required this.label,
+    required this.options,
     required this.state,
   });
 
-  final String field;
   final String label;
+  final List<String> options;
   final MultiSelectState state;
 
   @override
-  ConsumerState<MultiSelectField> createState() => _MultiSelectFieldState();
+  State<MultiSelectField> createState() => _MultiSelectFieldState();
 }
 
-class _MultiSelectFieldState extends ConsumerState<MultiSelectField> {
+class _MultiSelectFieldState extends State<MultiSelectField> {
   final _search = TextEditingController();
   final _focus = FocusNode();
 
@@ -49,13 +73,10 @@ class _MultiSelectFieldState extends ConsumerState<MultiSelectField> {
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     final st = widget.state;
-    final options =
-        ref.watch(smartFieldValuesProvider(widget.field)).value ??
-        const <String>[];
     final q = _search.text.trim().toLowerCase();
     final showList = _focus.hasFocus || q.isNotEmpty;
     final hits = [
-      for (final v in options)
+      for (final v in widget.options)
         if (q.isEmpty || v.toLowerCase().contains(q)) v,
     ].take(200).toList();
 

@@ -124,7 +124,7 @@ void main() {
     test('activeCount counts one per active group (legacy badge)', () {
       const f = TrackFilters(
         strings: {
-          'artist': MultiFilter(vals: ['x']),
+          'albumArtist': MultiFilter(vals: ['x']),
           'genre': MultiFilter(vals: ['y']),
         },
         yearFrom: 1990,

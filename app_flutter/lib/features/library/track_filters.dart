@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
+import '../../widgets/multi_select_field.dart';
 import 'album_filters.dart';
 import 'library_providers.dart';
 
 // The Tracks-view rich filter (legacy view.filters + openFilterDialog):
-// artist / album-artist / credited / genre / tag / composer / format
-// multi-selects with AND-OR modes, year range, lossless/lossy, release
-// type, played/never-played, added-within-days.
+// primary-artist / performer / genre / tag / composer / format multi-selects
+// with AND-OR modes, year range, lossless/lossy, release type,
+// played/never-played, added-within-days.
 
 /// One multi-select: values + match mode (legacy multiSelect state).
 @immutable
@@ -21,19 +22,6 @@ class MultiFilter {
 
   bool get isActive => vals.isNotEmpty;
 }
-
-/// Legacy FILTER_STRINGS order.
-const trackFilterStringFields = [
-  ('artist', 'Artist'),
-  ('albumArtist', 'Album artist'),
-  ('credited', 'Credited artist'),
-  ('genre', 'Genre'),
-  ('tag', 'Tag'),
-  ('composer', 'Composer'),
-  ('format', 'Format'),
-];
-
-const releaseTypes = ['Album', 'EP', 'Single', 'Compilation', 'Live'];
 
 @immutable
 class TrackFilters {
@@ -119,7 +107,6 @@ bool trackPassesFilters(
   Map<String, int>? playCounts,
 }) {
   if (f.isEmpty) return true;
-  if (!_msPass(f.stringFilter('artist'), [t.artist])) return false;
   if (!_msPass(f.stringFilter('albumArtist'), [t.albumArtist])) return false;
   if (!_msPass(f.stringFilter('credited'), [
     t.artist,
@@ -179,8 +166,6 @@ final trackFilterOptionsProvider = Provider.family<List<String>, String>((
   final vals = <String>{};
   for (final t in tracks) {
     switch (field) {
-      case 'artist':
-        if ((t.artist ?? '').isNotEmpty) vals.add(t.artist!);
       case 'albumArtist':
         if ((t.albumArtist ?? '').isNotEmpty) vals.add(t.albumArtist!);
       case 'composer':
@@ -214,8 +199,7 @@ class _FilterDialog extends ConsumerStatefulWidget {
 }
 
 class _FilterDialogState extends ConsumerState<_FilterDialog> {
-  late final Map<String, List<String>> _vals;
-  late final Map<String, String> _modes;
+  late final Map<String, MultiSelectState> _draft;
   late final TextEditingController _yearFrom;
   late final TextEditingController _yearTo;
   late final TextEditingController _added;
@@ -227,13 +211,12 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
   void initState() {
     super.initState();
     final f = ref.read(trackFiltersProvider);
-    _vals = {
-      for (final (field, _) in trackFilterStringFields)
-        field: [...f.stringFilter(field).vals],
-    };
-    _modes = {
-      for (final (field, _) in trackFilterStringFields)
-        field: f.stringFilter(field).mode,
+    _draft = {
+      for (final (field, _) in filterStringFields)
+        field: MultiSelectState(
+          vals: f.stringFilter(field).vals,
+          mode: f.stringFilter(field).mode,
+        ),
     };
     _yearFrom = TextEditingController(text: f.yearFrom?.toString() ?? '');
     _yearTo = TextEditingController(text: f.yearTo?.toString() ?? '');
@@ -259,9 +242,12 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
         .apply(
           TrackFilters(
             strings: {
-              for (final (field, _) in trackFilterStringFields)
-                if (_vals[field]!.isNotEmpty)
-                  field: MultiFilter(vals: _vals[field]!, mode: _modes[field]!),
+              for (final (field, _) in filterStringFields)
+                if (_draft[field]!.vals.isNotEmpty)
+                  field: MultiFilter(
+                    vals: _draft[field]!.vals,
+                    mode: _draft[field]!.mode,
+                  ),
             },
             yearFrom: _num(_yearFrom),
             yearTo: _num(_yearTo),
@@ -309,15 +295,13 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final (field, fieldLabel) in trackFilterStringFields) ...[
-                label(fieldLabel),
-                _MultiSelectField(
+              for (final (field, fieldLabel) in filterStringFields) ...[
+                MultiSelectField(
+                  label: fieldLabel,
                   options: ref.watch(trackFilterOptionsProvider(field)),
-                  vals: _vals[field]!,
-                  mode: _modes[field]!,
-                  onModeChanged: (m) => setState(() => _modes[field] = m),
-                  onChanged: () => setState(() {}),
+                  state: _draft[field]!,
                 ),
+                const SizedBox(height: AriaSpace.s4),
               ],
               label('Year'),
               Row(
@@ -376,160 +360,6 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(onPressed: _apply, child: const Text('Apply')),
-      ],
-    );
-  }
-}
-
-/// Legacy multiSelect(): search box narrows the option list; picked values
-/// become chips; AND/OR toggle appears at 2+ picks. Mutates [vals] in place.
-class _MultiSelectField extends StatefulWidget {
-  const _MultiSelectField({
-    required this.options,
-    required this.vals,
-    required this.mode,
-    required this.onModeChanged,
-    required this.onChanged,
-  });
-
-  final List<String> options;
-  final List<String> vals;
-  final String mode;
-  final ValueChanged<String> onModeChanged;
-  final VoidCallback onChanged;
-
-  @override
-  State<_MultiSelectField> createState() => _MultiSelectFieldState();
-}
-
-class _MultiSelectFieldState extends State<_MultiSelectField> {
-  final _search = TextEditingController();
-  final _focus = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _search.addListener(_changed);
-    _focus.addListener(_changed);
-  }
-
-  void _changed() => setState(() {});
-
-  @override
-  void dispose() {
-    _search.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
-    final q = _search.text.trim().toLowerCase();
-    final showList = _focus.hasFocus || q.isNotEmpty;
-    final hits = [
-      for (final v in widget.options)
-        if (q.isEmpty || v.toLowerCase().contains(q)) v,
-    ].take(200).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _search,
-                focusNode: _focus,
-                decoration: const InputDecoration(hintText: 'search…'),
-              ),
-            ),
-            if (widget.vals.length >= 2) ...[
-              const SizedBox(width: AriaSpace.s2),
-              DropdownButton<String>(
-                value: widget.mode,
-                underline: const SizedBox.shrink(),
-                items: const [
-                  DropdownMenuItem(value: 'any', child: Text('match any (OR)')),
-                  DropdownMenuItem(
-                    value: 'all',
-                    child: Text('match all (AND)'),
-                  ),
-                ],
-                onChanged: (v) => widget.onModeChanged(v ?? 'any'),
-              ),
-            ],
-          ],
-        ),
-        if (showList)
-          Container(
-            margin: const EdgeInsets.only(top: AriaSpace.s1),
-            constraints: const BoxConstraints(maxHeight: 160),
-            decoration: BoxDecoration(
-              color: c.bgRaised,
-              border: Border.all(color: c.line),
-              borderRadius: BorderRadius.circular(AriaRadius.sm),
-            ),
-            child: hits.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(AriaSpace.s3),
-                    child: Text('No matches', style: TextStyle(color: c.fgDim)),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: hits.length,
-                    itemBuilder: (context, i) {
-                      final v = hits[i];
-                      final sel = widget.vals.contains(v);
-                      return InkWell(
-                        onTap: () {
-                          sel ? widget.vals.remove(v) : widget.vals.add(v);
-                          widget.onChanged();
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AriaSpace.s3,
-                            vertical: AriaSpace.s2,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  v,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: sel ? c.accent : c.fg,
-                                  ),
-                                ),
-                              ),
-                              if (sel)
-                                Icon(Icons.check, size: 16, color: c.accent),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        if (widget.vals.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: AriaSpace.s2),
-            child: Wrap(
-              spacing: AriaSpace.s2,
-              runSpacing: AriaSpace.s1,
-              children: [
-                for (final v in widget.vals)
-                  InputChip(
-                    label: Text(v),
-                    onDeleted: () {
-                      widget.vals.remove(v);
-                      widget.onChanged();
-                    },
-                  ),
-              ],
-            ),
-          ),
       ],
     );
   }
