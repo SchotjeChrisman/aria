@@ -54,16 +54,22 @@ class _EqTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eq = ref.watch(eqProvider);
+    final hasLayer = eq.headphone != null || eq.custom != null;
+    // Summarize the active layers; nothing set reads as 'Off'.
+    final summary = [
+      if (eq.headphone != null) eq.headphone!.name ?? 'Headphone',
+      if (eq.custom != null) eq.custom!.name ?? 'Custom',
+    ].join(' + ');
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: const Text('Headphone EQ'),
-      subtitle: Text(eq.profile?.name ?? 'Off'),
+      subtitle: Text(hasLayer ? summary : 'Off'),
       trailing: Switch(
         value: eq.enabled,
-        // No profile selected: nothing to enable.
-        onChanged: eq.profile == null
-            ? null
-            : (v) => ref.read(eqProvider.notifier).setEnabled(v),
+        // No layer selected: nothing to enable.
+        onChanged: hasLayer
+            ? (v) => ref.read(eqProvider.notifier).setEnabled(v)
+            : null,
       ),
       onTap: () => context.push('/settings/eq'),
     );

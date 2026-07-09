@@ -67,4 +67,30 @@ void main() {
       '',
     );
   });
+
+  group('combineEq', () {
+    const h = EqProfile(gainDb: -3, bands: [
+      EqBand(type: 'peak_dip', frequency: 100, gainDb: 2, q: 1),
+    ]);
+    const c = EqProfile(gainDb: -1.5, bands: [
+      EqBand(type: 'low_shelf', frequency: 200, gainDb: 1, q: 0.7),
+    ]);
+
+    test('sums preamps and concatenates bands', () {
+      final r = combineEq(h, c)!;
+      expect(r.gainDb, -4.5);
+      expect(r.bands.map((b) => b.frequency), [100, 200]);
+    });
+
+    test('null side contributes 0 preamp and no bands', () {
+      expect(combineEq(h, null)!.gainDb, -3);
+      expect(combineEq(h, null)!.bands.length, 1);
+      expect(combineEq(null, c)!.gainDb, -1.5);
+      expect(combineEq(null, c)!.bands.length, 1);
+    });
+
+    test('both null → null', () {
+      expect(combineEq(null, null), isNull);
+    });
+  });
 }

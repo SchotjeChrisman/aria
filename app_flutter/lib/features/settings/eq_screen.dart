@@ -5,13 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/connection.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
+import 'eq_browse.dart';
 
 /// OPRA database, fetched once per app run (the server caches it for a week).
 final opraProvider = FutureProvider<List<OpraProduct>>(
   (ref) => ref.watch(apiClientProvider).eqOpra(),
 );
 
-/// Headphone EQ picker: OPRA (Roon Labs) product list + user custom presets.
+/// Headphone EQ entry: master switch, two layers (headphone + custom), a
+/// favourites shortcut, the OPRA drill-down, and the custom-preset editor.
 class EqScreen extends ConsumerStatefulWidget {
   const EqScreen({super.key});
 
@@ -20,37 +22,6 @@ class EqScreen extends ConsumerStatefulWidget {
 }
 
 class _EqScreenState extends ConsumerState<EqScreen> {
-  String _query = '';
-
-  void _select(EqProfile eq, String name) {
-    ref
-        .read(eqProvider.notifier)
-        .select(EqProfile(name: name, gainDb: eq.gainDb, bands: eq.bands));
-  }
-
-  /// Single EQ selects directly; several offer an author picker.
-  Future<void> _pick(OpraProduct p) async {
-    final name = '${p.vendor} ${p.product}';
-    if (p.eqs.length == 1) {
-      _select(p.eqs.single, '$name · ${p.eqs.single.author}');
-      return;
-    }
-    final eq = await showDialog<EqProfile>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(name),
-        children: [
-          for (final e in p.eqs)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, e),
-              child: Text(e.author ?? 'unknown'),
-            ),
-        ],
-      ),
-    );
-    if (eq != null) _select(eq, '$name · ${eq.author}');
-  }
-
   Future<void> _editCustom({EqProfile? preset, int? index}) async {
     final edited = await showDialog<EqProfile>(
       context: context,
@@ -64,11 +35,11 @@ class _EqScreenState extends ConsumerState<EqScreen> {
       presets[index] = edited;
     }
     ref.read(customEqPresetsProvider.notifier).set(presets);
-    // Editing the selected preset updates it in place — the master enabled
+    // Editing the preset in the custom slot updates it in place (matched on its
+    // previous name, so a rename still re-points the slot) — the master enabled
     // switch stays as the user left it.
-    if (index != null &&
-        ref.read(eqProvider).profile?.name == preset?.name) {
-      ref.read(eqProvider.notifier).updateProfile(edited);
+    if (index != null) {
+      ref.read(eqProvider.notifier).updateCustom(preset?.name ?? '', edited);
     }
   }
 
@@ -76,16 +47,8 @@ class _EqScreenState extends ConsumerState<EqScreen> {
   Widget build(BuildContext context) {
     final eq = ref.watch(eqProvider);
     final custom = ref.watch(customEqPresetsProvider);
-    final opra = ref.watch(opraProvider);
+    final favourites = ref.watch(favouriteEqProvider);
     final theme = Theme.of(context);
-    // Null while the OPRA fetch is loading/failed — the list then shows a
-    // single status row after the always-available local head.
-    final filtered = opra.whenOrNull(
-      data: (products) => [
-        for (final p in products)
-          if ('${p.vendor} ${p.product}'.toLowerCase().contains(_query)) p,
-      ],
-    );
 
     Widget header(String title) => Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -97,104 +60,97 @@ class _EqScreenState extends ConsumerState<EqScreen> {
       child: Text(title, style: theme.textTheme.titleMedium),
     );
 
-    // Everything above the OPRA product list is a fixed widget prefix; the
-    // (possibly thousands of) products render lazily behind it.
-    final head = <Widget>[
-      ListTile(
-        title: const Text('Off'),
-        selected: eq.profile == null,
-        onTap: () => ref.read(eqProvider.notifier).select(null),
-      ),
-      header('Custom'),
-      for (final (i, p) in custom.indexed)
-        ListTile(
-          title: Text(p.name ?? 'Custom'),
-          subtitle: Text('${p.bands.length} bands'),
-          selected: eq.profile?.name == p.name,
-          onTap: () => ref.read(eqProvider.notifier).select(p),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                onPressed: () => _editCustom(preset: p, index: i),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: () {
-                  // Deleting the active preset turns the EQ off — the state
-                  // must match what the player is actually doing.
-                  if (eq.profile?.name == p.name) {
-                    ref.read(eqProvider.notifier).select(null);
-                  }
-                  ref
-                      .read(customEqPresetsProvider.notifier)
-                      .set(List.of(custom)..removeAt(i));
-                },
-              ),
-            ],
-          ),
-        ),
-      ListTile(
-        leading: const Icon(Icons.add),
-        title: const Text('Add custom EQ'),
-        onTap: _editCustom,
-      ),
-      header('Opra by Roon'),
-    ];
+    // A layer slot row: current pick or 'None' with a clear (×) trailing.
+    Widget slot(String label, EqProfile? p, void Function() clear) => ListTile(
+      title: Text('$label: ${p?.name ?? 'None'}'),
+      trailing: p == null
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Clear',
+              onPressed: clear,
+            ),
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Headphone EQ')),
-      body: Column(
+      body: ListView(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(AriaSpace.s4),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search headphones…',
-              ),
-              onChanged: (v) => setState(() => _query = v.toLowerCase()),
-            ),
+          SwitchListTile(
+            title: const Text('EQ enabled'),
+            value: eq.enabled,
+            // No layer to apply → nothing to switch on (matches playback_screen).
+            onChanged: eq.headphone == null && eq.custom == null
+                ? null
+                : (v) => ref.read(eqProvider.notifier).setEnabled(v),
           ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: head.length + (filtered?.length ?? 1),
-              itemBuilder: (context, i) {
-                if (i < head.length) return head[i];
-                if (filtered == null) {
-                  // OPRA fetch state row — the local head above stays usable.
-                  return opra.when(
-                    data: (_) => const SizedBox.shrink(), // unreachable
-                    loading: () => const ListTile(
-                      leading: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      title: Text('Loading the OPRA database…'),
-                    ),
-                    error: (e, _) => ListTile(
-                      leading: const Icon(Icons.error_outline),
-                      title: Text('Could not load the OPRA database: $e'),
-                    ),
-                  );
-                }
-                final p = filtered[i - head.length];
-                final name = '${p.vendor} ${p.product}';
-                return ListTile(
-                  title: Text(name),
-                  subtitle: Text(
-                    p.eqs.length == 1
-                        ? (p.eqs.single.author ?? '')
-                        : '${p.eqs.length} EQs',
+          const Divider(),
+          slot(
+            'Headphone',
+            eq.headphone,
+            () => ref.read(eqProvider.notifier).selectHeadphone(null),
+          ),
+          slot(
+            'Custom EQ',
+            eq.custom,
+            () => ref.read(eqProvider.notifier).selectCustom(null),
+          ),
+          if (favourites.isNotEmpty) ...[
+            header('★ Favourites'),
+            for (final f in favourites)
+              ListTile(
+                title: Text(f.name ?? 'Favourite'),
+                selected: eq.headphone?.name == f.name,
+                onTap: () =>
+                    ref.read(eqProvider.notifier).selectHeadphone(f),
+                trailing: IconButton(
+                  icon: const Icon(Icons.star),
+                  tooltip: 'Un-favourite',
+                  onPressed: () =>
+                      ref.read(favouriteEqProvider.notifier).toggle(f),
+                ),
+              ),
+          ],
+          ListTile(
+            leading: const Icon(Icons.headphones_outlined),
+            title: const Text('Choose headphone'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => pushEqBrands(context),
+          ),
+          header('Custom EQ'),
+          for (final (i, p) in custom.indexed)
+            ListTile(
+              title: Text(p.name ?? 'Custom'),
+              subtitle: Text('${p.bands.length} bands'),
+              selected: eq.custom?.name == p.name,
+              onTap: () => ref.read(eqProvider.notifier).selectCustom(p),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    onPressed: () => _editCustom(preset: p, index: i),
                   ),
-                  selected: eq.profile?.name?.startsWith('$name ·') ??
-                      false,
-                  onTap: () => _pick(p),
-                );
-              },
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    onPressed: () {
+                      // Deleting the preset in the custom slot clears it — the
+                      // notifier doesn't watch this list, so do it here.
+                      if (eq.custom?.name == p.name) {
+                        ref.read(eqProvider.notifier).selectCustom(null);
+                      }
+                      ref
+                          .read(customEqPresetsProvider.notifier)
+                          .set(List.of(custom)..removeAt(i));
+                    },
+                  ),
+                ],
+              ),
             ),
+          ListTile(
+            leading: const Icon(Icons.add),
+            title: const Text('Add custom EQ'),
+            onTap: _editCustom,
           ),
         ],
       ),

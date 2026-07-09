@@ -7,6 +7,16 @@ String _n(num v) {
   return s;
 }
 
+/// Stack two EQ layers into one chain: bands concatenated, preamps summed.
+/// Null when both layers are empty. eqToAf() already clamps the summed preamp.
+EqProfile? combineEq(EqProfile? h, EqProfile? c) {
+  if (h == null && c == null) return null;
+  return EqProfile(
+    gainDb: (h?.gainDb ?? 0) + (c?.gainDb ?? 0),
+    bands: [...?h?.bands, ...?c?.bands],
+  );
+}
+
 /// [EqProfile] -> mpv `af` string using ffmpeg biquads via lavfi, e.g.
 /// 'lavfi=[volume=-6.8dB,equalizer=f=105:t=q:w=0.7:g=3.1]'. The preamp
 /// volume element is omitted at 0 dB; unknown band types are skipped;

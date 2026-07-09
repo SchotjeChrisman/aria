@@ -17,6 +17,7 @@ const _prefsKeyRadio = 'aria.radio';
 const _prefsKeyExclusive = 'aria.audioExclusive';
 const _prefsKeyEq = 'aria.eq';
 const _prefsKeyEqCustom = 'aria.eq.custom';
+const _prefsKeyEqFavourites = 'aria.eq.favourites';
 
 /// Single engine instance for the app's lifetime. The persisted exclusive
 /// flag is passed to the constructor so --audio-exclusive is set before
@@ -49,18 +50,20 @@ class AudioExclusiveNotifier extends Notifier<bool> {
   }
 }
 
-/// Headphone EQ selection (OPRA or custom preset), persisted and pushed to
-/// the engine as an mpv `af` chain. Re-applied after init by
+/// Headphone EQ selection: two independent layers (a headphone correction from
+/// OPRA/a favourite, plus one custom preset) stacked into one mpv `af` chain,
+/// persisted and pushed to the engine. Re-applied after init by
 /// playerInitProvider, same as volume/exclusive.
 final eqProvider = NotifierProvider<EqNotifier, EqState>(EqNotifier.new);
 
 class EqState {
-  const EqState({this.enabled = false, this.profile});
+  const EqState({this.enabled = false, this.headphone, this.custom});
 
   final bool enabled;
-  final EqProfile? profile;
+  final EqProfile? headphone; // from OPRA (or a favourite)
+  final EqProfile? custom; // one selected custom preset
 
-  bool get active => enabled && profile != null;
+  bool get active => enabled && (headphone != null || custom != null);
 }
 
 class EqNotifier extends Notifier<EqState> {
@@ -70,9 +73,17 @@ class EqNotifier extends Notifier<EqState> {
     if (raw == null) return const EqState();
     try {
       final j = jsonDecode(raw) as Map<String, dynamic>;
+      // Old flat shape (name/bands at top level, no layer keys) → headphone.
+      if (!j.containsKey('headphone') && !j.containsKey('custom')) {
+        return EqState(
+          enabled: j['enabled'] == true,
+          headphone: j['name'] == null ? null : EqProfile.fromJson(j),
+        );
+      }
       return EqState(
         enabled: j['enabled'] == true,
-        profile: j['name'] == null ? null : EqProfile.fromJson(j),
+        headphone: _layer(j['headphone']),
+        custom: _layer(j['custom']),
       );
     } catch (e) {
       Log.w('settings', 'corrupt eq prefs', e);
@@ -80,43 +91,118 @@ class EqNotifier extends Notifier<EqState> {
     }
   }
 
-  /// Select a profile (enables it); null turns the EQ off entirely.
-  void select(EqProfile? p) {
-    Log.i('settings', 'eq ${p == null ? 'off' : 'profile "${p.name}"'}');
-    state = EqState(enabled: p != null, profile: p);
+  static EqProfile? _layer(Object? j) =>
+      j is Map<String, dynamic> ? EqProfile.fromJson(j) : null;
+
+  /// Set/clear the headphone layer; enables when a layer remains, else leaves
+  /// the master switch untouched (clearing the last layer just yields silence).
+  void selectHeadphone(EqProfile? p) {
+    Log.i('settings', 'eq headphone ${p?.name ?? 'off'}');
+    _set(headphone: p, custom: state.custom);
+  }
+
+  /// Set/clear the custom layer; enable semantics as [selectHeadphone].
+  void selectCustom(EqProfile? p) {
+    Log.i('settings', 'eq custom ${p?.name ?? 'off'}');
+    _set(headphone: state.headphone, custom: p);
+  }
+
+  void _set({required EqProfile? headphone, required EqProfile? custom}) {
+    final hasLayer = headphone != null || custom != null;
+    state = EqState(
+      enabled: hasLayer ? true : state.enabled,
+      headphone: headphone,
+      custom: custom,
+    );
     apply();
     _persist();
   }
 
-  /// Replace the selected profile in place, preserving the enabled flag —
-  /// editing a preset while the master switch is off must not re-enable it.
-  void updateProfile(EqProfile p) {
-    state = EqState(enabled: state.enabled, profile: p);
+  /// Replace the custom layer in place after an in-place edit, matching on the
+  /// preset's *previous* name so a rename still re-points the slot (and its
+  /// audio) to [edited]. Preserves the enabled flag — editing while off must
+  /// not re-enable.
+  void updateCustom(String previousName, EqProfile edited) {
+    if (state.custom?.name != previousName) return;
+    state = EqState(
+      enabled: state.enabled,
+      headphone: state.headphone,
+      custom: edited,
+    );
     apply();
     _persist();
   }
 
   void setEnabled(bool on) {
     Log.i('settings', 'eq ${on ? 'enabled' : 'disabled'}');
-    state = EqState(enabled: on, profile: state.profile);
+    state = EqState(
+      enabled: on,
+      headphone: state.headphone,
+      custom: state.custom,
+    );
     apply();
     _persist();
   }
 
   /// Push the current chain to the engine (also called post-init).
   void apply() {
-    final p = state.profile;
-    ref
-        .read(ariaPlayerProvider)
-        .setAudioFilter(state.enabled && p != null ? eqToAf(p) : '');
+    final p = state.enabled ? combineEq(state.headphone, state.custom) : null;
+    ref.read(ariaPlayerProvider).setAudioFilter(p == null ? '' : eqToAf(p));
   }
 
   void _persist() {
-    // {enabled} + flattened profile fields (name, gainDb, bands).
     ref.read(sharedPrefsProvider).setString(
           _prefsKeyEq,
-          jsonEncode({'enabled': state.enabled, ...?state.profile?.toJson()}),
+          jsonEncode({
+            'enabled': state.enabled,
+            if (state.headphone != null) 'headphone': state.headphone!.toJson(),
+            if (state.custom != null) 'custom': state.custom!.toJson(),
+          }),
         );
+  }
+}
+
+/// Decode/encode a prefs-backed `List<EqProfile>` (favourites, custom presets).
+/// Corrupt or missing → empty; skips non-object entries.
+List<EqProfile> _decodeEqList(String? raw) {
+  if (raw == null) return const [];
+  try {
+    return [
+      for (final j in jsonDecode(raw) as List)
+        if (j is Map<String, dynamic>) EqProfile.fromJson(j),
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
+String _encodeEqList(List<EqProfile> list) =>
+    jsonEncode([for (final e in list) e.toJson()]);
+
+/// Favourited OPRA curves (aria.eq.favourites) — self-contained named
+/// [EqProfile]s so a favourite applies without waiting on the OPRA fetch.
+/// Same storage shape as [customEqPresetsProvider].
+final favouriteEqProvider =
+    NotifierProvider<FavouriteEqNotifier, List<EqProfile>>(
+      FavouriteEqNotifier.new,
+    );
+
+class FavouriteEqNotifier extends Notifier<List<EqProfile>> {
+  @override
+  List<EqProfile> build() => _decodeEqList(
+        ref.read(sharedPrefsProvider).getString(_prefsKeyEqFavourites),
+      );
+
+  bool contains(String name) => state.any((p) => p.name == name);
+
+  /// Add [p] if no entry shares its name, else remove that entry; persist.
+  void toggle(EqProfile p) {
+    state = contains(p.name ?? '')
+        ? [for (final e in state) if (e.name != p.name) e]
+        : [...state, p];
+    ref
+        .read(sharedPrefsProvider)
+        .setString(_prefsKeyEqFavourites, _encodeEqList(state));
   }
 }
 
@@ -128,25 +214,15 @@ final customEqPresetsProvider =
 
 class CustomEqPresetsNotifier extends Notifier<List<EqProfile>> {
   @override
-  List<EqProfile> build() {
-    final raw = ref.read(sharedPrefsProvider).getString(_prefsKeyEqCustom);
-    if (raw == null) return const [];
-    try {
-      return [
-        for (final j in jsonDecode(raw) as List)
-          if (j is Map<String, dynamic>) EqProfile.fromJson(j),
-      ];
-    } catch (_) {
-      return const [];
-    }
-  }
+  List<EqProfile> build() => _decodeEqList(
+        ref.read(sharedPrefsProvider).getString(_prefsKeyEqCustom),
+      );
 
   void set(List<EqProfile> presets) {
     state = presets;
-    ref.read(sharedPrefsProvider).setString(
-          _prefsKeyEqCustom,
-          jsonEncode([for (final p in presets) p.toJson()]),
-        );
+    ref
+        .read(sharedPrefsProvider)
+        .setString(_prefsKeyEqCustom, _encodeEqList(presets));
   }
 }
 

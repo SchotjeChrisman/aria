@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:aria/core/connection.dart';
+import 'package:aria/core/eq.dart';
 import 'package:aria/core/player_providers.dart';
 import 'package:aria/features/settings/eq_screen.dart';
 import 'package:aria_api/aria_api.dart';
@@ -12,6 +13,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _preset = EqProfile(
   name: 'My EQ',
   bands: [EqBand(type: 'peak_dip', frequency: 1000, gainDb: 3, q: 1)],
+);
+
+const _fav = EqProfile(
+  name: 'Sony WH-1000XM4 · oratory1990',
+  bands: [EqBand(type: 'peak_dip', frequency: 200, gainDb: -2, q: 1)],
 );
 
 void main() {
@@ -37,49 +43,127 @@ void main() {
 
   /// Prefs seed with 'My EQ' as a stored custom preset.
   Map<String, Object> presetPrefs({required bool enabled}) => {
-    'aria.eq': jsonEncode({'enabled': enabled, ..._preset.toJson()}),
+    'aria.eq': jsonEncode({'enabled': enabled}),
     'aria.eq.custom': jsonEncode([_preset.toJson()]),
   };
 
-  testWidgets('local head stays usable when the OPRA fetch fails', (
-    tester,
-  ) async {
+  testWidgets('selecting a headphone favourite and a custom preset both apply',
+      (tester) async {
     final container = await pump(
       tester,
-      opra: () async => throw Exception('502'),
-      prefs: presetPrefs(enabled: true),
+      prefs: {
+        ...presetPrefs(enabled: false),
+        'aria.eq.favourites': jsonEncode([_fav.toJson()]),
+      },
     );
 
-    // Off, custom presets, and Add render despite the failed fetch; the
-    // error shows as an inline row below them.
-    expect(find.text('Off'), findsOneWidget);
-    expect(find.text('My EQ'), findsOneWidget);
-    expect(find.text('Add custom EQ'), findsOneWidget);
-    expect(find.textContaining('Could not load the OPRA database'),
-        findsOneWidget);
+    // Favourite -> headphone slot; enabling happens automatically.
+    await tester.tap(find.text(_fav.name!));
+    await tester.pump();
+    // Custom preset -> custom slot.
+    await tester.tap(find.text('My EQ'));
+    await tester.pump();
 
-    await tester.tap(find.text('Off'));
-    expect(container.read(eqProvider).profile, isNull);
+    final eq = container.read(eqProvider);
+    expect(eq.headphone?.name, _fav.name);
+    expect(eq.custom?.name, 'My EQ');
+    expect(eq.enabled, isTrue);
+    // Combined chain stacks both bands.
+    final combined = combineEq(eq.headphone, eq.custom);
+    expect(combined!.bands.length, 2);
   });
 
-  testWidgets('deleting the active preset resets the EQ to off', (
-    tester,
-  ) async {
-    final container = await pump(tester, prefs: presetPrefs(enabled: true));
+  testWidgets('clearing each slot leaves the other intact', (tester) async {
+    final container = await pump(
+      tester,
+      prefs: {
+        'aria.eq': jsonEncode({
+          'enabled': true,
+          'headphone': _fav.toJson(),
+          'custom': _preset.toJson(),
+        }),
+        'aria.eq.custom': jsonEncode([_preset.toJson()]),
+      },
+    );
+
+    // Two clear (×) buttons, one per filled slot.
+    final clears = find.byIcon(Icons.close);
+    expect(clears, findsNWidgets(2));
+
+    // Clear the headphone slot (first ×).
+    await tester.tap(clears.first);
+    await tester.pump();
+    expect(container.read(eqProvider).headphone, isNull);
+    expect(container.read(eqProvider).custom?.name, 'My EQ');
+
+    // Clear the custom slot (now the only ×).
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump();
+    expect(container.read(eqProvider).custom, isNull);
+  });
+
+  testWidgets('master switch flips enabled without touching slots',
+      (tester) async {
+    final container = await pump(
+      tester,
+      prefs: {
+        'aria.eq': jsonEncode({'enabled': true, 'custom': _preset.toJson()}),
+        'aria.eq.custom': jsonEncode([_preset.toJson()]),
+      },
+    );
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+
+    final eq = container.read(eqProvider);
+    expect(eq.enabled, isFalse);
+    expect(eq.custom?.name, 'My EQ'); // slot preserved
+  });
+
+  testWidgets('un-favouriting removes the row', (tester) async {
+    final container = await pump(
+      tester,
+      prefs: {
+        ...presetPrefs(enabled: false),
+        'aria.eq.favourites': jsonEncode([_fav.toJson()]),
+      },
+    );
+
+    expect(find.text(_fav.name!), findsOneWidget);
+    // The filled star trailing un-favourites.
+    await tester.tap(find.byIcon(Icons.star));
+    await tester.pump();
+
+    expect(container.read(favouriteEqProvider), isEmpty);
+    expect(find.text(_fav.name!), findsNothing);
+  });
+
+  testWidgets('deleting the preset in the custom slot clears it',
+      (tester) async {
+    final container = await pump(
+      tester,
+      prefs: {
+        'aria.eq': jsonEncode({'enabled': true, 'custom': _preset.toJson()}),
+        'aria.eq.custom': jsonEncode([_preset.toJson()]),
+      },
+    );
 
     await tester.tap(find.byIcon(Icons.delete_outline));
     await tester.pump();
 
     expect(container.read(customEqPresetsProvider), isEmpty);
-    final eq = container.read(eqProvider);
-    expect(eq.profile, isNull);
-    expect(eq.enabled, isFalse);
+    expect(container.read(eqProvider).custom, isNull);
   });
 
-  testWidgets('editing the selected preset keeps the enabled flag off', (
-    tester,
-  ) async {
-    final container = await pump(tester, prefs: presetPrefs(enabled: false));
+  testWidgets('editing the custom-slot preset keeps enabled off',
+      (tester) async {
+    final container = await pump(
+      tester,
+      prefs: {
+        'aria.eq': jsonEncode({'enabled': false, 'custom': _preset.toJson()}),
+        'aria.eq.custom': jsonEncode([_preset.toJson()]),
+      },
+    );
 
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
@@ -87,8 +171,31 @@ void main() {
     await tester.pumpAndSettle();
 
     final eq = container.read(eqProvider);
-    expect(eq.profile?.name, 'My EQ');
+    expect(eq.custom?.name, 'My EQ');
     expect(eq.enabled, isFalse);
+  });
+
+  testWidgets('renaming the custom-slot preset re-points the slot',
+      (tester) async {
+    final container = await pump(
+      tester,
+      prefs: {
+        'aria.eq': jsonEncode({'enabled': true, 'custom': _preset.toJson()}),
+        'aria.eq.custom': jsonEncode([_preset.toJson()]),
+      },
+    );
+
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    // Rename in the dialog's Name field (pre-filled with the old name).
+    await tester.enterText(find.widgetWithText(TextField, 'My EQ'), 'My EQ v2');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Slot follows the rename instead of pointing at a now-gone preset.
+    final eq = container.read(eqProvider);
+    expect(eq.custom?.name, 'My EQ v2');
+    expect(eq.enabled, isTrue);
   });
 
   testWidgets('editor refuses to save out-of-range bands', (tester) async {
@@ -96,10 +203,7 @@ void main() {
 
     await tester.tap(find.text('Add custom EQ'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Q').last,
-      '0',
-    );
+    await tester.enterText(find.widgetWithText(TextField, 'Q').last, '0');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
