@@ -30,7 +30,7 @@ void main() {
     );
 
     // Shelf fills the Scaffold body width (no outer padding here).
-    const gap = AriaSpace.s6;
+    const gap = AriaSpace.s3;
     const w = 390.0;
     final expected = (w - 2 * gap) / 3;
 
@@ -71,7 +71,7 @@ void main() {
       ),
     );
 
-    const gap = AriaSpace.s6;
+    const gap = AriaSpace.s3;
     const w = 390.0;
     final expected = (w - 3 * gap) / 4;
     final cardWidth = tester

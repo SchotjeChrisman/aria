@@ -28,7 +28,24 @@ class MixScreen extends ConsumerWidget {
       AsyncData() => _build(context, ref, homeMixById(ref, id), currentId),
       _ => const Center(child: CircularProgressIndicator()),
     };
-    return Scaffold(appBar: AppBar(), body: body);
+    final tracks = switch (async) {
+      AsyncData() => homeMixById(ref, id)?.tracks ?? const <Track>[],
+      _ => const <Track>[],
+    };
+    return Scaffold(
+      appBar: AppBar(
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            tooltip: 'Save as playlist',
+            onPressed: tracks.isEmpty
+                ? null
+                : () => showAddToPlaylistMenu(context, tracks: tracks),
+          ),
+        ],
+      ),
+      body: body,
+    );
   }
 
   Widget _build(
@@ -52,12 +69,27 @@ class MixScreen extends ConsumerWidget {
         const SizedBox(height: AriaSpace.s2),
         Text(mix.subtitle, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: AriaSpace.s4),
-        FilledButton.icon(
-          icon: const Icon(Icons.play_arrow, size: 18),
-          label: const Text('Play all'),
-          onPressed: list.isEmpty
-              ? null
-              : () => ref.read(queueProvider.notifier).playQueue(list, 0),
+        Row(
+          children: [
+            FilledButton.icon(
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: const Text('Play all'),
+              onPressed: list.isEmpty
+                  ? null
+                  : () => ref.read(queueProvider.notifier).playQueue(list, 0),
+            ),
+            const SizedBox(width: AriaSpace.s2),
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.shuffle, size: 18),
+              label: const Text('Shuffle'),
+              onPressed: list.isEmpty
+                  ? null
+                  : () => ref.read(queueProvider.notifier).playQueue(
+                        List.of(list)..shuffle(),
+                        0,
+                      ),
+            ),
+          ],
         ),
         const SizedBox(height: AriaSpace.s5),
         if (list.isEmpty)

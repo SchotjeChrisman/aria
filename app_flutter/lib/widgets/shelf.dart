@@ -69,7 +69,7 @@ class Shelf extends StatelessWidget {
           // Genuinely local constraint: the shelf's own width (minus
           // rail/padding) drives the card size, not the window width.
           builder: (context, box) {
-            const gap = AriaSpace.s6;
+            const gap = AriaSpace.s3;
             // Band-fixed visible cards. Mobile shows exactly 3 full cards
             // (no peek — requested); wider bands keep the half-card peek that
             // signals scrollability. gridColumns stays 2 on mobile (it drives

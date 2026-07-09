@@ -73,7 +73,6 @@ class _HomeBody extends ConsumerWidget {
         const SizedBox(height: AriaSpace.s6),
         const NewReleasesShelf(),
         const SizedBox(height: AriaSpace.s6),
-        const _MixesShelf(),
         if (added.isNotEmpty) ...[
           _AlbumShelf(title: 'Recently Added', albums: added.take(20).toList()),
           const SizedBox(height: AriaSpace.s6),
@@ -153,6 +152,7 @@ class _HomeBody extends ConsumerWidget {
               const SizedBox(height: AriaSpace.s6),
             ],
           ],
+          const _MixesShelf(),
           _Listening(stats: value),
           if (top.isNotEmpty) ...[
             _AlbumShelf(
@@ -226,61 +226,62 @@ class _StatStrip extends StatelessWidget {
       for (final t in tracks) ?compositionKey(t),
     };
 
-    Widget tile(String num, String label) => Expanded(
-      child: Container(
-        // Equal-width under Expanded; vertical padding only so tiles stretch
-        // to fill their share of the row.
-        padding: const EdgeInsets.symmetric(
-          horizontal: AriaSpace.s3,
-          vertical: AriaSpace.s4,
-        ),
-        decoration: BoxDecoration(
-          color: c.bgRaised,
-          borderRadius: BorderRadius.circular(AriaRadius.md),
-          border: Border.all(color: c.line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              num,
-              style: TextStyle(
-                fontSize: 18,
-                color: c.fg,
-                fontFeatures: const [FontFeature.tabularFigures()],
+    Widget tile(String num, String label, String route) => Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AriaRadius.md),
+        onTap: () => context.go(route),
+        child: Container(
+          // Equal-width under Expanded; vertical padding only so tiles stretch
+          // to fill their share of the row.
+          padding: const EdgeInsets.symmetric(
+            horizontal: AriaSpace.s3,
+            vertical: AriaSpace.s4,
+          ),
+          decoration: BoxDecoration(
+            color: c.bgRaised,
+            borderRadius: BorderRadius.circular(AriaRadius.md),
+            border: Border.all(color: c.line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                num,
+                style: TextStyle(
+                  fontSize: 18,
+                  color: c.fg,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
-            ),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
       ),
     );
 
     return Row(
       children: [
-        tile('${composers.length}', 'Composers'),
+        tile('${composers.length}', 'Composers', '/library/composers'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${performers.length}', 'Performers'),
+        tile('${performers.length}', 'Performers', '/library/artists'),
         const SizedBox(width: AriaSpace.s2),
-        tile('$albumCount', 'Releases'),
+        tile('$albumCount', 'Releases', '/library/albums'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${compositions.length}', 'Compositions'),
+        tile('${compositions.length}', 'Compositions', '/library/tracks'),
       ],
     );
   }
 }
 
-/// "Your Mixes": one gradient card per non-empty server mix, tapping into the
-/// mix detail screen. Hidden entirely when every mix is empty.
 class _MixesShelf extends ConsumerWidget {
   const _MixesShelf();
 
-  /// Per-mix icon + gradient end tint (start is the accent).
   static const _looks = {
     'daily': (Icons.wb_sunny_outlined, Color(0xFF7C4DFF)),
     'weekly': (Icons.calendar_view_week_outlined, Color(0xFF00897B)),
@@ -298,59 +299,81 @@ class _MixesShelf extends ConsumerWidget {
     if (mixes.isEmpty) return const SizedBox.shrink();
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Shelf(
-          title: 'Your Mixes',
-          height: 236,
-          itemCount: mixes.length,
-          itemBuilder: (context, i) {
-            final m = mixes[i];
-            final (icon, tint) = _looks[m.id] ?? (Icons.queue_music, c.accent);
-            return InkWell(
-              borderRadius: BorderRadius.circular(AriaRadius.md),
-              onTap: () => context.push('/mix/${m.id}'),
-              child: Container(
-                padding: const EdgeInsets.all(AriaSpace.s4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AriaRadius.md),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [c.accent, tint],
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(icon, color: Colors.white, size: 28),
-                    const Spacer(),
-                    Text(
-                      m.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      m.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: AriaSpace.s6),
+        Text('Your Mixes', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AriaSpace.s3),
+        // Short full-width banners (one per row, full width on mobile) instead
+        // of tall narrow shelf cards.
+        for (final m in mixes) ...[
+          _MixBanner(mix: m, looks: _looks[m.id] ?? (Icons.queue_music, c.accent)),
+          const SizedBox(height: AriaSpace.s2),
+        ],
+        const SizedBox(height: AriaSpace.s4),
       ],
+    );
+  }
+}
+
+class _MixBanner extends StatelessWidget {
+  const _MixBanner({required this.mix, required this.looks});
+
+  final HomeMix mix;
+  final (IconData, Color) looks;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AriaColors.of(context);
+    final (icon, tint) = looks;
+    return InkWell(
+      borderRadius: BorderRadius.circular(AriaRadius.md),
+      onTap: () => context.push('/mix/${mix.id}'),
+      child: Container(
+        height: 76,
+        padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AriaRadius.md),
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [c.accent, tint],
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(width: AriaSpace.s4),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    mix.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    mix.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -488,6 +511,17 @@ class _Listening extends ConsumerWidget {
       trkC[p.id] = (trkC[p.id] ?? 0) + 1;
     }
 
+    // Listening time (seconds) per week for the last 4 weeks, from the play
+    // log times * each track's tagged duration.
+    final weekSecs = List<double>.filled(4, 0);
+    for (final p in hist) {
+      final d = DateTime.tryParse(p.at)?.toLocal();
+      if (d == null) continue;
+      final daysAgo = now.difference(d).inDays;
+      if (daysAgo < 0 || daysAgo >= 28) continue;
+      weekSecs[daysAgo ~/ 7] += byId[p.id]?.duration ?? 0;
+    }
+
     List<MapEntry<String, int>> top5(Map<String, int> m) =>
         (m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
             .take(5)
@@ -525,6 +559,7 @@ class _Listening extends ConsumerWidget {
             child: PageView(
               controller: PageController(viewportFraction: 0.92),
               children: [
+                _WeeklyTimeBox(weekSecs: weekSecs),
                 _ChartBox(
                   title: 'Plays · last 30 days',
                   values: [for (final d in days.values) d.n],
@@ -704,4 +739,78 @@ class _MiniList extends StatelessWidget {
       ),
     );
   }
+}
+
+class _WeeklyTimeBox extends StatelessWidget {
+  const _WeeklyTimeBox({required this.weekSecs});
+
+  /// Index 0 = current 7 days, 1 = prior week, up to 4 weeks back.
+  final List<double> weekSecs;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AriaColors.of(context);
+    const labels = ['This week', 'Last week', '2 wks ago', '3 wks ago'];
+    final max = weekSecs.fold<double>(1, (m, v) => v > m ? v : m);
+    return Container(
+      margin: const EdgeInsets.only(right: AriaSpace.s3),
+      padding: const EdgeInsets.all(AriaSpace.s4),
+      decoration: BoxDecoration(
+        color: c.bgRaised,
+        borderRadius: BorderRadius.circular(AriaRadius.md),
+        border: Border.all(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Listening time · last 4 weeks',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AriaSpace.s3),
+          for (final (i, secs) in weekSecs.indexed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 78,
+                    child: Text(
+                      labels[i],
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: (secs / max).clamp(0, 1).toDouble(),
+                        minHeight: 8,
+                        backgroundColor: c.line,
+                        color: c.accent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AriaSpace.s3),
+                  SizedBox(
+                    width: 56,
+                    child: Text(
+                      _fmtListen(secs),
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _fmtListen(double secs) {
+  final m = (secs / 60).round();
+  if (m < 60) return '${m}m';
+  return '${m ~/ 60}h ${m % 60}m';
 }

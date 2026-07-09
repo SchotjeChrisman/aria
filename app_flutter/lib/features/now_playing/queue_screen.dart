@@ -19,11 +19,33 @@ import 'transport_bar.dart';
 /// Play queue (legacy #queue-panel / renderQueue): played history dimmed
 /// above the accented current row, drag handle to reorder (qMove semantics),
 /// per-row remove (qRemove semantics), clear, save-as-playlist.
-class QueueScreen extends ConsumerWidget {
+class QueueScreen extends ConsumerStatefulWidget {
   const QueueScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<QueueScreen> createState() => _QueueScreenState();
+}
+
+class _QueueScreenState extends ConsumerState<QueueScreen> {
+  late final ScrollController _scroll;
+
+  @override
+  void initState() {
+    super.initState();
+    // Open at the current song: played history is above (scroll up),
+    // upcoming below (scroll down). ~64px per row, clamped by the list.
+    final i = ref.read(queueProvider).index;
+    _scroll = ScrollController(initialScrollOffset: i > 0 ? i * 64.0 : 0);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final q = ref.watch(queueProvider);
     final c = AriaColors.of(context);
 
@@ -40,7 +62,7 @@ class QueueScreen extends ConsumerWidget {
             TextButton.icon(
               icon: const Icon(Icons.playlist_add, size: 18),
               label: const Text('Save as playlist'),
-              onPressed: () => _saveAsPlaylist(context, ref),
+              onPressed: () => _saveAsPlaylist(context),
             ),
             IconButton(
               icon: const Icon(Icons.clear_all),
@@ -58,6 +80,7 @@ class QueueScreen extends ConsumerWidget {
             )
           : ReorderableListView.builder(
               buildDefaultDragHandles: false,
+              scrollController: _scroll,
               padding: const EdgeInsets.only(bottom: AriaSpace.s8),
               itemCount: q.tracks.length,
               // onReorderItem's newIndex is post-removal; core move() wants
@@ -79,7 +102,7 @@ class QueueScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _saveAsPlaylist(BuildContext context, WidgetRef ref) async {
+  Future<void> _saveAsPlaylist(BuildContext context) async {
     final tracks = ref.read(queueProvider).tracks;
     if (tracks.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -210,7 +233,7 @@ class _QueueRow extends ConsumerWidget {
       ],
     );
 
-    return GestureDetector(
+    final content = GestureDetector(
       onSecondaryTapUp: (d) => _menu(context, ref, d.globalPosition),
       onLongPressStart: (d) => _menu(context, ref, d.globalPosition),
       child: Material(
@@ -232,6 +255,28 @@ class _QueueRow extends ConsumerWidget {
           ),
         ),
       ),
+    );
+    if (!isCurrent) return content;
+    // Time left on the queue: remainder of the current track + all upcoming.
+    final pos = ref.watch(playbackPositionProvider).value ?? 0;
+    final curDur = ref.watch(currentDurationProvider);
+    final q = ref.read(queueProvider);
+    final upcoming = q.tracks
+        .skip(q.index + 1)
+        .fold<double>(0, (s, t) => s + (t.duration ?? 0));
+    final left = (curDur - pos).clamp(0, double.infinity) + upcoming;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        content,
+        Padding(
+          padding: const EdgeInsets.only(left: 64, bottom: 6),
+          child: Text(
+            _queueLeft(left.toDouble()),
+            style: Theme.of(context).textTheme.bodySmall!.copyWith(color: c.accent),
+          ),
+        ),
+      ],
     );
   }
 
@@ -282,4 +327,10 @@ class _QueueRow extends ConsumerWidget {
       ),
     ]);
   }
+}
+
+String _queueLeft(double secs) {
+  final m = (secs / 60).round();
+  final body = m < 60 ? '$m min' : '${m ~/ 60}h ${m % 60}m';
+  return '$body left in queue';
 }
