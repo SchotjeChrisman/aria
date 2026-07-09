@@ -143,6 +143,15 @@ class AlbumsSection extends ConsumerWidget {
                             .toggleTag(v),
                       ),
                     ),
+                    FilterPill(
+                      label: filters.combine == 'any'
+                          ? 'Match: Any'
+                          : 'Match: All',
+                      selected: filters.combine == 'any',
+                      onTap: () => ref
+                          .read(albumFiltersProvider.notifier)
+                          .toggleCombine(),
+                    ),
                     if (!filters.isEmpty)
                       FilterPill(
                         label: 'Clear',

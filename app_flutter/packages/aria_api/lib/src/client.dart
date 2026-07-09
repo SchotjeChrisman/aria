@@ -10,6 +10,7 @@ import 'json.dart';
 import 'models/enrichment.dart';
 import 'models/eq.dart';
 import 'models/misc.dart';
+import 'models/mixes.dart';
 import 'models/playlist.dart';
 import 'models/profile.dart';
 import 'models/stats.dart';
@@ -358,6 +359,11 @@ class AriaClient {
       Stats.fromJson(asMap(await _get('/api/stats', query: {
         if (profileId != null) 'profileId': profileId,
         if (counts) 'counts': '1',
+      })));
+
+  Future<Mixes> mixes({String? profileId}) async =>
+      Mixes.fromJson(asMap(await _get('/api/mixes', query: {
+        if (profileId != null) 'profileId': profileId,
       })));
 
   Future<List<NewRelease>> newReleases() async =>

@@ -74,7 +74,10 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
     final c = AriaColors.of(context);
     final st = widget.state;
     final q = _search.text.trim().toLowerCase();
-    final showList = _focus.hasFocus || q.isNotEmpty;
+    // Focus alone drives visibility: typing implies focus, and leftover search
+    // text must not pin the list open after focus leaves (it blocked the next
+    // field). onTapOutside below closes it reliably across platforms.
+    final showList = _focus.hasFocus;
     final hits = [
       for (final v in widget.options)
         if (q.isEmpty || v.toLowerCase().contains(q)) v,
@@ -91,6 +94,7 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
               child: TextField(
                 controller: _search,
                 focusNode: _focus,
+                onTapOutside: (_) => _focus.unfocus(),
                 decoration: const InputDecoration(hintText: 'search…'),
               ),
             ),

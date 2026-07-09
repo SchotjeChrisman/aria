@@ -34,6 +34,7 @@ class TrackFilters {
     this.played,
     this.added,
     this.favourites = false,
+    this.combine = 'all',
   });
 
   /// field -> MultiFilter, only active fields present.
@@ -53,6 +54,10 @@ class TrackFilters {
 
   /// Favourites-only (the reserved ♥ metatag).
   final bool favourites;
+
+  /// Cross-field combine mode: 'all' = every active field (AND, default),
+  /// 'any' = at least one active field (OR).
+  final String combine;
 
   MultiFilter stringFilter(String field) =>
       strings[field] ?? const MultiFilter();
@@ -113,45 +118,62 @@ bool trackPassesFilters(
   Map<String, int>? playCounts,
 }) {
   if (f.isEmpty) return true;
-  if (f.favourites && !favouriteIds.contains(t.id)) return false;
-  if (!_msPass(f.stringFilter('albumArtist'), [t.albumArtist])) return false;
-  if (!_msPass(f.stringFilter('credited'), [
-    t.artist,
-    t.conductor,
-    t.orchestra,
-    ...t.performers.map((p) => p.name),
-  ])) {
-    return false;
+
+  // Evaluate each ACTIVE field to a bool, then combine: 'all' = every active
+  // field must pass (AND), 'any' = at least one active field passes (OR).
+  // Inactive fields don't count toward the 'any' OR.
+  final results = <bool>[];
+
+  if (f.favourites) results.add(favouriteIds.contains(t.id));
+  if (f.stringFilter('albumArtist').isActive) {
+    results.add(_msPass(f.stringFilter('albumArtist'), [t.albumArtist]));
   }
-  if (!_msPass(
-    f.stringFilter('genre'),
-    trackGenresUp(t, genreParents),
-    exact: true,
-  )) {
-    return false;
+  if (f.stringFilter('credited').isActive) {
+    results.add(
+      _msPass(f.stringFilter('credited'), [
+        t.artist,
+        t.conductor,
+        t.orchestra,
+        ...t.performers.map((p) => p.name),
+      ]),
+    );
   }
-  if (!_msPass(f.stringFilter('tag'), tagIndex.namesFor(t), exact: true)) {
-    return false;
+  if (f.stringFilter('genre').isActive) {
+    results.add(
+      _msPass(f.stringFilter('genre'), trackGenresUp(t, genreParents),
+          exact: true),
+    );
   }
-  if (!_msPass(f.stringFilter('composer'), [t.composer])) return false;
-  if (!_msPass(f.stringFilter('format'), [t.format])) return false;
-  if (f.yearFrom != null && !((t.year ?? -1) >= f.yearFrom!)) return false;
-  if (f.yearTo != null && !((t.year ?? 1 << 31) <= f.yearTo!)) return false;
-  if (f.lossless != null && (f.lossless == 'true') != t.lossless) return false;
-  if (f.type != null && (t.releaseType ?? '') != f.type) return false;
+  if (f.stringFilter('tag').isActive) {
+    results.add(_msPass(f.stringFilter('tag'), tagIndex.namesFor(t),
+        exact: true));
+  }
+  if (f.stringFilter('composer').isActive) {
+    results.add(_msPass(f.stringFilter('composer'), [t.composer]));
+  }
+  if (f.stringFilter('format').isActive) {
+    results.add(_msPass(f.stringFilter('format'), [t.format]));
+  }
+  if (f.yearFrom != null) results.add((t.year ?? -1) >= f.yearFrom!);
+  if (f.yearTo != null) results.add((t.year ?? 1 << 31) <= f.yearTo!);
+  if (f.lossless != null) results.add((f.lossless == 'true') == t.lossless);
+  if (f.type != null) results.add((t.releaseType ?? '') == f.type);
   if (f.played != null && playCounts != null) {
     final played = (playCounts[t.id] ?? 0) > 0;
-    if ((f.played == 'played') != played) return false;
+    results.add((f.played == 'played') == played);
   }
   final within = f.added;
   if (within != null && within > 0) {
     final at = t.addedAt == null ? null : DateTime.tryParse(t.addedAt!);
-    if (at == null ||
-        at.isBefore(DateTime.now().subtract(Duration(days: within)))) {
-      return false;
-    }
+    results.add(
+      at != null &&
+          !at.isBefore(DateTime.now().subtract(Duration(days: within))),
+    );
   }
-  return true;
+
+  // No active field evaluated (e.g. played filter with counts unloaded) passes.
+  if (results.isEmpty) return true;
+  return f.combine == 'any' ? results.any((r) => r) : results.every((r) => r);
 }
 
 // --------------------------------------------------------- option lists
@@ -214,6 +236,7 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
   String? _type;
   String? _played;
   bool _favourites = false;
+  String _combine = 'all';
 
   @override
   void initState() {
@@ -233,6 +256,7 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
     _type = f.type;
     _played = f.played;
     _favourites = f.favourites;
+    _combine = f.combine;
   }
 
   @override
@@ -265,6 +289,7 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
             played: _played,
             added: _num(_added),
             favourites: _favourites,
+            combine: _combine,
           ),
         );
     Navigator.of(context).pop();
@@ -305,6 +330,20 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'all', label: Text('Match all fields')),
+                    ButtonSegment(value: 'any', label: Text('Match any field')),
+                  ],
+                  selected: {_combine},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (s) =>
+                      setState(() => _combine = s.first),
+                ),
+              ),
+              const SizedBox(height: AriaSpace.s4),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Favourites only'),

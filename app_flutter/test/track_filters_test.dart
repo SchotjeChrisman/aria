@@ -131,6 +131,36 @@ void main() {
       expect(pass(t(), f), isFalse); // no addedAt at all
     });
 
+    test('combine any = OR over active fields, all = AND', () {
+      final track = t(artist: 'Miles Davis', format: 'FLAC');
+      // credited hits, format misses.
+      const anyF = TrackFilters(
+        strings: {
+          'credited': MultiFilter(vals: ['miles']),
+          'format': MultiFilter(vals: ['mp3']),
+        },
+        combine: 'any',
+      );
+      const allF = TrackFilters(
+        strings: {
+          'credited': MultiFilter(vals: ['miles']),
+          'format': MultiFilter(vals: ['mp3']),
+        },
+      ); // default 'all'
+      expect(pass(track, anyF), isTrue); // one hit is enough
+      expect(pass(track, allF), isFalse); // format miss fails AND
+
+      // Inactive fields must not count toward 'any': only a missing field
+      // active -> no hit -> false.
+      const missAny = TrackFilters(
+        strings: {
+          'credited': MultiFilter(vals: ['coltrane']),
+        },
+        combine: 'any',
+      );
+      expect(pass(track, missAny), isFalse);
+    });
+
     test('activeCount counts one per active group (legacy badge)', () {
       const f = TrackFilters(
         strings: {

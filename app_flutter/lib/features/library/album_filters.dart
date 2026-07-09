@@ -15,6 +15,7 @@ class AlbumFilters {
     this.formats = const {},
     this.tags = const {},
     this.decade,
+    this.combine = 'all',
   });
 
   final Set<String> genres;
@@ -23,6 +24,10 @@ class AlbumFilters {
 
   /// Decade start year — 1970 means 1970–1979.
   final int? decade;
+
+  /// Cross-field combine mode: 'all' = every active group (AND, default),
+  /// 'any' = at least one active group (OR).
+  final String combine;
 
   /// Legacy activeFilterCount(): one per active filter group, for the badge.
   int get activeCount =>
@@ -38,11 +43,13 @@ class AlbumFilters {
     Set<String>? formats,
     Set<String>? tags,
     int? Function()? decade,
+    String? combine,
   }) => AlbumFilters(
     genres: genres ?? this.genres,
     formats: formats ?? this.formats,
     tags: tags ?? this.tags,
     decade: decade == null ? this.decade : decade(),
+    combine: combine ?? this.combine,
   );
 }
 
@@ -60,6 +67,8 @@ class AlbumFiltersNotifier extends Notifier<AlbumFilters> {
   void toggleTag(String t) =>
       state = state.copyWith(tags: _toggle(state.tags, t));
   void setDecade(int? d) => state = state.copyWith(decade: () => d);
+  void toggleCombine() =>
+      state = state.copyWith(combine: state.combine == 'all' ? 'any' : 'all');
   void clear() => state = const AlbumFilters();
 }
 
@@ -78,23 +87,26 @@ bool _trackPasses(
 ) {
   // Genre matches exactly against the track's genres + ancestors, so 'Pop'
   // does not substring-match 'Pop Rock' (legacy msPass exact=true).
+  // Evaluate each active group to a bool, then combine per f.combine.
+  final results = <bool>[];
   if (f.genres.isNotEmpty) {
     final up = trackGenresUp(t, parents).map(_lc).toSet();
-    if (!f.genres.any((g) => up.contains(_lc(g)))) return false;
+    results.add(f.genres.any((g) => up.contains(_lc(g))));
   }
   if (f.formats.isNotEmpty) {
     final fmt = _lc(t.format ?? '');
-    if (!f.formats.any((q) => fmt.contains(_lc(q)))) return false;
+    results.add(f.formats.any((q) => fmt.contains(_lc(q))));
   }
   if (f.tags.isNotEmpty) {
     final names = tagIndex.namesFor(t).map(_lc).toSet();
-    if (!f.tags.any((q) => names.contains(_lc(q)))) return false;
+    results.add(f.tags.any((q) => names.contains(_lc(q))));
   }
   if (f.decade != null) {
     final y = t.year;
-    if (y == null || y < f.decade! || y > f.decade! + 9) return false;
+    results.add(y != null && y >= f.decade! && y <= f.decade! + 9);
   }
-  return true;
+  if (results.isEmpty) return true;
+  return f.combine == 'any' ? results.any((r) => r) : results.every((r) => r);
 }
 
 bool albumPassesFilters(
