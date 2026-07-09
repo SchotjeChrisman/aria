@@ -148,6 +148,10 @@ class EqNotifier extends Notifier<EqState> {
   void apply() {
     final p = state.enabled ? combineEq(state.headphone, state.custom) : null;
     ref.read(ariaPlayerProvider).setAudioFilter(p == null ? '' : eqToAf(p));
+    // Setting `af` live reconfigures the open audio output and fails on some
+    // devices (silent, skipping playback). Reload the current track in place so
+    // the filter lands on a clean init; no-op at startup / when stopped.
+    ref.read(queueProvider.notifier).reapplyForFilterChange();
   }
 
   void _persist() {
@@ -239,6 +243,12 @@ final playbackPositionProvider = StreamProvider<double>(
 /// and bit-perfect badge in now-playing.
 final playbackFormatProvider = StreamProvider<AudioFormat>(
   (ref) => ref.watch(ariaPlayerProvider).format,
+);
+
+/// The audio output in use (mpv current-ao). Drives the now-playing output
+/// device readout.
+final audioDeviceProvider = StreamProvider<String>(
+  (ref) => ref.watch(ariaPlayerProvider).audioDevice,
 );
 
 final queueProvider = NotifierProvider<QueueNotifier, QueueState>(
@@ -529,7 +539,19 @@ class QueueNotifier extends Notifier<QueueState> {
 
   // -------------------------------------------------------------- internals
 
-  void _playCurrent() {
+  /// Re-init the current track in place at its position so an audio-filter (EQ)
+  /// change lands via a clean load instead of a live `af` swap — the live swap
+  /// reconfigures the open audio output and fails on some devices, racing the
+  /// queue with no sound. No-op unless a library track is actively loaded (EQ
+  /// applied at startup, when stopped, or over radio just sets the property).
+  void reapplyForFilterChange() {
+    if (state.current == null) return;
+    final st = ref.read(playbackStateProvider).value;
+    if (st != PlaybackState.playing && st != PlaybackState.paused) return;
+    _playCurrent(startAt: ref.read(playbackPositionProvider).value ?? 0);
+  }
+
+  void _playCurrent({double startAt = 0}) {
     final t = state.current;
     if (t == null) return;
     // Data-usage gate: local downloads always play; streaming asks the
@@ -577,6 +599,7 @@ class QueueNotifier extends Notifier<QueueState> {
         bits: t.bitsPerSample,
         channels: t.channels,
       ),
+      startAt: startAt,
     );
     _persist();
     _syncEngineNext();

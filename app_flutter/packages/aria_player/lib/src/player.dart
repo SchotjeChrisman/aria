@@ -115,10 +115,22 @@ class AriaPlayer {
 
   // No-sound safety net: an ao that fails to init makes mpv EOF straight
   // through the queue with no playback. Track the furthest position reached
-  // per file; back-to-back sub-0.5s EOFs mean nothing is actually playing.
+  // per file; a sub-0.5s EOF means the file produced no sound.
   double _maxPosThisFile = 0;
-  int _deadEofStreak = 0;
   String? _lastErrorText;
+  String? _audioDevice;
+
+  /// Absolute position to seek to once the (reloaded) file starts. Set by
+  /// [play]'s startAt so an EQ change can reload the current file cleanly (a
+  /// live `af` swap reconfigures the open output and fails on some devices)
+  /// without losing the listener's spot.
+  double? _pendingSeek;
+
+  /// Sticky stop after dead audio: mpv may have already prefetched the next
+  /// gapless entry, so its START_FILE/advance events are still queued. Swallow
+  /// every event until the next explicit [play] re-arms, so a silent output
+  /// can never race the queue.
+  bool _deadStopped = false;
 
   /// User's desired exclusive-output state, tracked so setAudioFilter can
   /// force it off while an EQ filter is active (desktop only) and restore it.
@@ -136,6 +148,7 @@ class AriaPlayer {
   final _formatCtrl = StreamController<AudioFormat>.broadcast(sync: true);
   final _trackStartedCtrl = StreamController<int>.broadcast(sync: true);
   final _audioErrorCtrl = StreamController<String>.broadcast(sync: true);
+  final _audioDeviceCtrl = StreamController<String>.broadcast(sync: true);
 
   /// Seconds into the current track.
   Stream<double> get position => _positionCtrl.stream;
@@ -159,9 +172,14 @@ class AriaPlayer {
   /// the track instead of playing it.
   Stream<String> get audioError => _audioErrorCtrl.stream;
 
+  /// The audio output currently in use (mpv current-ao), e.g. "pipewire",
+  /// "coreaudio", "wasapi". Empty until playback initialises an output.
+  Stream<String> get audioDevice => _audioDeviceCtrl.stream;
+
   PlaybackState get currentState => _state;
   double get currentPosition => _position;
   double? get currentDuration => _duration;
+  String? get currentAudioDevice => _audioDevice;
   TrackMeta? get currentMeta => _meta;
 
   bool get isAvailable => _handle != 0 && !_disposed;
@@ -229,6 +247,7 @@ class AriaPlayer {
       'audio-params/channel-count',
       MpvFormat.int64,
     );
+    raw.observeProperty(handle, 8, 'current-ao', MpvFormat.string);
 
     // Surface audio-output failures (see [audioError]).
     raw.requestLogMessages(handle, 'error');
@@ -252,17 +271,20 @@ class AriaPlayer {
     _timer = Timer.periodic(want, (_) => _poll());
   }
 
-  /// Replace the playlist with [url] and start playing.
-  void play(String url, {TrackMeta? meta}) {
+  /// Replace the playlist with [url] and start playing. [startAt] resumes at a
+  /// position once the file starts — used to reload the current track in place
+  /// after an EQ change without losing the listener's spot.
+  void play(String url, {TrackMeta? meta, double startAt = 0}) {
     if (!isAvailable) return;
     _meta = meta;
+    _pendingSeek = startAt > 0 ? startAt : null;
+    _deadStopped = false;
     _playlistPos = -1;
     _localPlaylistCount = 1;
     _pendingNextIndex = null;
     _loadPending = true;
     _syncPollRate(); // back to the fast poll before START_FILE arrives
     _aoErrorNotified = false;
-    _deadEofStreak = 0;
     _fmtRate = null;
     _fmtChannels = null;
     _fmtSampleFormat = null;
@@ -322,9 +344,18 @@ class AriaPlayer {
   void stop() {
     if (!isAvailable) return;
     _loadPending = false; // an explicit stop outranks any in-flight load
-    _deadEofStreak = 0;
     _raw!.command(_handle, ['stop']);
     _setState(PlaybackState.stopped);
+  }
+
+  /// Stop on dead audio (a silent EOF or an ao failure) and stay stopped:
+  /// drop any prefetched gapless entry and swallow the already-queued advance
+  /// events for it, so the queue can never race through producing no sound.
+  void _deadAudioStop(String message) {
+    clearQueueNext();
+    _deadStopped = true;
+    stop();
+    _audioErrorCtrl.add(message);
   }
 
   /// Absolute seek in seconds.
@@ -340,13 +371,16 @@ class AriaPlayer {
     _raw!.setPropertyDouble(_handle, 'volume', volume.clamp(0, 100));
   }
 
-  /// Replace the mpv audio filter chain ('' clears it) — the EQ hook.
+  /// Replace the mpv audio filter chain ('' clears it) — the EQ hook. Callers
+  /// that change this mid-playback should reload the current file afterwards
+  /// (see QueueNotifier.reapplyForFilterChange): a live `af` swap reconfigures
+  /// the open output and fails on some devices.
   void setAudioFilter(String af) {
     if (!isAvailable) return;
-    _raw!.setPropertyString(_handle, 'af', af);
-    // EQ and bit-perfect exclusive output are mutually exclusive: an active
-    // filter forces exclusive off; clearing it restores the user's intent.
-    // Desktop-only — audio-exclusive is a no-op on Android.
+    // Exclusive off must land BEFORE the filter: the af change reconfigures the
+    // audio output, which fails against a held (exclusive) device. EQ and
+    // bit-perfect exclusive output are mutually exclusive; clearing the filter
+    // restores the user's intent. Desktop-only — a no-op on Android.
     if (!Platform.isAndroid) {
       _raw!.setPropertyString(
         _handle,
@@ -354,6 +388,7 @@ class AriaPlayer {
         af.isNotEmpty ? 'no' : (_exclusiveIntent ? 'yes' : 'no'),
       );
     }
+    _raw!.setPropertyString(_handle, 'af', af);
   }
 
   /// Runtime toggle for exclusive device access (desktop).
@@ -379,6 +414,7 @@ class AriaPlayer {
     await _formatCtrl.close();
     await _trackStartedCtrl.close();
     await _audioErrorCtrl.close();
+    await _audioDeviceCtrl.close();
   }
 
   /// Drains pending mpv events now — what the poll timer does each tick.
@@ -397,6 +433,18 @@ class AriaPlayer {
   }
 
   void _handleEvent(MpvEventData ev) {
+    // Sticky dead-audio stop: once we stop for no-sound, mpv's already-queued
+    // events for a prefetched gapless entry (START_FILE/playlist-pos) would
+    // otherwise un-stop us and advance the queue. Swallow everything until the
+    // next explicit play() clears the flag.
+    if (_deadStopped) {
+      if (ev.eventId == MpvEventId.shutdown) {
+        _timer?.cancel();
+        _timer = null;
+        _timerInterval = null;
+      }
+      return;
+    }
     switch (ev.eventId) {
       case MpvEventId.propertyChange:
         _handleProperty(ev.propertyName, ev.propertyValue);
@@ -405,24 +453,27 @@ class AriaPlayer {
         _loadPending = false;
         _maxPosThisFile = 0;
         _setState(_pausedProp ? PlaybackState.paused : PlaybackState.playing);
+        // Resume at the saved spot after an in-place reload (EQ change).
+        final seekTo = _pendingSeek;
+        if (seekTo != null) {
+          _pendingSeek = null;
+          seek(seekTo);
+        }
       case MpvEventId.endFile:
         if (ev.endFileReason == MpvEndFileReason.eof) {
-          // No-sound safety net: a file that never reached 0.5s never played.
-          // ponytail: 0.5s / 2-in-a-row is a heuristic — real music tracks
-          // are never sub-0.5s back-to-back. Tighten only on a false stop.
-          if (_maxPosThisFile < 0.5) {
-            _deadEofStreak++;
-          } else {
-            _deadEofStreak = 0;
-          }
-          if (_deadEofStreak >= 2) {
-            stop();
-            _audioErrorCtrl.add(
+          // No-sound safety net: a file that never reached 0.5s produced no
+          // sound. Only stop when a gapless entry is prefetched — that is the
+          // race we must not blow through (mpv would auto-advance into it). A
+          // lone dead EOF (radio drop, single/last track) falls through to the
+          // normal end so radio can reconnect and the queue ends cleanly.
+          // ponytail: 0.5s is a heuristic; real music tracks are never
+          // sub-0.5s. Loosen only on a false stop.
+          if (_maxPosThisFile < 0.5 && _pendingNextIndex != null) {
+            _deadAudioStop(
               _lastErrorText?.isNotEmpty == true
                   ? _lastErrorText!
                   : 'Audio output produced no sound — playback stopped.',
             );
-            _deadEofStreak = 0;
             return;
           }
           _endedCtrl.add(null);
@@ -459,8 +510,7 @@ class AriaPlayer {
     if (prefix == null || !prefix.startsWith('ao')) return;
     if (_aoErrorNotified || (!_fileActive && !_loadPending)) return;
     _aoErrorNotified = true;
-    stop();
-    _audioErrorCtrl.add((text ?? 'audio output error').trim());
+    _deadAudioStop((text ?? 'audio output error').trim());
   }
 
   void _handleProperty(String? name, Object? value) {
@@ -507,6 +557,11 @@ class AriaPlayer {
         if (value is int) {
           _fmtChannels = value;
           _emitFormat();
+        }
+      case 'current-ao':
+        if (value is String && value.isNotEmpty) {
+          _audioDevice = value;
+          _audioDeviceCtrl.add(value);
         }
     }
   }

@@ -274,6 +274,19 @@ void main() {
       await player.dispose();
     });
 
+    test('play with startAt seeks to the position once the file starts', () async {
+      final (player, fake) = await makePlayer();
+      // Reload-in-place path (EQ change): fresh loadfile, resume at the spot.
+      player.play('u', startAt: 42.5);
+      expect(fake.log, contains('cmd loadfile u replace'));
+      // No seek yet — it waits for START_FILE.
+      expect(fake.log.where((l) => l.startsWith('cmd seek')), isEmpty);
+      fake.events.add(startFile);
+      player.debugPoll();
+      expect(fake.log, contains('cmd seek 42.5 absolute'));
+      await player.dispose();
+    });
+
     test('setVolume clamps 0-100', () async {
       final (player, fake) = await makePlayer();
       player.setVolume(150);
@@ -314,7 +327,9 @@ void main() {
       player.ended.listen((_) => endedCount++);
       player.state.listen(states.add);
       player.play('u');
-      fake.events.addAll([startFile, endFileEof, idle]);
+      // time-pos advances: the track actually played before its natural eof
+      // (a sub-0.5s eof is treated as dead audio, not a clean end).
+      fake.events.addAll([startFile, prop('time-pos', 3.0), endFileEof, idle]);
       player.debugPoll();
       expect(endedCount, 1);
       expect(states, [PlaybackState.playing, PlaybackState.stopped]);
@@ -385,7 +400,7 @@ void main() {
       player.state.listen(states.add);
 
       player.play('t1');
-      fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+      fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
       player.debugPoll();
 
       player.queueNext('t2');
@@ -405,7 +420,7 @@ void main() {
       () async {
         final (player, fake) = await makePlayer();
         player.play('t1');
-        fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+        fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
         player.debugPoll();
 
         player.queueNext('t2');
@@ -448,7 +463,7 @@ void main() {
     test('clearQueueNext removes a pending entry once, then no-ops', () async {
       final (player, fake) = await makePlayer();
       player.play('t1');
-      fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+      fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
       player.debugPoll();
       player.queueNext('t2');
       player.clearQueueNext();
@@ -474,7 +489,7 @@ void main() {
       player.ended.listen((_) => player.play('t2'));
 
       player.play('t1');
-      fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+      fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
       player.debugPoll();
       expect(states, [PlaybackState.playing]);
 
@@ -484,7 +499,7 @@ void main() {
       player.debugPoll();
       expect(states, [PlaybackState.playing]); // no transient stopped
 
-      fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+      fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
       player.debugPoll();
       // Bookkeeping survived: queueNext still works on the fresh load.
       expect(player.queueNext('t3'), isTrue);
@@ -497,7 +512,7 @@ void main() {
       final states = <PlaybackState>[];
       player.state.listen(states.add);
       player.play('t1');
-      fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+      fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
       player.debugPoll();
       fake.events.addAll([endFileEof, idle]);
       player.debugPoll();
@@ -578,30 +593,64 @@ void main() {
     });
 
     test(
-      'no-audio race stops instead of blowing through the queue',
+      'no-audio EOF stops on the first silent file and never skips',
       () async {
         final (player, fake) = await makePlayer();
         final errors = <String>[];
         var endedCount = 0;
+        final tracks = <int>[];
         final states = <PlaybackState>[];
         player.audioError.listen(errors.add);
         player.ended.listen((_) => endedCount++);
+        player.trackStarted.listen(tracks.add);
         player.state.listen(states.add);
 
         player.play('http://x/t.flac');
-        // Two files EOF with no time-pos advance: the ao is producing no sound.
-        fake.events.addAll([startFile, endFileEof, startFile, endFileEof]);
+        player.queueNext('http://x/t2.flac'); // gapless entry is prefetched
+        // First file EOFs sub-0.5s (no sound); mpv has already prefetched the
+        // next entry, so its START_FILE/playlist-pos are queued behind the eof.
+        fake.events.addAll([
+          startFile,
+          prop('playlist-pos', 0),
+          endFileEof,
+          startFile,
+          prop('playlist-pos', 1),
+          endFileEof,
+        ]);
         player.debugPoll();
 
         expect(errors, isNotEmpty);
-        // First EOF emits ended once; the second (streak==2) stops instead of
-        // emitting a 2nd ended — the queue does not blow through.
-        expect(endedCount, 1);
+        // Stops on the first silent file: no ended fired, only t1's start seen,
+        // the prefetched entry's events are swallowed after the dead stop.
+        expect(endedCount, 0);
+        expect(tracks, [0]);
         expect(states.last, PlaybackState.stopped);
         expect(fake.log, contains('cmd stop'));
         await player.dispose();
       },
     );
+
+    test('an explicit play() re-arms after a dead-audio stop', () async {
+      final (player, fake) = await makePlayer();
+      final states = <PlaybackState>[];
+      player.state.listen(states.add);
+
+      player.play('http://x/t.flac');
+      player.queueNext('http://x/t2.flac'); // prefetched → dead stop applies
+      fake.events.addAll([
+        startFile,
+        prop('playlist-pos', 0),
+        endFileEof,
+      ]); // dead: stops, sticky
+      player.debugPoll();
+      expect(states.last, PlaybackState.stopped);
+
+      player.play('http://x/t3.flac');
+      fake.events.addAll([startFile, prop('time-pos', 2.0)]);
+      player.debugPoll();
+      expect(states.last, PlaybackState.playing); // no longer swallowed
+      await player.dispose();
+    });
 
     test('a normally-playing track still ends cleanly', () async {
       final (player, fake) = await makePlayer();

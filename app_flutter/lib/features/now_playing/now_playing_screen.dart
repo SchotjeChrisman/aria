@@ -38,7 +38,7 @@ class NowPlayingScreen extends ConsumerWidget {
           tooltip: 'Close',
           onPressed: () => context.pop(),
         ),
-        actions: [if (track != null) _FavouriteButton(trackId: track.id)],
+        actions: const [],
       ),
       body: track == null
           ? const EmptyState(message: 'Nothing playing.')
@@ -110,6 +110,7 @@ class _Meta extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
+    final ao = ref.watch(audioDeviceProvider).value;
     final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId);
     // "3 of 12" only when there is an actual queue to navigate.
     final queuePos = ref.watch(
@@ -185,6 +186,14 @@ class _Meta extends ConsumerWidget {
         ],
         const SizedBox(height: AriaSpace.s4),
         const SignalPath(),
+        if (ao != null && ao.isNotEmpty) ...[
+          const SizedBox(height: AriaSpace.s2),
+          Text(
+            'Output · $ao',
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
       ],
     );
   }
@@ -200,6 +209,7 @@ class _Controls extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
+    final track = ref.watch(currentTrackProvider);
     final playing =
         ref.watch(playbackStateProvider).value == PlaybackState.playing;
     final shuffle = ref.watch(queueProvider.select((q) => q.shuffle));
@@ -264,6 +274,10 @@ class _Controls extends ConsumerWidget {
             // where a thumb reaches on mobile. Same push targets as before.
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              if (track != null) ...[
+                _FavouriteButton(trackId: track.id),
+                const SizedBox(width: AriaSpace.s5),
+              ],
               IconButton(
                 icon: const Icon(Icons.lyrics_outlined),
                 color: c.fgDim,

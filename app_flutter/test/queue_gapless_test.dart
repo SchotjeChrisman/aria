@@ -110,7 +110,7 @@ void main() {
   test('natural EOF advances via trackStarted without a reload', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2'), track('t3')], 0);
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     // t1 ends, engine slides into the prefetched t2 — mpv playlist pos 1.
@@ -129,7 +129,7 @@ void main() {
   test('EOF of the last track just stops; queue position is kept', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2')], 1); // start at the last track
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     fake.events.addAll([endFileEof, idle]);
@@ -145,7 +145,7 @@ void main() {
   test('manual next() replaces the load (hard skip, not gapless)', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2'), track('t3')], 0);
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     q.next();
@@ -156,7 +156,7 @@ void main() {
   test('queue edits re-sync the engine queued-next', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2')], 0);
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     // Insert t9 right after the current track: pending must become t9.
@@ -201,7 +201,7 @@ void main() {
   test('loop one queues the current track again and repeats gaplessly', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2')], 0);
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     q.cycleLoop(); // off -> all
@@ -235,7 +235,7 @@ void main() {
   test('loop all on the last track queues track 0 and wraps gaplessly', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2')], 1); // last track
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
     expect(fake.log.where((l) => l.contains('append')), isEmpty);
 
@@ -257,7 +257,7 @@ void main() {
   test('manual next() on the last track wraps with loop all', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2')], 1);
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     q.cycleLoop(); // off -> all
@@ -269,7 +269,7 @@ void main() {
   test('manual next() on the last track with loop off stops as before', () {
     final q = container.read(queueProvider.notifier);
     q.playQueue([track('t1'), track('t2')], 1);
-    fake.events.addAll([startFile, prop('playlist-pos', 0)]);
+    fake.events.addAll([startFile, prop('playlist-pos', 0), prop('time-pos', 3.0)]);
     player.debugPoll();
 
     q.next();
