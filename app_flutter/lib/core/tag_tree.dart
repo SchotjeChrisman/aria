@@ -1,8 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 
-/// Pure ports of the legacy tag-hierarchy helpers (app.js tagById /
-/// tagChainNames / tagPath / tagKids / tagWithDescendants / tagHas).
-/// Tags nest via .parent (tag id); parents match all descendants' items.
+/// Tag helpers. Tags live in one-level folders: `.parent` is the folder id
+/// (null = no folder). A folder (`.folder == true`) holds tags, never items.
 
 Tag? tagById(List<Tag> all, String? id) {
   if (id == null) return null;
@@ -48,3 +47,21 @@ bool tagHas(Tag tag, String kind, String key) =>
 /// Tags sorted by full path, the pick-list order used everywhere in legacy.
 List<Tag> tagsByPath(List<Tag> all) =>
     [...all]..sort((a, b) => tagPath(all, a).compareTo(tagPath(all, b)));
+
+/// Folders (top-level rows flagged as folders), by name.
+List<Tag> folders(List<Tag> all) => [
+  for (final t in all)
+    if (t.folder) t,
+]..sort((a, b) => a.name.compareTo(b.name));
+
+/// Plain tags with no folder (top level), by name.
+List<Tag> looseTags(List<Tag> all) => [
+  for (final t in all)
+    if (!t.folder && t.parent == null) t,
+]..sort((a, b) => a.name.compareTo(b.name));
+
+/// Plain tags inside a folder, by name.
+List<Tag> tagsInFolder(List<Tag> all, String folderId) => [
+  for (final t in all)
+    if (!t.folder && t.parent == folderId) t,
+]..sort((a, b) => a.name.compareTo(b.name));

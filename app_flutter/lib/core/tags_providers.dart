@@ -19,10 +19,11 @@ class TagsNotifier extends AsyncNotifier<List<Tag>> {
     await future;
   }
 
-  Future<Tag> create(String name, {String? parent}) async {
+  /// `parent` is a folder id; pass `folder: true` to create a folder.
+  Future<Tag> create(String name, {String? parent, bool folder = false}) async {
     final tag = await ref
         .read(apiClientProvider)
-        .createTag(name, parent: parent);
+        .createTag(name, parent: parent, folder: folder);
     await refresh();
     return tag;
   }
@@ -32,9 +33,9 @@ class TagsNotifier extends AsyncNotifier<List<Tag>> {
     await refresh();
   }
 
-  /// null parent = move to top level.
-  Future<void> setParent(String id, String? parent) async {
-    await ref.read(apiClientProvider).updateTag(id, parent: parent);
+  /// Assign a tag to a folder; null = no folder (top level).
+  Future<void> setFolder(String id, String? folderId) async {
+    await ref.read(apiClientProvider).updateTag(id, parent: folderId);
     await refresh();
   }
 

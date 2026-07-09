@@ -65,10 +65,14 @@ class Shelf extends StatelessWidget {
           // rail/padding) drives the card size, not the window width.
           builder: (context, box) {
             const gap = AriaSpace.s6;
-            // Band-fixed visible cards + a half-card peek to signal
-            // scrollability — same layout on every phone in the band.
-            final n = AriaBreakpoint.of(context).gridColumns;
-            final w = itemWidth ?? (box.maxWidth - n * gap) / (n + 0.5);
+            // Band-fixed visible cards. Mobile shows exactly 3 full cards
+            // (no peek — requested); wider bands keep the half-card peek that
+            // signals scrollability. gridColumns stays 2 on mobile (it drives
+            // the 2-col grid pages), so shelf count is decided here.
+            final band = AriaBreakpoint.of(context);
+            final n = band == AriaBreakpoint.mobile ? 3 : band.gridColumns;
+            final peek = band == AriaBreakpoint.mobile ? 0.0 : 0.5;
+            final w = itemWidth ?? (box.maxWidth - n * gap) / (n + peek);
             return SizedBox(
               height: itemWidth == null ? height + (w - _designWidth) : height,
               child: ListView.separated(

@@ -19,7 +19,7 @@ import 'signal_path.dart';
 
 /// Expanded now-playing (legacy #np-overlay): big art + title/sub + signal
 /// path with full-size transport controls inline. Lyrics and queue are their
-/// own screens, reachable from the app bar.
+/// own screens, reachable from the bottom controls (thumb-reachable on mobile).
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key});
 
@@ -37,19 +37,6 @@ class NowPlayingScreen extends ConsumerWidget {
           tooltip: 'Close',
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.lyrics_outlined),
-            tooltip: 'Lyrics',
-            onPressed: track == null ? null : () => context.push('/lyrics'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.queue_music),
-            tooltip: 'Queue',
-            onPressed: () => context.push('/queue'),
-          ),
-          const SizedBox(width: AriaSpace.s2),
-        ],
       ),
       body: track == null
           ? const EmptyState(message: 'Nothing playing.')
@@ -182,8 +169,9 @@ class _Meta extends ConsumerWidget {
 }
 
 /// Full-size transport for the expanded screen: seek with times, shuffle,
-/// prev / big play / next, repeat. The persistent bar stays on the shell;
-/// this replaces it here.
+/// prev / big play / next, repeat, plus lyrics/queue links below (moved off
+/// the app bar so they sit thumb-reachable under the transport). The
+/// persistent bar stays on the shell; this replaces it here.
 class _Controls extends ConsumerWidget {
   const _Controls();
 
@@ -246,6 +234,26 @@ class _Controls extends ConsumerWidget {
                 color: loop != LoopMode.off ? c.accent : c.fgDim,
                 tooltip: 'Repeat',
                 onPressed: queue.cycleLoop,
+              ),
+            ],
+          ),
+          Row(
+            // Lyrics + queue, moved off the app bar to sit under the transport
+            // where a thumb reaches on mobile. Same push targets as before.
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.lyrics_outlined),
+                color: c.fgDim,
+                tooltip: 'Lyrics',
+                onPressed: () => context.push('/lyrics'),
+              ),
+              const SizedBox(width: AriaSpace.s5),
+              IconButton(
+                icon: const Icon(Icons.queue_music),
+                color: c.fgDim,
+                tooltip: 'Queue',
+                onPressed: () => context.push('/queue'),
               ),
             ],
           ),

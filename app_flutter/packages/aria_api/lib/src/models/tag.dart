@@ -15,19 +15,23 @@ class TagItem {
   Map<String, dynamic> toJson() => {'kind': kind, 'key': key};
 }
 
-/// Roon-style nestable user label. Parent tags match all descendants' items.
+/// User label. Tags live in one-level folders: `parent` is the folder id (null
+/// = no folder). A folder is a tag with `folder == true` that holds tags, not
+/// items — folders never nest.
 class Tag {
   const Tag({
     required this.id,
     required this.name,
     this.parent,
+    this.folder = false,
     this.items = const [],
     this.createdAt,
   });
 
   final String id;
   final String name;
-  final String? parent; // parent tag id
+  final String? parent; // folder id (one level), null = no folder
+  final bool folder; // a folder holds tags, never items
   final List<TagItem> items;
   final String? createdAt;
 
@@ -35,6 +39,7 @@ class Tag {
         id: j['id'] as String,
         name: j['name'] as String,
         parent: asString(j['parent']),
+        folder: j['folder'] == true,
         items: j['items'] is List
             ? (j['items'] as List)
                 .whereType<Map<String, dynamic>>()

@@ -26,14 +26,16 @@ Future<void> showTagPicker(
           shrinkWrap: true,
           children: [
             for (final tag in tagsByPath(all))
-              ListTile(
-                title: Text(tagPath(all, tag)),
-                trailing: tagHas(tag, kind, key)
-                    ? Icon(Icons.check, color: c.accent)
-                    : null,
-                onTap: () =>
-                    ref.read(tagsProvider.notifier).toggleItem(tag, kind, key),
-              ),
+              if (!tag.folder)
+                ListTile(
+                  title: Text(tagPath(all, tag)),
+                  trailing: tagHas(tag, kind, key)
+                      ? Icon(Icons.check, color: c.accent)
+                      : null,
+                  onTap: () => ref
+                      .read(tagsProvider.notifier)
+                      .toggleItem(tag, kind, key),
+                ),
             ListTile(
               leading: const Icon(Icons.add, size: 18),
               title: Text(all.isEmpty ? 'New tag…' : '＋ New tag…'),
@@ -89,13 +91,14 @@ Future<void> showBulkTagMenu(
           shrinkWrap: true,
           children: [
             for (final tag in tagsByPath(all))
-              ListTile(
-                title: Text(tagPath(all, tag)),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  ref.read(tagsProvider.notifier).applyToItems(tag, items);
-                },
-              ),
+              if (!tag.folder)
+                ListTile(
+                  title: Text(tagPath(all, tag)),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ref.read(tagsProvider.notifier).applyToItems(tag, items);
+                  },
+                ),
             ListTile(
               leading: const Icon(Icons.add, size: 18),
               title: Text(all.isEmpty ? 'New tag…' : '＋ New tag…'),

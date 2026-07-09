@@ -71,22 +71,11 @@ func dupTag(tags []repo.Tag, name, skipID string) bool {
 	return false
 }
 
-// tagParentOk: walking up from parentID must never reach the tag itself (also
-// rejects unknown ids, broken chains, and pre-existing cycles — the seen map
-// keeps a racily/verbatim-imported parent cycle from spinning forever).
-func tagParentOk(tags []repo.Tag, selfID, parentID string) bool {
-	seen := map[string]bool{}
-	for p := tagIn(tags, parentID); p != nil && !seen[p.ID]; {
-		if p.ID == selfID {
-			return false
-		}
-		seen[p.ID] = true
-		if p.Parent == nil {
-			return true
-		}
-		p = tagIn(tags, *p.Parent)
-	}
-	return false
+// tagFolderOk: one-level rule — a tag's folder must be an existing top-level
+// folder, and never the tag itself. No nesting means no cycle walk.
+func tagFolderOk(tags []repo.Tag, selfID, folderID string) bool {
+	f := tagIn(tags, folderID)
+	return f != nil && f.ID != selfID && f.Folder && f.Parent == nil
 }
 
 func registerTags(mux *http.ServeMux, d *Deps) {
@@ -121,16 +110,21 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusBadRequest, "tag exists")
 			return
 		}
+		folder, _ := body["folder"].(bool)
 		var parent *string
 		if pv, present := body["parent"]; present && pv != nil {
 			s, isStr := pv.(string)
-			if !isStr || tagIn(tags, s) == nil {
-				httpError(w, http.StatusBadRequest, "unknown parent")
+			if !isStr || !tagFolderOk(tags, "", s) {
+				httpError(w, http.StatusBadRequest, "invalid folder")
 				return
 			}
 			parent = &s
 		}
-		tag := repo.Tag{ID: newID(), Name: name, Parent: parent, Items: []repo.TagItem{}, CreatedAt: nowISO()}
+		if folder && parent != nil { // folders can't nest
+			httpError(w, http.StatusBadRequest, "folders cannot be foldered")
+			return
+		}
+		tag := repo.Tag{ID: newID(), Name: name, Parent: parent, Folder: folder, Items: []repo.TagItem{}, CreatedAt: nowISO()}
 		if err := d.Tags.Create(r.Context(), tag); err != nil {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
@@ -175,10 +169,13 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 		if hasParent {
 			if parentV == nil {
 				parent = nil
+			} else if tag.Folder { // folders stay at top level
+				httpError(w, http.StatusBadRequest, "folders cannot be foldered")
+				return
 			} else {
 				s, isStr := parentV.(string)
-				if !isStr || !tagParentOk(tags, tag.ID, s) {
-					httpError(w, http.StatusBadRequest, "invalid parent") // unknown, self, or a cycle
+				if !isStr || !tagFolderOk(tags, tag.ID, s) {
+					httpError(w, http.StatusBadRequest, "invalid folder") // unknown, self, or not a folder
 					return
 				}
 				parent = &s
@@ -220,6 +217,10 @@ func registerTags(mux *http.ServeMux, d *Deps) {
 		}
 		if tag == nil {
 			notFound(w)
+			return
+		}
+		if tag.Folder { // folders hold tags, not items
+			httpError(w, http.StatusBadRequest, "cannot tag into a folder")
 			return
 		}
 		body, ok := bodyMap(w, r)

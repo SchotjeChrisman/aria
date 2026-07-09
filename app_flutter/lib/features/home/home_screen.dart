@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/connection.dart';
 import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
+import '../../widgets/art_image.dart';
+import '../../widgets/artist_avatar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_cards.dart';
 import '../../widgets/new_releases_shelf.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
+import '../library/library_providers.dart' show composersProvider;
 import 'home_providers.dart';
 
 /// Legacy renderHome: stat strip, Recently Added, New Releases, Recently
@@ -67,12 +71,12 @@ class _HomeBody extends ConsumerWidget {
         const SizedBox(height: AriaSpace.s4),
         _StatStrip(tracks: tracks, albumCount: albums.length),
         const SizedBox(height: AriaSpace.s6),
+        const NewReleasesShelf(),
+        const SizedBox(height: AriaSpace.s6),
         if (added.isNotEmpty) ...[
           _AlbumShelf(title: 'Recently Added', albums: added.take(20).toList()),
           const SizedBox(height: AriaSpace.s6),
         ],
-        const NewReleasesShelf(),
-        const SizedBox(height: AriaSpace.s6),
         ..._playShelves(context, ref, stats),
       ],
     );
@@ -146,60 +150,69 @@ class _HomeBody extends ConsumerWidget {
   }
 }
 
-/// Legacy stat strip: Albums / Tracks / Artists / Genres / Of music.
-class _StatStrip extends StatelessWidget {
+/// Four equal-width tiles spanning the full width: Composers / Performers /
+/// Releases / Compositions. Counts derive from the loaded library cache.
+class _StatStrip extends ConsumerWidget {
   const _StatStrip({required this.tracks, required this.albumCount});
 
   final List<Track> tracks;
   final int albumCount;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
-    final artists = <String>{
-      for (final t in tracks) ...[
-        if ((t.artist ?? '').isNotEmpty) t.artist!,
-        if ((t.albumArtist ?? '').isNotEmpty) t.albumArtist!,
-      ],
+    final composers = ref.watch(composersProvider);
+    final performers = <String>{
+      for (final t in tracks)
+        for (final p in t.performers)
+          if (p.name.isNotEmpty) p.name,
     };
-    final genres = <String>{for (final t in tracks) ...t.genres};
-    final secs = tracks.fold<double>(0, (s, t) => s + (t.duration ?? 0));
+    final compositions = <String>{for (final e in composers) ...e.works};
 
-    Widget tile(String num, String label) => Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AriaSpace.s5,
-        vertical: AriaSpace.s4,
-      ),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            num,
-            style: TextStyle(
-              fontSize: 20,
-              color: c.fg,
-              fontFeatures: const [FontFeature.tabularFigures()],
+    Widget tile(String num, String label) => Expanded(
+      child: Container(
+        // Equal-width under Expanded; vertical padding only so tiles stretch
+        // to fill their share of the row.
+        padding: const EdgeInsets.symmetric(
+          horizontal: AriaSpace.s3,
+          vertical: AriaSpace.s4,
+        ),
+        decoration: BoxDecoration(
+          color: c.bgRaised,
+          borderRadius: BorderRadius.circular(AriaRadius.md),
+          border: Border.all(color: c.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              num,
+              style: TextStyle(
+                fontSize: 18,
+                color: c.fg,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
     );
 
-    return Wrap(
-      spacing: AriaSpace.s3,
-      runSpacing: AriaSpace.s3,
+    return Row(
       children: [
-        tile('$albumCount', 'Albums'),
-        tile('${tracks.length}', 'Tracks'),
-        tile('${artists.length}', 'Artists'),
-        tile('${genres.length}', 'Genres'),
-        tile(fmtHm(secs), 'Of music'),
+        tile('${composers.length}', 'Composers'),
+        const SizedBox(width: AriaSpace.s2),
+        tile('${performers.length}', 'Performers'),
+        const SizedBox(width: AriaSpace.s2),
+        tile('$albumCount', 'Releases'),
+        const SizedBox(width: AriaSpace.s2),
+        tile('${compositions.length}', 'Compositions'),
       ],
     );
   }
@@ -250,6 +263,8 @@ class _Listening extends ConsumerWidget {
     final hist = stats.history;
     if (hist.isEmpty) return const SizedBox.shrink(); // nothing in 30 days
     final byId = ref.watch(trackByIdProvider);
+    final people = ref.watch(peopleProvider).value ?? const {};
+    final api = ref.watch(apiClientProvider);
 
     // Bucket in the viewer's timezone — the server hands raw timestamps.
     String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
@@ -308,42 +323,56 @@ class _Listening extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AriaSpace.s3),
-          Wrap(
-            spacing: AriaSpace.s5,
-            runSpacing: AriaSpace.s5,
-            children: [
-              _ChartBox(
-                title: 'Plays · last 30 days',
-                values: [for (final d in days.values) d.n],
-              ),
-              _ChartBox(title: 'By hour of day', values: hours),
-              _MiniList(
-                title: 'Top artists · 30 days',
-                rows: [
-                  for (final e in topArtists)
-                    (
-                      label: e.key,
-                      sub: null,
-                      n: e.value,
-                      onTap: () => context.push(artistPath(e.key)),
-                    ),
-                ],
-              ),
-              _MiniList(
-                title: 'Top tracks · 30 days',
-                rows: [
-                  for (final x in topTracks)
-                    (
-                      label: x.track.title ?? '—',
-                      sub: x.track.artist,
-                      n: x.n,
-                      onTap: () => ref.read(queueProvider.notifier).playQueue([
-                        x.track,
-                      ], 0),
-                    ),
-                ],
-              ),
-            ],
+          // Full-width horizontal slider — one card per page.
+          SizedBox(
+            height: 248,
+            child: PageView(
+              controller: PageController(viewportFraction: 0.92),
+              children: [
+                _ChartBox(
+                  title: 'Plays · last 30 days',
+                  values: [for (final d in days.values) d.n],
+                ),
+                _ChartBox(title: 'By hour of day', values: hours),
+                _MiniList(
+                  title: 'Top artists · 30 days',
+                  rows: [
+                    for (final e in topArtists)
+                      (
+                        label: e.key,
+                        sub: null,
+                        n: e.value,
+                        leading: ArtistAvatar(
+                          name: e.key,
+                          imageUrl: people[e.key],
+                          size: 28,
+                        ),
+                        onTap: () => context.push(artistPath(e.key)),
+                      ),
+                  ],
+                ),
+                _MiniList(
+                  title: 'Top tracks · 30 days',
+                  rows: [
+                    for (final x in topTracks)
+                      (
+                        label: x.track.title ?? '—',
+                        sub: x.track.artist,
+                        n: x.n,
+                        leading: ArtImage(
+                          url: api.artUrl(x.track.albumId),
+                          fallbackText: x.track.title,
+                          size: 28,
+                          borderRadius: AriaRadius.sm,
+                        ),
+                        onTap: () => ref.read(queueProvider.notifier).playQueue([
+                          x.track,
+                        ], 0),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -362,7 +391,7 @@ class _ChartBox extends StatelessWidget {
     final c = AriaColors.of(context);
     final max = values.fold<int>(1, (m, v) => v > m ? v : m);
     return Container(
-      width: 320,
+      margin: const EdgeInsets.only(right: AriaSpace.s3),
       padding: const EdgeInsets.all(AriaSpace.s4),
       decoration: BoxDecoration(
         color: c.bgRaised,
@@ -387,7 +416,7 @@ class _ChartBox extends StatelessWidget {
                         heightFactor: v == 0 ? 0.04 : (v / max).clamp(0.04, 1),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: v == 0 ? c.line : c.fgDim,
+                            color: v == 0 ? c.line : c.accent,
                             borderRadius: BorderRadius.circular(1.5),
                           ),
                         ),
@@ -407,13 +436,16 @@ class _MiniList extends StatelessWidget {
   const _MiniList({required this.title, required this.rows});
 
   final String title;
-  final List<({String label, String? sub, int n, VoidCallback onTap})> rows;
+  final List<
+    ({String label, String? sub, int n, Widget leading, VoidCallback onTap})
+  >
+  rows;
 
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     return Container(
-      width: 320,
+      margin: const EdgeInsets.only(right: AriaSpace.s3),
       padding: const EdgeInsets.all(AriaSpace.s4),
       decoration: BoxDecoration(
         color: c.bgRaised,
@@ -443,6 +475,8 @@ class _MiniList extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
+                      r.leading,
+                      const SizedBox(width: AriaSpace.s2),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

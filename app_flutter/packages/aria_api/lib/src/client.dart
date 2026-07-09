@@ -69,9 +69,9 @@ class AriaClient {
 
   /// Candidate booklet PDF names in the album's directory, best first;
   /// empty when none. Each name feeds [bookletUrl].
-  Future<List<String>> booklets(String albumId) async => asStringList(asMap(
-          await _get('/api/albums/${Uri.encodeComponent(albumId)}/booklets'))[
-      'booklets']);
+  Future<List<String>> booklets(String albumId) async => asStringList(
+      asMap(await _get('/api/albums/${Uri.encodeComponent(albumId)}/booklets'))[
+          'booklets']);
 
   // ---- plumbing
 
@@ -249,13 +249,16 @@ class AriaClient {
   Future<List<Tag>> tags() async =>
       _list(await _get('/api/tags'), Tag.fromJson);
 
-  Future<Tag> createTag(String name, {String? parent}) async =>
+  /// `parent` is a folder id; pass `folder: true` to create a folder instead.
+  Future<Tag> createTag(String name,
+          {String? parent, bool folder = false}) async =>
       Tag.fromJson(asMap(await _post('/api/tags', {
         'name': name,
         'parent': parent,
+        'folder': folder,
       })));
 
-  /// Pass `parent: null` explicitly to move a tag to top level.
+  /// Pass `parent: null` explicitly to move a tag out of its folder.
   Future<Tag> updateTag(String id,
           {String? name, Object? parent = unset}) async =>
       Tag.fromJson(asMap(await _patch('/api/tags/${Uri.encodeComponent(id)}', {

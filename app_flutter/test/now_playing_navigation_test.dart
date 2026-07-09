@@ -5,7 +5,9 @@ import 'package:aria/core/router.dart';
 import 'package:aria/core/theme.dart';
 import 'package:aria/features/album/album_page.dart';
 import 'package:aria/features/artist/artist_page.dart';
+import 'package:aria/features/now_playing/lyrics_view.dart';
 import 'package:aria/features/now_playing/now_playing_screen.dart';
+import 'package:aria/features/now_playing/queue_screen.dart';
 import 'package:aria/widgets/art_image.dart';
 import 'package:aria_api/aria_api.dart';
 import 'package:aria_player/aria_player.dart';
@@ -130,6 +132,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ArtistPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
+
+  testWidgets('lyrics button (bottom controls) opens the lyrics screen', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [track], 0);
+    container.read(routerProvider).push('/now-playing');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.lyrics_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LyricsScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
+
+  testWidgets('queue button (bottom controls) opens the queue screen', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [track], 0);
+    container.read(routerProvider).push('/now-playing');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.queue_music));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QueueScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
+
+  testWidgets('now-playing does not overflow on a short window', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 560);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [track], 0);
+    container.read(routerProvider).push('/now-playing');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NowPlayingScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
     await cleanup(tester);
   });
