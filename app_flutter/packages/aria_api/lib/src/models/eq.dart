@@ -40,18 +40,21 @@ class EqProfile {
   const EqProfile({
     this.name,
     this.author,
+    this.details,
     this.gainDb = 0,
     this.bands = const [],
   });
 
   final String? name;
   final String? author;
+  final String? details;
   final double gainDb;
   final List<EqBand> bands;
 
   factory EqProfile.fromJson(Map<String, dynamic> j) => EqProfile(
         name: asString(j['name']),
         author: asString(j['author']),
+        details: asString(j['details']),
         gainDb: asDouble(j['gainDb']) ?? 0,
         bands: [
           for (final b in (j['bands'] as List? ?? const []))
@@ -62,6 +65,7 @@ class EqProfile {
   Map<String, dynamic> toJson() => {
         if (name != null) 'name': name,
         if (author != null) 'author': author,
+        if (details != null) 'details': details,
         'gainDb': gainDb,
         'bands': [for (final b in bands) b.toJson()],
       };

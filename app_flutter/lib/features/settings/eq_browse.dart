@@ -27,17 +27,38 @@ Widget _status(AsyncValue<Object?> opra, String loadingMsg) => opra.when(
   ),
 );
 
-/// A searchable ListView scaffold; [items] rebuilt from [query] by the caller.
+/// OPRA vendor strings for the big brands, pinned to the top of the empty-query
+/// Brands list (exact strings, all verified present in the feed).
+const _pinnedBrands = [
+  'Sennheiser',
+  'Sony',
+  'Beyerdynamic',
+  'Audio-Technica',
+  'HIFIMAN',
+  'AKG',
+  'Apple',
+  'Bose',
+  'Beats',
+  'JBL',
+  'Audeze',
+  'Focal',
+  'ZMF',
+];
+
+/// A searchable ListView scaffold; [builder] rebuilds rows from the query. When
+/// [pinned] is set, its rows show above a divider on the empty query only.
 class _SearchList extends StatefulWidget {
   const _SearchList({
     required this.title,
     required this.hint,
     required this.builder,
+    this.pinned,
   });
 
   final String title;
   final String hint;
   final List<Widget> Function(String query) builder;
+  final List<Widget> Function()? pinned;
 
   @override
   State<_SearchList> createState() => _SearchListState();
@@ -46,8 +67,24 @@ class _SearchList extends StatefulWidget {
 class _SearchListState extends State<_SearchList> {
   String _query = '';
 
+  static const _maxRows = 50;
+
   @override
   Widget build(BuildContext context) {
+    final rows = widget.builder(_query);
+    final capped = rows.length > _maxRows
+        ? [
+            ...rows.take(_maxRows),
+            ListTile(
+              enabled: false,
+              title: Text(
+                '＋${rows.length - _maxRows} more — refine your search',
+                style: TextStyle(color: Theme.of(context).disabledColor),
+              ),
+            ),
+          ]
+        : rows;
+    final showPinned = _query.isEmpty && widget.pinned != null;
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: Column(
@@ -63,7 +100,10 @@ class _SearchListState extends State<_SearchList> {
             ),
           ),
           Expanded(
-            child: ListView(children: widget.builder(_query)),
+            child: ListView(children: [
+              if (showPinned) ...[...widget.pinned!(), const Divider()],
+              ...capped,
+            ]),
           ),
         ],
       ),
@@ -82,24 +122,30 @@ class EqBrandsScreen extends ConsumerWidget {
       data: (products) =>
           {for (final p in products) p.vendor}.toList()..sort(),
     );
+    ListTile brandTile(String v) => ListTile(
+          title: Text(v),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EqHeadphonesScreen(vendor: v),
+            ),
+          ),
+        );
     return _SearchList(
       title: 'Choose brand',
       hint: 'Search brands…',
+      pinned: vendors == null
+          ? null
+          : () => [
+                for (final v in _pinnedBrands)
+                  if (vendors.contains(v)) brandTile(v),
+              ],
       builder: (query) => vendors == null
           ? [_status(opra, 'Loading the OPRA database…')]
           : [
               for (final v in vendors)
-                if (v.toLowerCase().contains(query))
-                  ListTile(
-                    title: Text(v),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EqHeadphonesScreen(vendor: v),
-                      ),
-                    ),
-                  ),
+                if (v.toLowerCase().contains(query)) brandTile(v),
             ],
     );
   }
@@ -176,6 +222,7 @@ class EqCurvesScreen extends ConsumerWidget {
                 final fav = favourites.any((f) => f.name == name);
                 return ListTile(
                   title: Text(e.author ?? 'unknown'),
+                  subtitle: e.details == null ? null : Text(e.details!),
                   trailing: IconButton(
                     icon: Icon(fav ? Icons.star : Icons.star_border),
                     onPressed: () => ref
@@ -192,10 +239,12 @@ class EqCurvesScreen extends ConsumerWidget {
 }
 
 String _curveName(OpraProduct p, EqProfile e) =>
-    '${p.vendor} ${p.product} · ${e.author ?? 'unknown'}';
+    '${p.vendor} ${p.product} · ${e.author ?? 'unknown'}'
+    '${e.details == null ? '' : ' (${e.details})'}';
 
 EqProfile _named(OpraProduct p, EqProfile e) => EqProfile(
   name: _curveName(p, e),
+  details: e.details,
   gainDb: e.gainDb,
   bands: e.bands,
 );
