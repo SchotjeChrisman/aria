@@ -14,7 +14,6 @@ import '../../widgets/library_cards.dart';
 import '../../widgets/new_releases_shelf.dart';
 import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
-import '../library/library_providers.dart' show composersProvider;
 import 'home_providers.dart';
 
 /// Legacy renderHome: stat strip, Recently Added, New Releases, Recently
@@ -152,22 +151,34 @@ class _HomeBody extends ConsumerWidget {
 
 /// Four equal-width tiles spanning the full width: Composers / Performers /
 /// Releases / Compositions. Counts derive from the loaded library cache.
-class _StatStrip extends ConsumerWidget {
+class _StatStrip extends StatelessWidget {
   const _StatStrip({required this.tracks, required this.albumCount});
 
   final List<Track> tracks;
   final int albumCount;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final c = AriaColors.of(context);
-    final composers = ref.watch(composersProvider);
+    // All tracks, not just classical-shaped ones: every distinct composer tag.
+    final composers = <String>{
+      for (final t in tracks)
+        if (t.composer?.isNotEmpty ?? false) t.composer!,
+    };
     final performers = <String>{
       for (final t in tracks)
         for (final p in t.performers)
           if (p.name.isNotEmpty) p.name,
     };
-    final compositions = <String>{for (final e in composers) ...e.works};
+    // A composition is the work; tracks with no work tag (most non-classical)
+    // fall back to their title so every track contributes one.
+    final compositions = <String>{
+      for (final t in tracks)
+        if (t.work?.isNotEmpty ?? false)
+          t.work!
+        else if (t.title?.isNotEmpty ?? false)
+          t.title!,
+    };
 
     Widget tile(String num, String label) => Expanded(
       child: Container(
