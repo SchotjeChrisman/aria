@@ -3,7 +3,7 @@ description: "Aria v2 — self-hosted lossless music player (Flutter client)."
 publish_to: 'none'
 
 # build number tracks release count — Android needs it rising to update in place
-version: 2.6.0+7
+version: 2.7.0+8
 
 environment:
   sdk: ^3.12.0
