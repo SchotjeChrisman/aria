@@ -12,6 +12,7 @@ class Shelf extends StatelessWidget {
     required this.itemCount,
     required this.itemBuilder,
     this.itemWidth,
+    this.mobileColumns = 3,
     this.onSeeAll,
   });
 
@@ -33,6 +34,10 @@ class Shelf extends StatelessWidget {
   /// shelf layout. Shelves whose cards hold fixed-size content (e.g.
   /// avatar discs) pass an explicit width.
   final double? itemWidth;
+
+  /// Full cards shown on a mobile-width band (no peek). Album shelves keep 3;
+  /// denser content (artist avatars) passes more.
+  final int mobileColumns;
   final VoidCallback? onSeeAll;
 
   @override
@@ -70,9 +75,16 @@ class Shelf extends StatelessWidget {
             // signals scrollability. gridColumns stays 2 on mobile (it drives
             // the 2-col grid pages), so shelf count is decided here.
             final band = AriaBreakpoint.of(context);
-            final n = band == AriaBreakpoint.mobile ? 3 : band.gridColumns;
+            final n = band == AriaBreakpoint.mobile
+                ? mobileColumns
+                : band.gridColumns;
             final peek = band == AriaBreakpoint.mobile ? 0.0 : 0.5;
-            final w = itemWidth ?? (box.maxWidth - n * gap) / (n + peek);
+            // Gaps rendered between the visible cards: one per full card when a
+            // half-card peeks after them, one fewer when the row ends flush
+            // (peek == 0) — else the cards under-fill and leave a gap of slack
+            // at the right edge.
+            final gaps = peek > 0 ? n : n - 1;
+            final w = itemWidth ?? (box.maxWidth - gaps * gap) / (n + peek);
             return SizedBox(
               height: itemWidth == null ? height + (w - _designWidth) : height,
               child: ListView.separated(

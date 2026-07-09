@@ -16,6 +16,7 @@ import '../../widgets/shelf.dart';
 import '../../widgets/track_actions.dart';
 import '../../widgets/track_row.dart';
 import 'providers.dart';
+import 'tag_grid.dart';
 import 'tag_tree.dart';
 
 /// Legacy renderTag(): a parent tag page shows everything under it,
@@ -52,6 +53,31 @@ class TagScreen extends ConsumerWidget {
   ) {
     final tag = tagById(all, id);
     if (tag == null) return const EmptyState(message: 'Tag not found.');
+
+    // Folder page: just its tags as a grid — folders hold tags, not items.
+    if (tag.folder) {
+      final inFolder = tagsInFolder(all, tag.id);
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AriaSpace.s6,
+          0,
+          AriaSpace.s6,
+          AriaSpace.s6,
+        ),
+        children: [
+          Text(tag.name, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: AriaSpace.s5),
+          if (inFolder.isEmpty)
+            const EmptyState(
+              message: 'This folder is empty — right-click / long-press a tag '
+                  'and pick "Move to folder…".',
+            )
+          else
+            TagGrid(all: all, tags: inFolder),
+        ],
+      );
+    }
+
     final c = AriaColors.of(context);
     final client = ref.watch(apiClientProvider);
     final currentId = ref.watch(currentTrackProvider)?.id;
