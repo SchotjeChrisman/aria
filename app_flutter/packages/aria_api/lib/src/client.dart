@@ -282,6 +282,11 @@ class AriaClient {
           '/api/tags/${Uri.encodeComponent(id)}/items',
           {'kind': kind, 'key': key})));
 
+  /// Set the independent favourite flag on a track.
+  Future<void> setFavourite(String id, bool favourite) async => _put(
+      '/api/tracks/${Uri.encodeComponent(id)}/favourite',
+      {'favourite': favourite});
+
   // ---- metadata edits (DB overrides; a null field value clears the override)
 
   Future<Map<String, dynamic>> patchTrack(

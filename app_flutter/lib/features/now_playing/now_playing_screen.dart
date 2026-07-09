@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/connection.dart';
 import '../../core/formats.dart';
+import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
@@ -37,6 +38,7 @@ class NowPlayingScreen extends ConsumerWidget {
           tooltip: 'Close',
           onPressed: () => context.pop(),
         ),
+        actions: [if (track != null) _FavouriteButton(trackId: track.id)],
       ),
       body: track == null
           ? const EmptyState(message: 'Nothing playing.')
@@ -68,6 +70,26 @@ class NowPlayingScreen extends ConsumerWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+/// Dedicated ♥ toggle for the current track (independent favourite flag).
+class _FavouriteButton extends ConsumerWidget {
+  const _FavouriteButton({required this.trackId});
+
+  final String trackId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = AriaColors.of(context);
+    final fav = ref.watch(favouriteIdsProvider).contains(trackId);
+    return IconButton(
+      icon: Icon(fav ? Icons.favorite : Icons.favorite_border),
+      color: fav ? c.accent : c.fgDim,
+      tooltip: fav ? 'Remove from favourites' : 'Add to favourites',
+      onPressed: () =>
+          ref.read(favouriteIdsProvider.notifier).toggle(trackId),
     );
   }
 }

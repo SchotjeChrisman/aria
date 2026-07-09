@@ -37,6 +37,7 @@ class Track {
     this.channels,
     this.lossless = false,
     this.hasArt = false,
+    this.favourite = false,
     this.composer,
     this.conductor,
     this.orchestra,
@@ -72,6 +73,7 @@ class Track {
   final bool lossless;
 
   final bool hasArt;
+  final bool favourite; // independent per-track flag (not a tag)
   final String? composer;
   final String? conductor;
   final String? orchestra;
@@ -110,6 +112,7 @@ class Track {
         channels: asInt(j['channels']),
         lossless: asBool(j['lossless']),
         hasArt: asBool(j['hasArt']),
+        favourite: asBool(j['favourite']),
         composer: asString(j['composer']),
         conductor: asString(j['conductor']),
         orchestra: asString(j['orchestra']),

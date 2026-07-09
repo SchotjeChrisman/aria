@@ -316,6 +316,7 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 			"duration":        ptrVal(t.Duration), "format": t.Format,
 			"sampleRate": ptrVal(t.SampleRate), "bitsPerSample": ptrVal(t.BitsPerSample),
 			"channels": ptrVal(t.Channels), "lossless": t.Lossless, "hasArt": t.HasArt,
+			"favourite": t.Favourite,
 		}
 		if raw, ok := enrichTrack[t.ID]; ok {
 			overlay(m, raw) // composer/conductor/orchestra/performers corrections
@@ -501,6 +502,31 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 			out = out[:limit]
 		}
 		writeJSON(w, http.StatusOK, out)
+	})
+
+	// Independent favourite flag: PUT {favourite: bool}. Mirrors the tag-item
+	// mutation pattern — set, invalidate the merged view, echo the new state.
+	mux.HandleFunc("PUT /api/tracks/{id}/favourite", func(w http.ResponseWriter, r *http.Request) {
+		t, err := d.Tracks.ByID(r.Context(), r.PathValue("id"))
+		if err != nil {
+			httpError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if t == nil {
+			notFound(w)
+			return
+		}
+		body, ok := bodyMap(w, r)
+		if !ok {
+			return
+		}
+		fav, _ := body["favourite"].(bool)
+		if err := d.Tracks.SetFavourite(r.Context(), t.ID, fav); err != nil {
+			httpError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		d.InvalidateTracks()
+		writeJSON(w, http.StatusOK, map[string]any{"favourite": fav})
 	})
 
 	mux.HandleFunc("GET /api/genres", func(w http.ResponseWriter, r *http.Request) {

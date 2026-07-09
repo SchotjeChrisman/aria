@@ -38,12 +38,14 @@ bool pass(
   TrackFilters f, {
   Map<String, String?> parents = const {},
   TagNameIndex tagIndex = emptyTags,
+  Set<String> favouriteIds = const {},
   Map<String, int>? counts,
 }) => trackPassesFilters(
   track,
   f,
   genreParents: parents,
   tagIndex: tagIndex,
+  favouriteIds: favouriteIds,
   playCounts: counts,
 );
 
@@ -110,6 +112,14 @@ void main() {
         pass(track, const TrackFilters(played: 'never'), counts: const {}),
         isTrue,
       );
+    });
+
+    test('favourites filter matches on the favourite-id set', () {
+      final track = t(); // id 't1'
+      const f = TrackFilters(favourites: true);
+      expect(pass(track, f, favouriteIds: const {'t1'}), isTrue);
+      expect(pass(track, f, favouriteIds: const {}), isFalse);
+      expect(pass(track, const TrackFilters()), isTrue); // off = passes
     });
 
     test('added-within-days uses addedAt', () {

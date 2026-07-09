@@ -101,6 +101,39 @@ final trackByIdProvider = Provider<Map<String, Track>>((ref) {
   return {for (final t in tracks) t.id: t};
 });
 
+/// Favourited track ids. Seeded from the loaded library's `favourite` column,
+/// then updated optimistically on toggle so a heart tap doesn't refetch the
+/// whole library. The server column is the store; a library reload reconciles.
+final favouriteIdsProvider =
+    NotifierProvider<FavouritesNotifier, Set<String>>(FavouritesNotifier.new);
+
+class FavouritesNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() {
+    final tracks = ref.watch(libraryTracksProvider).value ?? const <Track>[];
+    return {
+      for (final t in tracks)
+        if (t.favourite) t.id,
+    };
+  }
+
+  Future<void> toggle(String trackId) async {
+    final adding = !state.contains(trackId);
+    state = _with(trackId, adding); // optimistic
+    try {
+      await ref.read(apiClientProvider).setFavourite(trackId, adding);
+    } catch (_) {
+      state = _with(trackId, !adding); // revert on failure
+    }
+  }
+
+  Set<String> _with(String id, bool present) {
+    final next = {...state};
+    present ? next.add(id) : next.remove(id);
+    return next;
+  }
+}
+
 /// Canonical genre -> parent tree. Old/unreachable servers degrade to a flat
 /// genre list, exactly like the legacy loadLibrary() catch.
 final genreTreeProvider = FutureProvider<GenreTree>((ref) async {

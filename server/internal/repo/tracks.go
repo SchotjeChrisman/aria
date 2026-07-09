@@ -37,12 +37,17 @@ type Track struct {
 	Channels        *int     `json:"channels"`
 	Lossless        bool     `json:"lossless"`
 	HasArt          bool     `json:"hasArt"`
+	Favourite       bool     `json:"favourite"`
 }
 
 const trackCols = `id, path, mtime, size, addedAt, title, artist, albumArtist, album, albumId,
 	trackNo, discNo, year, genre, composer, conductor, work, movement,
 	mbAlbumId, mbRecordingId, mbAlbumArtistId,
 	duration, format, sampleRate, bitsPerSample, channels, lossless, hasArt`
+
+// Reads also pull the user favourite flag; it stays out of trackCols so the
+// scanner's UpsertAll (which never sets it) leaves it intact across rescans.
+const trackSelectCols = trackCols + `, favourite`
 
 type Tracks struct{ db *sql.DB }
 
@@ -103,20 +108,26 @@ func (r *Tracks) DeleteNotIn(ctx context.Context, keep []string) (int64, error) 
 }
 
 func (r *Tracks) ListAll(ctx context.Context) ([]Track, error) {
-	return r.query(ctx, `SELECT `+trackCols+` FROM tracks ORDER BY path`)
+	return r.query(ctx, `SELECT `+trackSelectCols+` FROM tracks ORDER BY path`)
 }
 
 func (r *Tracks) Paged(ctx context.Context, limit, offset int) ([]Track, error) {
-	return r.query(ctx, `SELECT `+trackCols+` FROM tracks ORDER BY path LIMIT ? OFFSET ?`, limit, offset)
+	return r.query(ctx, `SELECT `+trackSelectCols+` FROM tracks ORDER BY path LIMIT ? OFFSET ?`, limit, offset)
 }
 
 func (r *Tracks) ByAlbum(ctx context.Context, albumID string) ([]Track, error) {
-	return r.query(ctx, `SELECT `+trackCols+` FROM tracks WHERE albumId = ? ORDER BY discNo, trackNo, path`, albumID)
+	return r.query(ctx, `SELECT `+trackSelectCols+` FROM tracks WHERE albumId = ? ORDER BY discNo, trackNo, path`, albumID)
+}
+
+// SetFavourite flips the independent favourite flag on one track.
+func (r *Tracks) SetFavourite(ctx context.Context, id string, fav bool) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tracks SET favourite=? WHERE id=?`, fav, id)
+	return err
 }
 
 // ByID returns nil, nil when the track does not exist.
 func (r *Tracks) ByID(ctx context.Context, id string) (*Track, error) {
-	ts, err := r.query(ctx, `SELECT `+trackCols+` FROM tracks WHERE id = ?`, id)
+	ts, err := r.query(ctx, `SELECT `+trackSelectCols+` FROM tracks WHERE id = ?`, id)
 	if err != nil || len(ts) == 0 {
 		return nil, err
 	}
@@ -166,6 +177,7 @@ func (r *Tracks) query(ctx context.Context, q string, args ...any) ([]Track, err
 			&t.TrackNo, &t.DiscNo, &t.Year, &t.Genre, &t.Composer, &t.Conductor, &t.Work, &t.Movement,
 			&t.MBAlbumID, &t.MBRecordingID, &t.MBAlbumArtistID,
 			&t.Duration, &t.Format, &t.SampleRate, &t.BitsPerSample, &t.Channels, &t.Lossless, &t.HasArt,
+			&t.Favourite,
 		); err != nil {
 			return nil, err
 		}

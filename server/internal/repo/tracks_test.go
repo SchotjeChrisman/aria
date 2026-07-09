@@ -64,6 +64,39 @@ func TestTracksUpsertPreservesAddedAt(t *testing.T) {
 	}
 }
 
+func TestTracksFavouriteSurvivesRescan(t *testing.T) {
+	d := testDB(t)
+	r := NewTracks(d)
+	ctx := context.Background()
+
+	t1 := track("id1", "a/one.flac", "Alpha", "A", "X")
+	if err := r.UpsertAll(ctx, []Track{t1}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := r.SetFavourite(ctx, "id1", true); err != nil {
+		t.Fatalf("setfav: %v", err)
+	}
+
+	// rescan re-upserts the same track; the favourite flag must persist since
+	// it's not part of UpsertAll's ON CONFLICT SET.
+	if err := r.UpsertAll(ctx, []Track{t1}); err != nil {
+		t.Fatalf("upsert 2: %v", err)
+	}
+	got, err := r.ByID(ctx, "id1")
+	if err != nil || got == nil {
+		t.Fatalf("byid: %v %v", got, err)
+	}
+	if !got.Favourite {
+		t.Errorf("favourite = false, want preserved across rescan")
+	}
+	if err := r.SetFavourite(ctx, "id1", false); err != nil {
+		t.Fatalf("unfav: %v", err)
+	}
+	if got, _ := r.ByID(ctx, "id1"); got.Favourite {
+		t.Errorf("favourite = true, want cleared")
+	}
+}
+
 func TestTracksDeleteNotIn(t *testing.T) {
 	d := testDB(t)
 	r := NewTracks(d)

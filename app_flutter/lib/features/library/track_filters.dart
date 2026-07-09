@@ -33,6 +33,7 @@ class TrackFilters {
     this.type,
     this.played,
     this.added,
+    this.favourites = false,
   });
 
   /// field -> MultiFilter, only active fields present.
@@ -50,6 +51,9 @@ class TrackFilters {
   /// Added within the last N days.
   final int? added;
 
+  /// Favourites-only (the reserved ♥ metatag).
+  final bool favourites;
+
   MultiFilter stringFilter(String field) =>
       strings[field] ?? const MultiFilter();
 
@@ -60,6 +64,7 @@ class TrackFilters {
     for (final v in [lossless, type, played, added]) {
       if (v != null) n++;
     }
+    if (favourites) n++;
     return n;
   }
 
@@ -104,9 +109,11 @@ bool trackPassesFilters(
   TrackFilters f, {
   required Map<String, String?> genreParents,
   required TagNameIndex tagIndex,
+  required Set<String> favouriteIds,
   Map<String, int>? playCounts,
 }) {
   if (f.isEmpty) return true;
+  if (f.favourites && !favouriteIds.contains(t.id)) return false;
   if (!_msPass(f.stringFilter('albumArtist'), [t.albumArtist])) return false;
   if (!_msPass(f.stringFilter('credited'), [
     t.artist,
@@ -206,6 +213,7 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
   String? _lossless;
   String? _type;
   String? _played;
+  bool _favourites = false;
 
   @override
   void initState() {
@@ -224,6 +232,7 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
     _lossless = f.lossless;
     _type = f.type;
     _played = f.played;
+    _favourites = f.favourites;
   }
 
   @override
@@ -255,6 +264,7 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
             type: _type,
             played: _played,
             added: _num(_added),
+            favourites: _favourites,
           ),
         );
     Navigator.of(context).pop();
@@ -295,6 +305,12 @@ class _FilterDialogState extends ConsumerState<_FilterDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Favourites only'),
+                value: _favourites,
+                onChanged: (v) => setState(() => _favourites = v),
+              ),
               for (final (field, fieldLabel) in filterStringFields) ...[
                 MultiSelectField(
                   label: fieldLabel,

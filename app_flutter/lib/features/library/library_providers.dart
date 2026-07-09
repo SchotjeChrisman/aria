@@ -10,7 +10,8 @@ import '../../core/tags_providers.dart';
 // genreIndex()/tagsOf() in app/ui/app.js. Everything derives from core's
 // one /api/tracks cache; refresh with ref.invalidate(tracksProvider).
 
-export '../../core/library_providers.dart' show genreTreeProvider, peopleProvider;
+export '../../core/library_providers.dart'
+    show genreTreeProvider, peopleProvider, favouriteIdsProvider;
 export '../../core/tags_providers.dart' show tagsProvider;
 
 /// The core library cache under its legacy browse-layer name — invalidating

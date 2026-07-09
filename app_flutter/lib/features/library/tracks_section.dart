@@ -58,6 +58,7 @@ final visibleTracksProvider = Provider<List<Track>>((ref) {
   final s = ref.watch(tracksSortProvider);
   final parents = ref.watch(genreParentsProvider);
   final tagIndex = ref.watch(tagNameIndexProvider);
+  final favouriteIds = ref.watch(favouriteIdsProvider);
   // Counts load lazily, only once the played filter or plays sort needs
   // them (legacy ensurePlayCounts).
   final needCounts = f.played != null || s.key == 'plays';
@@ -70,6 +71,7 @@ final visibleTracksProvider = Provider<List<Track>>((ref) {
         f,
         genreParents: parents,
         tagIndex: tagIndex,
+        favouriteIds: favouriteIds,
         playCounts: counts,
       ))
         t,
