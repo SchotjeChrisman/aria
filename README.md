@@ -2,20 +2,25 @@
 
 A self-hosted, Roon-style music system. One Go server in a container, one
 Flutter app for macOS, Linux, and Android. The server indexes your library
-into SQLite and streams the **original, untouched files** — no transcoding,
-ever. The app plays through **libmpv** — native, gapless, bit-perfect; audio
-never touches a browser engine.
+into SQLite and streams the **original, untouched files** bit-perfect by
+default; optional **high/low Opus tiers** (~192k/~96k, from a bundled static
+ffmpeg) are there for constrained networks. The app plays through **libmpv** —
+native, gapless, bit-perfect; audio never touches a browser engine.
 
 ## Server (container)
 
 ```sh
-mkdir -p music        # or point it at your library
+# edit compose.yaml: point the music volume at your library
 podman-compose up -d  # docker-compose works too
 ```
 
-Up at `http://localhost:3001`. First boot scans `./music` into SQLite on the
-`aria-data` volume; later boots rescan incrementally (only changed files are
-re-read). Volume mounts use `:z` SELinux labels for Fedora-style hosts.
+The shipped `compose.yaml` mounts a host path read-only at `/music` — change
+that line to your library before first boot. Up at `http://localhost:3001`
+(the container listens on 3000; compose publishes it on 3001). First boot scans
+the music mount into SQLite on the `aria-data` volume; later boots rescan
+incrementally (only changed files are re-read). The `aria-data` volume uses a
+`:z` SELinux label for Fedora-style hosts; NFS shares can't be relabeled, so
+grant access with the `virt_use_nfs` boolean instead.
 
 Local dev builds: `docker compose up --build`.
 
@@ -44,7 +49,7 @@ recreates. Two automatic paths:
 Manual fallback:
 `podman-compose pull && podman-compose up -d --force-recreate aria`.
 
-- ~24 MB distroless image, static Go binary, non-root.
+- Distroless image, static Go binary + bundled static ffmpeg, non-root.
 - Healthcheck built in (`/aria -healthcheck`); graceful shutdown on SIGTERM.
 - Database: SQLite (WAL) at `/data/aria.db`; FTS5 powers search.
 
@@ -60,7 +65,8 @@ flutter run -d linux      # or: macos, or an Android device
 flutter build linux --release
 ```
 
-Point it at your server URL on first launch (default `http://localhost:3000`).
+Point it at your server URL on first launch (default `http://localhost:3000`;
+the bundled container publishes on `:3001`).
 
 Playback engine: libmpv is bundled inside the app on **macOS and Android**.
 On **Linux**, bundle it into the build output with
@@ -72,7 +78,8 @@ runs and says so, but won't play. For distributable Linux packaging, use
 Flatpak rather than shipping the ffmpeg stack yourself.
 Playback is a direct FFI binding to libmpv: gapless,
 optional exclusive-mode output on desktop, and a format badge showing the
-actual stream (e.g. FLAC 24/96). Android decodes losslessly but final output
+actual stream (e.g. FLAC 24/96). A streaming-quality setting picks original vs.
+high/low Opus per session (falls back to original if the server has no ffmpeg). Android decodes losslessly but final output
 is OS-managed; true bit-perfect there needs a USB DAC (Android 14+).
 
 Features: album/artist/genre/composer browsing with filters, full-text
@@ -91,11 +98,13 @@ progress), and `limit`/`offset` on `GET /api/tracks`.
 
 ## Environment variables (server)
 
-| Var         | Default  | Purpose                          |
-| ----------- | -------- | -------------------------------- |
-| `PORT`      | `3000`   | HTTP port                        |
-| `MUSIC_DIR` | `/music` | library root (read-only is fine) |
-| `DATA_DIR`  | `/data`  | SQLite db + cached art           |
+| Var                 | Default  | Purpose                                    |
+| ------------------- | -------- | ------------------------------------------ |
+| `PORT`              | `3000`   | HTTP port                                  |
+| `MUSIC_DIR`         | `/music` | library root (read-only is fine)           |
+| `DATA_DIR`          | `/data`  | SQLite db + cached art + transcode cache   |
+| `FFMPEG_PATH`       | `/ffmpeg`| ffmpeg for Opus tiers; skipped if missing  |
+| `TRANSCODE_CACHE_MB`| `5000`   | on-disk Opus cache budget under `DATA_DIR` |
 
 Scanned extensions: flac, mp3, m4a, ogg, opus, wav, aiff, ape, wv, dsf.
 
