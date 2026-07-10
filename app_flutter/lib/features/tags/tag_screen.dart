@@ -202,7 +202,8 @@ class TagScreen extends ConsumerWidget {
                 child: AlbumCard(
                   title: a.album,
                   subtitle: a.albumArtist,
-                  artUrl: client.artUrl(a.id),
+                  artUrl: client.artUrl(a.id,
+                      version: a.tracks.isEmpty ? null : a.tracks.first.artVersion),
                   onTap: () {
                     if (selectionTapHandled(
                       ref,

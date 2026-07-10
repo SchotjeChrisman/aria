@@ -33,6 +33,8 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   pdfrx: ^2.4.4
+  # Custom cover-art upload: cross-platform image file picking (returns bytes).
+  file_picker: ^8.1.0
 
 dev_dependencies:
   flutter_test:

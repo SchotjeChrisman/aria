@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -35,7 +37,7 @@ func nullish(raw json.RawMessage) bool {
 var editFields = map[string][]string{
 	"track": {"title", "artist", "album", "albumArtist", "genre", "year", "trackNo", "discNo",
 		"composer", "work", "movement", "conductor", "orchestra"},
-	"album":  {"album", "albumArtist", "genre", "year", "releaseType", "label", "date", "country", "blurb"},
+	"album":  {"album", "albumArtist", "genre", "year", "releaseType", "label", "date", "country", "blurb", "artSource"},
 	"artist": {"type", "area", "born", "died", "image", "bio"},
 }
 
@@ -122,6 +124,44 @@ func patchEdits(ctx context.Context, d *Deps, kind, key string, patch map[string
 	return cur, d.Edits.Put(ctx, kind, key, doc)
 }
 
+// prepareArtSource validates and effects an album artSource patch in place:
+// rejects unknown values, forbids "file" without embedded art, fetches+writes
+// the .api.jpg slot when picking "api" (if absent), and injects the bumped
+// artVersion (backend-owned, never client-set). Returns (0,"") on success or an
+// HTTP status+message. A nil value (clear override) only bumps the version.
+func prepareArtSource(ctx context.Context, d *Deps, id string, ts []repo.Track, patch map[string]any) (int, string) {
+	if v := patch["artSource"]; v != nil {
+		s, ok := v.(string)
+		if !ok || !slices.Contains([]string{"file", "api", "custom"}, s) {
+			return http.StatusBadRequest, "invalid artSource"
+		}
+		switch s {
+		case "file":
+			if !embeddedArtPresent(d.Cfg.DataDir, id) {
+				return http.StatusBadRequest, "no embedded art"
+			}
+		case "api":
+			p := artSlotPath(d.Cfg.DataDir, id, "api")
+			if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
+				ap, ok := d.Enricher.(artPreviewer)
+				if !ok {
+					return http.StatusBadGateway, "art fetch failed"
+				}
+				img := ap.AlbumArt(ctx, ts[0].AlbumArtist, ts[0].Album, mbidOf(ts))
+				if img == nil {
+					return http.StatusBadGateway, "art fetch failed"
+				}
+				if err := os.WriteFile(p, img, 0o644); err != nil {
+					return http.StatusInternalServerError, "art write failed"
+				}
+			}
+		}
+	}
+	_, ver := albumArtMeta(ctx, d, id)
+	patch["artVersion"] = ver + 1
+	return 0, ""
+}
+
 // editsBody reads and validates a PATCH body; nil means a 400 was written.
 func editsBody(w http.ResponseWriter, r *http.Request, kind string) map[string]any {
 	var body map[string]json.RawMessage
@@ -176,6 +216,12 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 			return
 		}
 		if patch := editsBody(w, r, "album"); patch != nil {
+			if _, ok := patch["artSource"]; ok {
+				if code, msg := prepareArtSource(r.Context(), d, r.PathValue("albumId"), ts, patch); code != 0 {
+					httpError(w, code, msg)
+					return
+				}
+			}
 			applyPatch(w, r, "album", r.PathValue("albumId"), patch)
 		}
 	})

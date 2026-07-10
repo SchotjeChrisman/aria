@@ -189,7 +189,9 @@ class _QueueRow extends ConsumerWidget {
           ),
         ),
         ArtImage(
-          url: ref.read(apiClientProvider).artUrl(track.albumId),
+          url: ref
+              .read(apiClientProvider)
+              .artUrl(track.albumId, version: track.artVersion),
           fallbackText: track.album,
           size: 40,
           borderRadius: AriaRadius.sm,

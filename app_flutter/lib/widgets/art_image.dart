@@ -12,7 +12,9 @@ import '../core/theme.dart';
 /// ponytail: parsed from the URL so 15+ call sites don't grow an albumId
 /// param — if art ever needs auth/query strings, pass the id explicitly.
 String? _artAlbumId(String url) {
-  final segs = Uri.tryParse(url)?.pathSegments;
+  // Strip any query string (?v=… / ?source=…) so cache-bust/slot params don't
+  // land in the parsed id and break the offline-file lookup.
+  final segs = Uri.tryParse(url.split('?').first)?.pathSegments;
   if (segs == null || segs.length < 3) return null;
   return segs[segs.length - 2] == 'art' && segs[segs.length - 3] == 'api'
       ? segs.last

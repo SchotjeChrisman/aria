@@ -350,7 +350,9 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         child: Text('Nothing playing', style: TextStyle(color: c.fgDim)),
       );
     }
-    final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId);
+    final artUrl = ref
+        .watch(apiClientProvider)
+        .artUrl(track.albumId, version: track.artVersion);
     return InkWell(
       onTap: () => context.push('/now-playing'),
       borderRadius: BorderRadius.circular(AriaRadius.sm),

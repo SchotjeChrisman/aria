@@ -591,7 +591,8 @@ class _Listening extends ConsumerWidget {
                         sub: x.track.artist,
                         n: x.n,
                         leading: ArtImage(
-                          url: api.artUrl(x.track.albumId),
+                          url: api.artUrl(x.track.albumId,
+                              version: x.track.artVersion),
                           fallbackText: x.track.title,
                           size: 28,
                           borderRadius: AriaRadius.sm,

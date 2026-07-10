@@ -215,7 +215,7 @@ class _StatsBody extends ConsumerWidget {
               return AlbumCard(
                 title: x.a.title,
                 subtitle: _plays(x.c),
-                artUrl: x.a.hasArt ? client.artUrl(x.a.id) : null,
+                artUrl: x.a.hasArt ? client.artUrl(x.a.id, version: x.a.artVersion) : null,
                 onTap: () => queue.playQueue(x.a.tracks, 0),
                 onSecondary: (pos) => showAriaContextMenu(
                   context,

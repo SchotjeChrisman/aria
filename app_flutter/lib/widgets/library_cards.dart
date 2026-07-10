@@ -47,7 +47,10 @@ class AlbumGridCard extends ConsumerWidget {
       child: AlbumCard(
         title: title,
         subtitle: subtitle ?? artistName,
-        artUrl: hasArt ? api.artUrl(albumId) : null,
+        artUrl: hasArt
+            ? api.artUrl(albumId,
+                version: tracks.isEmpty ? null : tracks.first.artVersion)
+            : null,
         onTap: () {
           if (selectionTapHandled(ref, albumSelectionItem(albumId, tracks))) {
             return;

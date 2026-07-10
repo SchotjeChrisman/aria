@@ -17,6 +17,16 @@ void main() {
           'http://box:3000/api/albums/deadbeef/booklet/liner%20notes.pdf');
     });
 
+    test('artUrl appends source/version query params', () {
+      expect(c.artUrl('deadbeef'), 'http://box:3000/api/art/deadbeef');
+      expect(c.artUrl('deadbeef', version: 5),
+          'http://box:3000/api/art/deadbeef?v=5');
+      expect(c.artUrl('deadbeef', source: 'api', version: 3),
+          'http://box:3000/api/art/deadbeef?source=api&v=3');
+      expect(c.artUrl('deadbeef', source: 'custom'),
+          'http://box:3000/api/art/deadbeef?source=custom');
+    });
+
     test('streamUrl appends ?tier only for high/low, omits for original', () {
       expect(c.streamUrl('t1'), 'http://box:3000/api/stream/t1');
       expect(c.streamUrl('t1', tier: null), 'http://box:3000/api/stream/t1');
@@ -289,6 +299,17 @@ void main() {
       expect(eq.bands.first.q, 0.7);
       expect(eq.bands.last.slope, 12);
       expect(eq.bands.last.q, isNull);
+    });
+
+    test('uploadArt posts multipart with an "image" file field', () async {
+      final c = client((_) => {'artSource': 'custom', 'artVersion': 7});
+      final resp = await c.uploadArt('deadbeef', [1, 2, 3], 'cover.jpg');
+      expect(resp['artVersion'], 7);
+      expect(seen.single.method, 'POST');
+      expect(seen.single.url.path, '/api/art/deadbeef');
+      expect(
+          seen.single.headers['content-type'], startsWith('multipart/form-data'));
+      expect(seen.single.body, contains('name="image"'));
     });
 
     test('reidentify posts mbid (null allowed for fresh search)', () async {

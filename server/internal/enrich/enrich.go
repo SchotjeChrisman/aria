@@ -501,17 +501,12 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 		}
 	}
 
-	artPath := filepath.Join(e.dataDir, "art", albumID+".jpg")
-	// only a confirmed-absent file triggers a fetch — a transient stat error
-	// must not overwrite existing art
+	// API-fetched art lands in the .api.jpg slot; the bare .jpg slot only ever
+	// holds real embedded art (scanner-written). only a confirmed-absent file
+	// triggers a fetch — a transient stat error must not overwrite existing art
+	artPath := filepath.Join(e.dataDir, "art", albumID+".api.jpg")
 	if _, err := os.Stat(artPath); !ts[0].HasArt && errors.Is(err, os.ErrNotExist) {
-		img := e.getBinary(ctx, "https://coverartarchive.org/release/"+mbid+"/front-500")
-		if img == nil {
-			if u, err := e.dz.AlbumCoverURL(ctx, ts[0].AlbumArtist, ts[0].Album); err == nil && u != "" {
-				img = e.getBinary(ctx, u)
-			}
-		}
-		if img != nil {
+		if img := e.AlbumArt(ctx, ts[0].AlbumArtist, ts[0].Album, mbid); img != nil {
 			if err := os.WriteFile(artPath, img, 0o644); err != nil {
 				e.log("art write " + albumID + ": " + err.Error())
 			} else {
@@ -519,6 +514,27 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 				return e.put(ctx, KindAlbum, albumID, a)
 			}
 		}
+	}
+	return nil
+}
+
+// AlbumArt fetches remote cover art bytes: MBID→CoverArtArchive(front-500)→
+// Deezer. mbid == "" triggers a release search first. Returns nil on total
+// failure. Persists nothing — enrichAlbum's fallback and the art-preview
+// endpoint decide whether to write.
+func (e *Enricher) AlbumArt(ctx context.Context, albumArtist, album, mbid string) []byte {
+	if mbid == "" {
+		if rels := e.mb.searchReleases(ctx, album, albumArtist, 1); len(rels) > 0 {
+			mbid = rels[0].ID
+		}
+	}
+	if mbid != "" {
+		if img := e.getBinary(ctx, "https://coverartarchive.org/release/"+mbid+"/front-500"); img != nil {
+			return img
+		}
+	}
+	if u, err := e.dz.AlbumCoverURL(ctx, albumArtist, album); err == nil && u != "" {
+		return e.getBinary(ctx, u)
 	}
 	return nil
 }

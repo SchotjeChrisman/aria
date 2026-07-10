@@ -108,7 +108,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
               return AlbumCard(
                 title: a.title,
                 subtitle: a.year?.toString() ?? '',
-                artUrl: api.artUrl(a.id),
+                artUrl: api.artUrl(a.id, version: a.artVersion),
                 onTap: () => context.push(albumPath(a.id)),
               );
             },

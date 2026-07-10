@@ -1,8 +1,10 @@
 import 'package:aria_api/aria_api.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
+import '../../widgets/art_image.dart';
 import 'providers.dart';
 import 'reidentify_dialog.dart';
 
@@ -68,6 +70,9 @@ Future<void> showAlbumEditor(
     ref.invalidate(albumInfoProvider(album.id));
   },
   onReidentify: (ctx) => showAlbumReidentify(ctx, ref, album),
+  // Album editor only: the cover-art source picker row.
+  artAlbumId: album.id,
+  client: ref.read(albumApiProvider),
 );
 
 Future<void> showTrackEditor(
@@ -95,6 +100,8 @@ Future<void> _openEditor(
   required Future<Object?> Function(Map<String, dynamic> body) patch,
   required VoidCallback onSaved,
   void Function(BuildContext ctx)? onReidentify,
+  String? artAlbumId,
+  AriaClient? client,
 }) async {
   Map<String, dynamic> original = {}, overrides = {};
   try {
@@ -116,6 +123,8 @@ Future<void> _openEditor(
       overrides: overrides,
       patch: patch,
       onReidentify: onReidentify,
+      artAlbumId: artAlbumId,
+      client: client,
     ),
   );
   if (saved == true) onSaved();
@@ -129,6 +138,8 @@ class _EditorDialog extends StatefulWidget {
     required this.overrides,
     required this.patch,
     this.onReidentify,
+    this.artAlbumId,
+    this.client,
   });
 
   final String title;
@@ -137,6 +148,10 @@ class _EditorDialog extends StatefulWidget {
   final Map<String, dynamic> overrides;
   final Future<Object?> Function(Map<String, dynamic> body) patch;
   final void Function(BuildContext ctx)? onReidentify;
+
+  /// Non-null only for the album editor: enables the cover-art source row.
+  final String? artAlbumId;
+  final AriaClient? client;
 
   @override
   State<_EditorDialog> createState() => _EditorDialogState();
@@ -149,6 +164,34 @@ class _EditorDialogState extends State<_EditorDialog> {
   };
   String? _error;
   bool _busy = false;
+
+  // Cover-art source picker (album editor only). _artSource is the chosen
+  // override (null = default resolution); _origArtSource is its loaded value
+  // so save only PATCHes on a real change. _artVersion busts the thumbnail
+  // cache after an upload. _fileExists gates the File thumbnail (null = still
+  // probing).
+  // Captured eagerly in initState — NOT `late`, whose lazy init would read
+  // _artSource *after* a thumbnail tap has mutated it and wrongly equal it.
+  String? _artSource;
+  String? _origArtSource;
+  int? _artVersion;
+  bool? _fileExists;
+
+  @override
+  void initState() {
+    super.initState();
+    _artSource = widget.overrides['artSource'] as String?;
+    _origArtSource = _artSource;
+    _artVersion = (widget.overrides['artVersion'] as num?)?.toInt();
+    final id = widget.artAlbumId, client = widget.client;
+    if (id != null && client != null) {
+      client.artExists(id, 'file').then((exists) {
+        if (mounted) setState(() => _fileExists = exists);
+      }).catchError((_) {
+        if (mounted) setState(() => _fileExists = false);
+      });
+    }
+  }
 
   // Legacy: large remote text (blurb/bio) never prefills — override only.
   String _initialText(_Field f) {
@@ -211,6 +254,10 @@ class _EditorDialogState extends State<_EditorDialog> {
           : null;
       if (want != cur) body[f.key] = want;
     }
+    // Cover-art source: send only when it changed (null clears the override).
+    if (widget.artAlbumId != null && _artSource != _origArtSource) {
+      body['artSource'] = _artSource;
+    }
     if (body.isEmpty) {
       Navigator.of(context).pop(false);
       return;
@@ -219,6 +266,35 @@ class _EditorDialogState extends State<_EditorDialog> {
   }
 
   void _clearAll() => _submit({for (final f in widget.fields) f.key: null});
+
+  /// Custom cover: pick an image, upload it, then select the custom slot and
+  /// refresh the thumbnails via the returned artVersion.
+  Future<void> _pickCustom() async {
+    final res = await FilePicker.platform
+        .pickFiles(type: FileType.image, withData: true);
+    if (res == null || res.files.isEmpty) return;
+    final file = res.files.first;
+    if (file.bytes == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final resp =
+          await widget.client!.uploadArt(widget.artAlbumId!, file.bytes!, file.name);
+      if (!mounted) return;
+      setState(() {
+        _artSource = 'custom';
+        _artVersion = (resp['artVersion'] as num?)?.toInt() ?? _artVersion;
+      });
+    } on AriaApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Upload failed.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   void _reset(_Field f) {
     final orig = widget.original[f.key];
@@ -245,6 +321,7 @@ class _EditorDialogState extends State<_EditorDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (widget.artAlbumId != null) _artRow(context),
               for (final f in widget.fields) _fieldRow(context, f),
               if (_error != null)
                 Padding(
@@ -289,6 +366,81 @@ class _EditorDialogState extends State<_EditorDialog> {
         ),
       ],
       backgroundColor: c.bgRaised,
+    );
+  }
+
+  Widget _artRow(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AriaSpace.s3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Cover art', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: AriaSpace.s1),
+          Row(
+            children: [
+              // File is disabled until the probe confirms embedded art exists.
+              _artThumb(context, 'File', 'file', enabled: _fileExists == true),
+              const SizedBox(width: AriaSpace.s2),
+              _artThumb(context, 'API', 'api'),
+              const SizedBox(width: AriaSpace.s2),
+              _artThumb(context, 'Custom', 'custom'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _artThumb(
+    BuildContext context,
+    String label,
+    String slot, {
+    bool enabled = true,
+  }) {
+    final c = AriaColors.of(context);
+    final selected = _artSource == slot;
+    return Column(
+      children: [
+        GestureDetector(
+          // Opaque: the thumbnail's whole 64px box is tappable even before the
+          // art image paints (DecoratedBox/Image don't absorb hits on their own).
+          behavior: HitTestBehavior.opaque,
+          onTap: (!enabled || _busy)
+              ? null
+              : () {
+                  if (slot == 'custom') {
+                    _pickCustom();
+                  } else {
+                    setState(() => _artSource = slot);
+                  }
+                },
+          child: Opacity(
+            opacity: enabled ? 1 : 0.4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AriaRadius.md),
+                border: Border.all(
+                  color: selected ? c.accent : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              child: ArtImage(
+                key: ValueKey('art-$slot'),
+                url: widget.client!
+                    .artUrl(widget.artAlbumId!, source: slot, version: _artVersion),
+                size: 64,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AriaSpace.s1),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: enabled ? c.fg : c.fgDim),
+        ),
+      ],
     );
   }
 

@@ -61,8 +61,40 @@ class AriaClient {
   static String? _tierQuery(String? tier) =>
       (tier == null || tier.isEmpty || tier == 'original') ? null : tier;
 
-  String artUrl(String albumId) =>
-      '$baseUrl/api/art/${Uri.encodeComponent(albumId)}';
+  /// [source] selects a disk slot (`file`/`api`/`custom`) for the edit dialog
+  /// thumbnails; omit it for normal display. [version] is the album's
+  /// `artVersion` cache-bust token — a changed value yields a new URL so the
+  /// ImageCache misses and refetches after an art edit.
+  String artUrl(String albumId, {int? version, String? source}) {
+    final q = <String>[];
+    if (source != null) q.add('source=$source');
+    if (version != null && version != 0) q.add('v=$version');
+    final qs = q.isEmpty ? '' : '?${q.join('&')}';
+    return '$baseUrl/api/art/${Uri.encodeComponent(albumId)}$qs';
+  }
+
+  /// Uploads a custom cover; the server writes the `custom` slot and sets the
+  /// album's `artSource=custom` edit. Returns the merged album edit
+  /// (includes the bumped `artVersion`).
+  Future<Map<String, dynamic>> uploadArt(
+      String albumId, List<int> bytes, String filename) async {
+    final path = '/api/art/${Uri.encodeComponent(albumId)}';
+    final req = http.MultipartRequest('POST', _u(path))
+      ..files.add(http.MultipartFile.fromBytes('image', bytes,
+          filename: filename));
+    final r = await _timed(
+        _http.send(req).then(http.Response.fromStream), path);
+    if (r.statusCode < 200 || r.statusCode >= 300) _throw(r, path);
+    return asMap(jsonDecode(utf8.decode(r.bodyBytes)));
+  }
+
+  /// Whether a given on-disk art slot exists (200). For `file`/`custom` only —
+  /// `api` streams a live preview so it always "exists".
+  Future<bool> artExists(String albumId, String source) async {
+    final r = await _timed(
+        _http.get(Uri.parse(artUrl(albumId, source: source))), 'art');
+    return r.statusCode == 200;
+  }
 
   String bookletUrl(String albumId, String name) =>
       '$baseUrl/api/albums/${Uri.encodeComponent(albumId)}'

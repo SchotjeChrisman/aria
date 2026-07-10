@@ -106,7 +106,7 @@ class _AlbumBody extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ArtImage(
-          url: api.artUrl(album.id),
+          url: api.artUrl(album.id, version: album.artVersion),
           fallbackText: album.title,
           size: 180,
           borderRadius: AriaRadius.lg,

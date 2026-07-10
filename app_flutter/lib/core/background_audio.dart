@@ -149,7 +149,8 @@ class AriaAudioHandler extends BaseAudioHandler {
         duration: t.duration == null
             ? null
             : Duration(milliseconds: (t.duration! * 1000).round()),
-        artUri: Uri.parse(_c.read(apiClientProvider).artUrl(t.albumId)),
+        artUri: Uri.parse(
+            _c.read(apiClientProvider).artUrl(t.albumId, version: t.artVersion)),
       ),
       _ => null,
     });

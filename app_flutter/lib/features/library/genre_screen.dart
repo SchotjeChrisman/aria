@@ -211,7 +211,7 @@ class _GenreBody extends ConsumerWidget {
                   subtitle: a.year != null
                       ? '${a.albumArtist} · ${a.year}'
                       : a.albumArtist,
-                  artUrl: a.hasArt ? api.artUrl(a.id) : null,
+                  artUrl: a.hasArt ? api.artUrl(a.id, version: a.artVersion) : null,
                   onTap: () {
                     if (selectionTapHandled(
                       ref,

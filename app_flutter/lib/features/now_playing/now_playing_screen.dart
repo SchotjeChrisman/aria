@@ -111,7 +111,9 @@ class _Meta extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
     final ao = ref.watch(audioDeviceProvider).value;
-    final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId);
+    final artUrl = ref
+        .watch(apiClientProvider)
+        .artUrl(track.albumId, version: track.artVersion);
     // "3 of 12" only when there is an actual queue to navigate.
     final queuePos = ref.watch(
       queueProvider.select(

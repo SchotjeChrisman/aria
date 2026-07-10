@@ -299,7 +299,7 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	}
 
 	// album edits that flow onto the album's tracks (label/blurb etc stay album-level)
-	albumFan := []string{"album", "albumArtist", "genre", "year"}
+	albumFan := []string{"album", "albumArtist", "genre", "year", "artVersion"}
 
 	merged := make([]map[string]any, 0, len(ts))
 	for _, t := range ts {

@@ -37,6 +37,7 @@ class Track {
     this.channels,
     this.lossless = false,
     this.hasArt = false,
+    this.artVersion = 0,
     this.favourite = false,
     this.composer,
     this.conductor,
@@ -73,6 +74,7 @@ class Track {
   final bool lossless;
 
   final bool hasArt;
+  final int artVersion; // art cache-bust token; bumped on any art edit/upload
   final bool favourite; // independent per-track flag (not a tag)
   final String? composer;
   final String? conductor;
@@ -112,6 +114,7 @@ class Track {
         channels: asInt(j['channels']),
         lossless: asBool(j['lossless']),
         hasArt: asBool(j['hasArt']),
+        artVersion: asInt(j['artVersion']) ?? 0,
         favourite: asBool(j['favourite']),
         composer: asString(j['composer']),
         conductor: asString(j['conductor']),

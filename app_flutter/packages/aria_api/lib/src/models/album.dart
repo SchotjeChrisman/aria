@@ -20,6 +20,7 @@ class Album {
   final List<Track> tracks;
 
   bool get hasArt => tracks.isNotEmpty && tracks.first.hasArt;
+  int get artVersion => tracks.isEmpty ? 0 : tracks.first.artVersion;
   String? get releaseType =>
       tracks.isNotEmpty ? tracks.first.releaseType : null;
   double get duration => tracks.fold(0.0, (s, t) => s + (t.duration ?? 0));
