@@ -20,7 +20,9 @@ val ksAlias: String? = System.getenv("ANDROID_KEY_ALIAS") ?: keyProps.getPropert
 
 android {
     namespace = "dev.aria.aria"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker's flutter_plugin_android_lifecycle needs compileSdk 36;
+    // flutter.compileSdkVersion still defaults to 34 on the pinned stable.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
