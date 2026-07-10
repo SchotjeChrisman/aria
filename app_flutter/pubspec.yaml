@@ -3,7 +3,7 @@ description: "Aria v2 — self-hosted lossless music player (Flutter client)."
 publish_to: 'none'
 
 # build number tracks release count — Android needs it rising to update in place
-version: 2.9.0+10
+version: 3.0.0+11
 
 environment:
   sdk: ^3.12.0
@@ -43,6 +43,21 @@ dev_dependencies:
   # Tests only: MockClient for the download worker (already transitive via
   # aria_api — declared so test imports are honest, not a new runtime dep).
   http: ^1.2.0
+  # Generates platform launcher icons from branding/ (run: dart run
+  # flutter_launcher_icons). Dev-only tool, not shipped.
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+# App icon: white G-clef on the aria accent (#D13B58). Source art in branding/,
+# regenerate with `dart run flutter_launcher_icons`.
+flutter_launcher_icons:
+  image_path: "branding/icon.png"
+  android: true
+  min_sdk_android: 21
+  adaptive_icon_background: "#D13B58"
+  adaptive_icon_foreground: "branding/icon_foreground.png"
+  macos:
+    generate: true
+    image_path: "branding/icon.png"

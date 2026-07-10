@@ -109,7 +109,7 @@ class _HomeBody extends ConsumerWidget {
         for (final r in value.recent) {
           final a = albumById[byId[r.id]?.albumId];
           if (a != null && seen.add(a.id)) recent.add(a);
-          if (recent.length >= 20) break;
+          if (recent.length >= 10) break;
         }
 
         // Recently Listened Artists: same play log, deduped by artist name.
@@ -120,7 +120,7 @@ class _HomeBody extends ConsumerWidget {
           if (name != null && name.isNotEmpty && seenArt.add(name)) {
             recentArtists.add(name);
           }
-          if (recentArtists.length >= 20) break;
+          if (recentArtists.length >= 10) break;
         }
 
         final top = [
@@ -303,12 +303,17 @@ class _MixesShelf extends ConsumerWidget {
       children: [
         Text('Your Mixes', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: AriaSpace.s3),
-        // Short full-width banners (one per row, full width on mobile) instead
-        // of tall narrow shelf cards.
-        for (final m in mixes) ...[
-          _MixBanner(mix: m, looks: _looks[m.id] ?? (Icons.queue_music, c.accent)),
-          const SizedBox(height: AriaSpace.s2),
-        ],
+        // Full-width horizontal slider — one full-width banner per page.
+        SizedBox(
+          height: 84,
+          child: PageView(
+            controller: PageController(viewportFraction: 1.0),
+            children: [
+              for (final m in mixes)
+                Center(child: _MixBanner(mix: m, looks: _looks[m.id] ?? (Icons.queue_music, c.accent))),
+            ],
+          ),
+        ),
         const SizedBox(height: AriaSpace.s4),
       ],
     );
@@ -486,23 +491,16 @@ class _Listening extends ConsumerWidget {
     final api = ref.watch(apiClientProvider);
 
     // Bucket in the viewer's timezone — the server hands raw timestamps.
-    String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
-    final days = <String, ({String label, int n})>{};
     final now = DateTime.now();
-    for (var i = 29; i >= 0; i--) {
-      final d = now.subtract(Duration(days: i));
-      days[dayKey(d)] = (label: '${d.month}/${d.day}', n: 0);
-    }
-    final hours = List<int>.filled(24, 0);
+    final monthSecs = <int, double>{}; // day-of-month (1..31) -> seconds
     final artC = <String, int>{};
     final trkC = <String, int>{};
     for (final p in hist) {
       final d = DateTime.tryParse(p.at)?.toLocal();
       if (d == null) continue;
-      final k = dayKey(d);
-      final day = days[k];
-      if (day != null) days[k] = (label: day.label, n: day.n + 1);
-      hours[d.hour]++;
+      if (d.year == now.year && d.month == now.month) {
+        monthSecs[d.day] = (monthSecs[d.day] ?? 0) + (byId[p.id]?.duration ?? 0);
+      }
       final t = byId[p.id];
       final artist = t?.artist;
       if (artist != null && artist.isNotEmpty) {
@@ -560,11 +558,7 @@ class _Listening extends ConsumerWidget {
               controller: PageController(viewportFraction: 0.92),
               children: [
                 _WeeklyTimeBox(weekSecs: weekSecs),
-                _ChartBox(
-                  title: 'Plays · last 30 days',
-                  values: [for (final d in days.values) d.n],
-                ),
-                _ChartBox(title: 'By hour of day', values: hours),
+                _CalendarDots(daySecs: monthSecs),
                 _MiniList(
                   title: 'Top artists · 30 days',
                   rows: [
@@ -612,16 +606,45 @@ class _Listening extends ConsumerWidget {
   }
 }
 
-class _ChartBox extends StatelessWidget {
-  const _ChartBox({required this.title, required this.values});
+class _CalendarDots extends StatelessWidget {
+  const _CalendarDots({required this.daySecs});
 
-  final String title;
-  final List<int> values;
+  final Map<int, double> daySecs;
 
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
-    final max = values.fold<int>(1, (m, v) => v > m ? v : m);
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    // weekday of the 1st: 1=Mon..7=Sun -> leading blanks so columns align Mon..Sun
+    final lead = DateTime(now.year, now.month, 1).weekday - 1;
+    // Relative sizing: scale to THIS month's busiest day so light listeners
+    // still see large dots. Floor of 1 avoids div-by-zero.
+    final maxSecs = daySecs.values.fold<double>(1, (m, v) => v > m ? v : m);
+    const minD = 7.0, maxD = 22.0;
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    Widget dot(int day) {
+      final secs = daySecs[day] ?? 0;
+      final has = secs > 0;
+      final size = has ? (minD + (maxD - minD) * (secs / maxSecs)).clamp(minD, maxD) : minD;
+      final isToday = day == now.day;
+      return Container(
+        alignment: Alignment.center,
+        child: Container(
+          width: size.toDouble(),
+          height: size.toDouble(),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: has ? c.accent : c.line,
+            border: isToday ? Border.all(color: c.accent, width: 1.5) : null,
+          ),
+        ),
+      );
+    }
+    final cells = <Widget>[
+      for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+      for (var day = 1; day <= daysInMonth; day++) dot(day),
+    ];
     return Container(
       margin: const EdgeInsets.only(right: AriaSpace.s3),
       padding: const EdgeInsets.all(AriaSpace.s4),
@@ -633,30 +656,15 @@ class _ChartBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.bodySmall),
+          Text('Listening · ${monthNames[now.month - 1]}', style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: AriaSpace.s3),
-          SizedBox(
-            height: 64,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (final v in values)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 0.5),
-                      child: FractionallySizedBox(
-                        heightFactor: v == 0 ? 0.04 : (v / max).clamp(0.04, 1),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: v == 0 ? c.line : c.accent,
-                            borderRadius: BorderRadius.circular(1.5),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+          GridView.count(
+            crossAxisCount: 7,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            children: cells,
           ),
         ],
       ),

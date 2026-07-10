@@ -110,7 +110,6 @@ class _Meta extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
-    final ao = ref.watch(audioDeviceProvider).value;
     final artUrl = ref
         .watch(apiClientProvider)
         .artUrl(track.albumId, version: track.artVersion);
@@ -188,14 +187,6 @@ class _Meta extends ConsumerWidget {
         ],
         const SizedBox(height: AriaSpace.s4),
         const SignalPath(),
-        if (ao != null && ao.isNotEmpty) ...[
-          const SizedBox(height: AriaSpace.s2),
-          Text(
-            'Output · $ao',
-            style: Theme.of(context).textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
       ],
     );
   }
@@ -274,19 +265,16 @@ class _Controls extends ConsumerWidget {
           Row(
             // Lyrics + queue, moved off the app bar to sit under the transport
             // where a thumb reaches on mobile. Same push targets as before.
-            mainAxisAlignment: MainAxisAlignment.center,
+            // Heart centred, lyrics/queue spread to the edges.
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              if (track != null) ...[
-                _FavouriteButton(trackId: track.id),
-                const SizedBox(width: AriaSpace.s5),
-              ],
               IconButton(
                 icon: const Icon(Icons.lyrics_outlined),
                 color: c.fgDim,
                 tooltip: 'Lyrics',
                 onPressed: () => context.push('/lyrics'),
               ),
-              const SizedBox(width: AriaSpace.s5),
+              if (track != null) _FavouriteButton(trackId: track.id),
               IconButton(
                 icon: const Icon(Icons.queue_music),
                 color: c.fgDim,
@@ -300,3 +288,4 @@ class _Controls extends ConsumerWidget {
     );
   }
 }
+

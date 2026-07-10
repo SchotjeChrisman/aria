@@ -16,6 +16,8 @@ import '../../widgets/track_actions.dart';
 import 'providers.dart';
 import 'transport_bar.dart';
 
+const double _rowH = 56.0;
+
 /// Play queue (legacy #queue-panel / renderQueue): played history dimmed
 /// above the accented current row, drag handle to reorder (qMove semantics),
 /// per-row remove (qRemove semantics), clear, save-as-playlist.
@@ -33,9 +35,9 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
   void initState() {
     super.initState();
     // Open at the current song: played history is above (scroll up),
-    // upcoming below (scroll down). ~64px per row, clamped by the list.
+    // upcoming below (scroll down). Fixed _rowH per row, clamped by the list.
     final i = ref.read(queueProvider).index;
-    _scroll = ScrollController(initialScrollOffset: i > 0 ? i * 64.0 : 0);
+    _scroll = ScrollController(initialScrollOffset: i > 0 ? i * _rowH : 0);
   }
 
   @override
@@ -78,25 +80,38 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
               message: 'Queue is empty.',
               icon: Icons.queue_music,
             )
-          : ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              scrollController: _scroll,
-              padding: const EdgeInsets.only(bottom: AriaSpace.s8),
-              itemCount: q.tracks.length,
-              // onReorderItem's newIndex is post-removal; core move() wants
-              // the pre-move insertion index (legacy qMove dest semantics).
-              onReorderItem: (oldIndex, newIndex) {
-                final dest = newIndex > oldIndex ? newIndex + 1 : newIndex;
-                ref.read(queueProvider.notifier).move([oldIndex], dest);
-              },
-              itemBuilder: (context, i) => _QueueRow(
-                // Same track can be queued twice; the index keeps keys unique.
-                key: ValueKey('q$i-${q.tracks[i].id}'),
-                track: q.tracks[i],
-                index: i,
-                isCurrent: i == q.index,
-                isPlayed: i < q.index,
-              ),
+          : Column(
+              children: [
+                const _QueueLeftBanner(),
+                Expanded(
+                  child: ReorderableListView.builder(
+                    buildDefaultDragHandles: false,
+                    scrollController: _scroll,
+                    physics: _DampenUpPhysics(
+                      boundary: q.index * _rowH,
+                      parent: const ClampingScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.only(bottom: AriaSpace.s8),
+                    itemCount: q.tracks.length,
+                    // onReorderItem's newIndex is post-removal; core move()
+                    // wants the pre-move insertion index (legacy qMove dest
+                    // semantics).
+                    onReorderItem: (oldIndex, newIndex) {
+                      final dest = newIndex > oldIndex ? newIndex + 1 : newIndex;
+                      ref.read(queueProvider.notifier).move([oldIndex], dest);
+                    },
+                    itemBuilder: (context, i) => _QueueRow(
+                      // Same track can be queued twice; the index keeps keys
+                      // unique.
+                      key: ValueKey('q$i-${q.tracks[i].id}'),
+                      track: q.tracks[i],
+                      index: i,
+                      isCurrent: i == q.index,
+                      isPlayed: i < q.index,
+                    ),
+                  ),
+                ),
+              ],
             ),
       bottomNavigationBar: const TransportBar(),
     );
@@ -258,27 +273,14 @@ class _QueueRow extends ConsumerWidget {
         ),
       ),
     );
-    if (!isCurrent) return content;
-    // Time left on the queue: remainder of the current track + all upcoming.
-    final pos = ref.watch(playbackPositionProvider).value ?? 0;
-    final curDur = ref.watch(currentDurationProvider);
-    final q = ref.read(queueProvider);
-    final upcoming = q.tracks
-        .skip(q.index + 1)
-        .fold<double>(0, (s, t) => s + (t.duration ?? 0));
-    final left = (curDur - pos).clamp(0, double.infinity) + upcoming;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        content,
-        Padding(
-          padding: const EdgeInsets.only(left: 64, bottom: 6),
-          child: Text(
-            _queueLeft(left.toDouble()),
-            style: Theme.of(context).textTheme.bodySmall!.copyWith(color: c.accent),
-          ),
-        ),
-      ],
+    final sized = SizedBox(height: _rowH, child: content);
+    if (!isCurrent) return sized;
+    // Visible separator dividing the current song from upcoming tracks.
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.accent, width: 2)),
+      ),
+      child: sized,
     );
   }
 
@@ -335,4 +337,52 @@ String _queueLeft(double secs) {
   final m = (secs / 60).round();
   final body = m < 60 ? '$m min' : '${m ~/ 60}h ${m % 60}m';
   return '$body left in queue';
+}
+
+/// Thin non-scrolling banner: remainder of the current track + all upcoming.
+class _QueueLeftBanner extends ConsumerWidget {
+  const _QueueLeftBanner();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = AriaColors.of(context);
+    final q = ref.watch(queueProvider);
+    final pos = ref.watch(playbackPositionProvider).value ?? 0;
+    final curDur = ref.watch(currentDurationProvider);
+    if (q.tracks.isEmpty) return const SizedBox.shrink();
+    final upcoming = q.tracks
+        .skip(q.index + 1)
+        .fold<double>(0, (s, t) => s + (t.duration ?? 0));
+    final left = (curDur - pos).clamp(0, double.infinity) + upcoming;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AriaSpace.s4,
+        0,
+        AriaSpace.s4,
+        AriaSpace.s2,
+      ),
+      child: Text(
+        _queueLeft(left.toDouble()),
+        style: Theme.of(context).textTheme.bodySmall!.copyWith(color: c.accent),
+      ),
+    );
+  }
+}
+
+/// Dampens upward flings/drags into already-played history so scrolling back
+/// up past the current song meets a bit of resistance.
+class _DampenUpPhysics extends ScrollPhysics {
+  const _DampenUpPhysics({required this.boundary, super.parent});
+  final double boundary;
+  @override
+  _DampenUpPhysics applyTo(ScrollPhysics? ancestor) =>
+      _DampenUpPhysics(boundary: boundary, parent: buildParent(ancestor));
+  @override
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
+    // In Flutter, a NEGATIVE offset moves toward minScrollExtent (up, into
+    // already-played history). Dampen that once at/above the current song.
+    if (offset < 0 && position.pixels <= boundary) {
+      return super.applyPhysicsToUserOffset(position, offset * 0.35);
+    }
+    return super.applyPhysicsToUserOffset(position, offset);
+  }
 }

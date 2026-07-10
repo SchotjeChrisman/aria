@@ -19,8 +19,13 @@ class TrackMeta {
   final int? channels;
 }
 
-/// Decoded audio format for the UI badge. Emitted from server meta on play,
-/// then overwritten by mpv's real `audio-params` once decode starts.
+/// Audio format for the UI badge. [sampleRate]/[bitDepth] are the *decoded*
+/// stream (mpv `audio-params`, or server meta before decode starts).
+/// [outSampleRate]/[outBitDepth] are what mpv actually sends to the audio
+/// device (`audio-out-params`) after any resampling it does — the honest
+/// bit-perfect story, and the deepest into the chain the platform lets us see
+/// (an OS layer below mpv, e.g. Android AudioFlinger, can still resample
+/// invisibly).
 @immutable
 class AudioFormat {
   const AudioFormat({
@@ -28,6 +33,8 @@ class AudioFormat {
     this.channels,
     this.sampleFormat,
     this.bitDepth,
+    this.outSampleRate,
+    this.outBitDepth,
   });
 
   final int? sampleRate;
@@ -38,20 +45,35 @@ class AudioFormat {
   final String? sampleFormat;
   final int? bitDepth;
 
+  /// The format mpv hands to the audio output (`audio-out-params`). Null until
+  /// an output is initialised.
+  final int? outSampleRate;
+  final int? outBitDepth;
+
   @override
   bool operator ==(Object other) =>
       other is AudioFormat &&
       other.sampleRate == sampleRate &&
       other.channels == channels &&
       other.sampleFormat == sampleFormat &&
-      other.bitDepth == bitDepth;
+      other.bitDepth == bitDepth &&
+      other.outSampleRate == outSampleRate &&
+      other.outBitDepth == outBitDepth;
 
   @override
-  int get hashCode => Object.hash(sampleRate, channels, sampleFormat, bitDepth);
+  int get hashCode => Object.hash(
+    sampleRate,
+    channels,
+    sampleFormat,
+    bitDepth,
+    outSampleRate,
+    outBitDepth,
+  );
 
   @override
   String toString() =>
-      'AudioFormat(${sampleRate}Hz, ${channels}ch, ${sampleFormat ?? 'meta'}, ${bitDepth}bit)';
+      'AudioFormat(${sampleRate}Hz, ${channels}ch, ${sampleFormat ?? 'meta'}, '
+      '${bitDepth}bit → out ${outSampleRate}Hz ${outBitDepth}bit)';
 }
 
 int? _bitDepthFromSampleFormat(String? fmt) {
@@ -140,6 +162,8 @@ class AriaPlayer {
   int? _fmtRate;
   int? _fmtChannels;
   String? _fmtSampleFormat;
+  int? _outRate;
+  String? _outSampleFormat;
 
   final _positionCtrl = StreamController<double>.broadcast(sync: true);
   final _durationCtrl = StreamController<double>.broadcast(sync: true);
@@ -248,6 +272,10 @@ class AriaPlayer {
       MpvFormat.int64,
     );
     raw.observeProperty(handle, 8, 'current-ao', MpvFormat.string);
+    // What actually reaches the audio device after mpv's own resampling —
+    // the honest output leg for the signal path.
+    raw.observeProperty(handle, 9, 'audio-out-params/samplerate', MpvFormat.int64);
+    raw.observeProperty(handle, 10, 'audio-out-params/format', MpvFormat.string);
 
     // Surface audio-output failures (see [audioError]).
     raw.requestLogMessages(handle, 'error');
@@ -288,6 +316,8 @@ class AriaPlayer {
     _fmtRate = null;
     _fmtChannels = null;
     _fmtSampleFormat = null;
+    _outRate = null;
+    _outSampleFormat = null;
     _raw!.command(_handle, ['loadfile', url, 'replace']);
     _raw!.setPropertyString(_handle, 'pause', 'no');
     if (meta != null) {
@@ -563,6 +593,16 @@ class AriaPlayer {
           _audioDevice = value;
           _audioDeviceCtrl.add(value);
         }
+      case 'audio-out-params/samplerate':
+        if (value is int) {
+          _outRate = value;
+          _emitFormat();
+        }
+      case 'audio-out-params/format':
+        if (value is String) {
+          _outSampleFormat = value;
+          _emitFormat();
+        }
     }
   }
 
@@ -573,6 +613,8 @@ class AriaPlayer {
         channels: _fmtChannels,
         sampleFormat: _fmtSampleFormat,
         bitDepth: _bitDepthFromSampleFormat(_fmtSampleFormat) ?? _meta?.bits,
+        outSampleRate: _outRate,
+        outBitDepth: _bitDepthFromSampleFormat(_outSampleFormat),
       ),
     );
   }

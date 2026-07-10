@@ -387,6 +387,25 @@ void main() {
       expect(formats.last.bitDepth, 32);
       await player.dispose();
     });
+
+    test('audio-out-params exposes the real output rate, not just decode',
+        () async {
+      final (player, fake) = await makePlayer();
+      final formats = <AudioFormat>[];
+      player.format.listen(formats.add);
+      player.play('u');
+      fake.events.addAll([
+        startFile,
+        prop('audio-params/samplerate', 44100), // decoded source
+        prop('audio-out-params/samplerate', 48000), // mpv resamples to device
+        prop('audio-out-params/format', 's16'),
+      ]);
+      player.debugPoll();
+      expect(formats.last.sampleRate, 44100);
+      expect(formats.last.outSampleRate, 48000);
+      expect(formats.last.outBitDepth, 16);
+      await player.dispose();
+    });
   });
 
   group('gapless queue', () {

@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// ponytail: kept in sync with pubspec.yaml by hand — package_info_plus would
 /// read it at runtime but isn't worth a dependency for one string.
-const appVersion = '2.6.0';
+const appVersion = '3.0.0';
 
 const _prefsKeyDeviceId = 'aria.deviceId';
 

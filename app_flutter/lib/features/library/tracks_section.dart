@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -169,58 +171,78 @@ class TracksSection extends ConsumerWidget {
             ],
           ),
         ),
-        _HeaderRow(sort: sort),
-        Divider(height: 1, color: c.line),
         Expanded(
-          child: list.isEmpty
-              ? const EmptyState(
-                  message: 'No tracks.',
-                  icon: Icons.music_note_outlined,
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: AriaSpace.s6),
-                  itemCount: list.length,
-                  itemExtent: 44,
-                  itemBuilder: (context, i) => SelectionHighlight(
-                    kind: 'track',
-                    itemKey: list[i].id,
-                    child: _TrackTableRow(
-                      track: list[i],
-                      index: i,
-                      plays: counts?[list[i].id],
-                      isCurrent: list[i].id == currentId,
-                      onTap: () {
-                        final t = list[i];
-                        if (selectionTapHandled(ref, trackSelectionItem(t))) {
-                          return;
-                        }
-                        ref.read(queueProvider.notifier).playQueue(list, i);
-                      },
-                      onSecondary: (pos) => showAriaContextMenu(
-                        context,
-                        pos,
-                        trackMenuItems(context, ref, list[i]),
-                      ),
+          child: LayoutBuilder(
+            builder: (context, cons) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: math.max(cons.maxWidth, 900),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HeaderRow(sort: sort),
+                    Divider(height: 1, color: c.line),
+                    Expanded(
+                      child: list.isEmpty
+                          ? const EmptyState(
+                              message: 'No tracks.',
+                              icon: Icons.music_note_outlined,
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(
+                                bottom: AriaSpace.s6,
+                              ),
+                              itemCount: list.length,
+                              itemExtent: 44,
+                              itemBuilder: (context, i) => SelectionHighlight(
+                                kind: 'track',
+                                itemKey: list[i].id,
+                                child: _TrackTableRow(
+                                  track: list[i],
+                                  index: i,
+                                  plays: counts?[list[i].id],
+                                  isCurrent: list[i].id == currentId,
+                                  onTap: () {
+                                    final t = list[i];
+                                    if (selectionTapHandled(
+                                      ref,
+                                      trackSelectionItem(t),
+                                    )) {
+                                      return;
+                                    }
+                                    ref
+                                        .read(queueProvider.notifier)
+                                        .playQueue(list, i);
+                                  },
+                                  onSecondary: (pos) => showAriaContextMenu(
+                                    context,
+                                    pos,
+                                    trackMenuItems(context, ref, list[i]),
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
-                  ),
+                  ],
                 ),
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-/// Column layout shared by the header and every row; genre/year/plays
-/// collapse on narrow layouts.
+/// Column layout shared by the header and every row.
 class _Cells extends StatelessWidget {
   const _Cells({required this.builder});
 
-  final Widget Function(String key, bool narrow) builder;
+  final Widget Function(String key) builder;
 
   @override
   Widget build(BuildContext context) {
-    final narrow = AriaBreakpoint.of(context) == AriaBreakpoint.mobile;
-    Widget cell(String key) => builder(key, narrow);
+    Widget cell(String key) => builder(key);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s6),
       child: Row(
@@ -229,11 +251,11 @@ class _Cells extends StatelessWidget {
           Expanded(flex: 3, child: cell('title')),
           Expanded(flex: 2, child: cell('artist')),
           Expanded(flex: 2, child: cell('album')),
-          if (!narrow) Expanded(flex: 2, child: cell('genre')),
-          if (!narrow) SizedBox(width: 48, child: cell('year')),
+          Expanded(flex: 2, child: cell('genre')),
+          SizedBox(width: 48, child: cell('year')),
           SizedBox(width: 52, child: cell('duration')),
           SizedBox(width: 92, child: cell('format')),
-          if (!narrow) SizedBox(width: 46, child: cell('plays')),
+          SizedBox(width: 46, child: cell('plays')),
         ],
       ),
     );
@@ -250,7 +272,7 @@ class _HeaderRow extends ConsumerWidget {
     final c = AriaColors.of(context);
     final labels = {for (final (k, l) in _cols) k: l};
     return _Cells(
-      builder: (key, _) {
+      builder: (key) {
         if (key == 'no') return const SizedBox.shrink();
         final active = sort.key == key;
         return InkWell(
@@ -317,7 +339,7 @@ class _TrackTableRow extends StatelessWidget {
           onTap: onTap,
           hoverColor: c.bgHover,
           child: _Cells(
-            builder: (key, _) => switch (key) {
+            builder: (key) => switch (key) {
               'no' => txt(
                 isCurrent ? '▶' : '${index + 1}',
                 color: dim,
