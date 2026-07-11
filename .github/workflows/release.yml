@@ -91,7 +91,8 @@ jobs:
         # itself is resolved from flathub on the user's machine at install time.
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
+          sudo apt-get install -y flatpak flatpak-builder \
+            ninja-build libgtk-3-dev libmpv-dev mpv
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
       - name: Build Flutter bundle
