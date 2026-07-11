@@ -43,6 +43,27 @@ class ArtistDiscography extends ConsumerWidget {
       for (final a in albums)
         if (a.albumArtist == name) a,
     ];
+
+    // Appears on: library albums this artist is credited on but doesn't
+    // front, gathered from every credit field (legacy renderArtistOverview).
+    final albumsById = {for (final a in albums) a.id: a};
+    final appear = <String>{};
+    for (final t in ref.watch(artistRelevantTracksProvider(name))) {
+      if (t.artist == name && t.albumArtist != name) appear.add(t.albumId);
+      if (t.composer == name) appear.add(t.albumId);
+      if (t.conductor == name) appear.add(t.albumId);
+      if (t.orchestra == name) appear.add(t.albumId);
+      for (final p in t.performers) {
+        if (p.name == name && p.role != null) appear.add(t.albumId);
+      }
+    }
+    for (final a in lib) {
+      appear.remove(a.id);
+    }
+    final appearAlbums = [
+      for (final id in appear)
+        if (albumsById[id] != null) albumsById[id]!,
+    ]..sort((x, y) => (y.year ?? 0) - (x.year ?? 0));
     // owned titles block remote ghosts
     final seen = <String>{for (final a in lib) normTitle(a.title)};
 
@@ -68,7 +89,7 @@ class ArtistDiscography extends ConsumerWidget {
         ),
       );
     }
-    if (items.isEmpty) {
+    if (items.isEmpty && appearAlbums.isEmpty) {
       return const EmptyState(
         message: 'No releases found.',
         icon: Icons.album_outlined,
@@ -168,6 +189,67 @@ class ArtistDiscography extends ConsumerWidget {
             ),
             const SizedBox(height: AriaSpace.s4),
           ],
+        if (appearAlbums.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(
+              top: AriaSpace.s2,
+              bottom: AriaSpace.s3,
+            ),
+            child: Text.rich(
+              TextSpan(
+                text: 'Appears on',
+                style: Theme.of(context).textTheme.titleMedium,
+                children: [
+                  TextSpan(
+                    text: '  ${appearAlbums.length}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w400,
+                      color: cn.fgDim,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: AriaBreakpoint.of(context).gridColumns,
+              mainAxisSpacing: AriaSpace.s5,
+              crossAxisSpacing: AriaSpace.s5,
+              childAspectRatio:
+                  AriaBreakpoint.of(context) == AriaBreakpoint.tablet
+                  ? 0.67
+                  : 0.72,
+            ),
+            itemCount: appearAlbums.length,
+            itemBuilder: (context, i) {
+              final a = appearAlbums[i];
+              return Consumer(
+                builder: (context, ref, _) => AlbumCard(
+                  title: a.title,
+                  subtitle: '${a.albumArtist}${a.year != null ? ' · ${a.year}' : ''}',
+                  artUrl: api.artUrl(a.id, version: a.artVersion),
+                  onTap: () => context.push(albumPath(a.id)),
+                  onSecondary: (pos) => showAriaContextMenu(
+                    context,
+                    pos,
+                    actions.albumMenuItems(
+                      context,
+                      ref,
+                      albumId: a.id,
+                      tracks: a.tracks,
+                      artistName: a.albumArtist,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AriaSpace.s4),
+        ],
       ],
     );
   }

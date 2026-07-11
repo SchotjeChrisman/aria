@@ -45,30 +45,12 @@ class ArtistOverview extends ConsumerWidget {
     // Cached, artist-filtered subset — never rescan the full library here.
     final tracks = ref.watch(artistRelevantTracksProvider(name));
     final albums = ref.watch(artistAlbumsProvider).value ?? const <Album>[];
-    final albumsById = {for (final a in albums) a.id: a};
     final inLibrary = ref.watch(libraryArtistNamesProvider);
 
     final main = [
       for (final a in albums)
         if (a.albumArtist == name) a,
     ];
-
-    // appears on: albumId -> roles, from every credit field (legacy)
-    final appear = <String, Set<String>>{};
-    void add(String albumId, String role) =>
-        (appear[albumId] ??= <String>{}).add(role);
-    for (final t in tracks) {
-      if (t.artist == name && t.albumArtist != name) add(t.albumId, 'artist');
-      if (t.composer == name) add(t.albumId, 'composer');
-      if (t.conductor == name) add(t.albumId, 'conductor');
-      if (t.orchestra == name) add(t.albumId, 'orchestra');
-      for (final p in t.performers) {
-        if (p.name == name && p.role != null) add(t.albumId, p.role!);
-      }
-    }
-    for (final a in main) {
-      appear.remove(a.id);
-    }
 
     // explicit works only, like the legacy composers index
     final works = <String>{
@@ -82,7 +64,6 @@ class ArtistOverview extends ConsumerWidget {
         _FactsHero(name: name, tracks: tracks, onMoreBio: onMoreBio),
         _TopTracks(name: name),
         ..._albumShelves(context, ref, main),
-        ..._appearsOn(context, appear, albumsById),
         _PeopleShelves(name: name, inLibrary: inLibrary),
         if (works.isNotEmpty)
           Align(
@@ -92,7 +73,7 @@ class ArtistOverview extends ConsumerWidget {
               child: Text('View compositions (${works.length}) →'),
             ),
           ),
-        if (main.isEmpty && appear.isEmpty)
+        if (main.isEmpty && tracks.isEmpty)
           const EmptyState(
             message: 'Not in your library — yet.',
             icon: Icons.person_outline,
@@ -158,60 +139,6 @@ class ArtistOverview extends ConsumerWidget {
     ];
   }
 
-  List<Widget> _appearsOn(
-    BuildContext context,
-    Map<String, Set<String>> appear,
-    Map<String, Album> albumsById,
-  ) {
-    if (appear.isEmpty) return const [];
-    final c = AriaColors.of(context);
-    return [
-      Padding(
-        padding: const EdgeInsets.only(bottom: AriaSpace.s3),
-        child: Text(
-          'Appears on',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-      ),
-      for (final e in appear.entries)
-        if (albumsById[e.key] != null)
-          InkWell(
-            onTap: () => context.push(albumPath(e.key)),
-            borderRadius: BorderRadius.circular(AriaRadius.md),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AriaSpace.s3,
-                vertical: 10,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        text: albumsById[e.key]!.title,
-                        children: [
-                          TextSpan(
-                            text: ' — ${albumsById[e.key]!.albumArtist}',
-                            style: TextStyle(color: c.fgDim),
-                          ),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: AriaSpace.s3),
-                  Text(
-                    e.value.join(', '),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-      const SizedBox(height: AriaSpace.s5),
-    ];
-  }
 }
 
 /// Portrait + age/origin/genres only — the bio lives in the Info tab

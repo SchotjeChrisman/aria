@@ -222,54 +222,83 @@ class _StatStrip extends StatelessWidget {
       for (final t in tracks) ?compositionKey(t),
     };
 
-    Widget tile(String num, String label, String route) => Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        onTap: () => context.go(route),
-        child: Container(
-          // Equal-width under Expanded; vertical padding only so tiles stretch
-          // to fill their share of the row.
-          padding: const EdgeInsets.symmetric(
-            horizontal: AriaSpace.s3,
-            vertical: AriaSpace.s4,
+    Widget tile(String num, String label, IconData icon, String route) {
+      final text = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            num,
+            style: TextStyle(
+              fontSize: 18,
+              color: c.fg,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-          decoration: BoxDecoration(
-            color: c.bgRaised,
-            borderRadius: BorderRadius.circular(AriaRadius.md),
-            border: Border.all(color: c.line),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                num,
-                style: TextStyle(
-                  fontSize: 18,
-                  color: c.fg,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+        ],
+      );
+      final glyph = Icon(icon, size: 24, color: c.accent);
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AriaRadius.md),
+          onTap: () => context.go(route),
+          child: Container(
+            // Equal-width under Expanded; vertical padding only so tiles stretch
+            // to fill their share of the row.
+            padding: const EdgeInsets.symmetric(
+              horizontal: AriaSpace.s3,
+              vertical: AriaSpace.s4,
+            ),
+            decoration: BoxDecoration(
+              color: c.bgRaised,
+              borderRadius: BorderRadius.circular(AriaRadius.md),
+              border: Border.all(color: c.line),
+            ),
+            // Icon beside the text when the tile is wide enough, stacked above
+            // it when it isn't.
+            child: LayoutBuilder(
+              builder: (context, box) => box.maxWidth >= 150
+                  ? Row(
+                      children: [
+                        glyph,
+                        const SizedBox(width: AriaSpace.s3),
+                        Flexible(child: text),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        glyph,
+                        const SizedBox(height: AriaSpace.s2),
+                        text,
+                      ],
+                    ),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    }
 
     return Row(
       children: [
-        tile('${composers.length}', 'Composers', '/library/composers'),
+        tile('${composers.length}', 'Composers', Icons.edit_note,
+            '/library/composers'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${performers.length}', 'Performers', '/library/artists'),
+        tile('${performers.length}', 'Performers', Icons.groups_outlined,
+            '/library/artists'),
         const SizedBox(width: AriaSpace.s2),
-        tile('$albumCount', 'Releases', '/library/albums'),
+        tile('$albumCount', 'Releases', Icons.album_outlined,
+            '/library/albums'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${compositions.length}', 'Compositions', '/library/tracks'),
+        tile('${compositions.length}', 'Compositions', Icons.music_note_outlined,
+            '/library/tracks'),
       ],
     );
   }
@@ -545,35 +574,66 @@ class _Listening extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Listening',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              TextButton(
-                onPressed: () => context.push('/stats'),
-                child: const Text('See all →'),
-              ),
-            ],
+          // Two separate titled shelves, each three panels wide (3 across on
+          // desktop, 2 on tablet, 1 on mobile) — replaces the old swipe slider.
+          _shelfHeader(
+            context,
+            'Listening time',
+            onSeeAll: () => context.push('/stats'),
           ),
           const SizedBox(height: AriaSpace.s3),
-          // Full-width slider — one card per page, no background.
-          SizedBox(
-            height: 360,
-            child: PageView(
-              children: [
-                _WeeklyTimeBox(weekSecs: weekSecs, dayGrid: dayGrid),
-                const _RanksCard(),
-              ],
-            ),
-          ),
+          _WeeklyTimeBox(weekSecs: weekSecs, dayGrid: dayGrid),
+          const SizedBox(height: AriaSpace.s6),
+          _shelfHeader(context, 'Ranks'),
+          const SizedBox(height: AriaSpace.s3),
+          const _RanksCard(),
         ],
       ),
     );
   }
+}
+
+/// Section header for a stat shelf: title with an optional "See all →".
+Widget _shelfHeader(
+  BuildContext context,
+  String title, {
+  VoidCallback? onSeeAll,
+}) => Row(
+  children: [
+    Expanded(
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    ),
+    if (onSeeAll != null)
+      TextButton(onPressed: onSeeAll, child: const Text('See all →')),
+  ],
+);
+
+/// Three stat panels sized so N fill the width — 3 on desktop, 2 on tablet,
+/// 1 on mobile — with the rest reachable by horizontal slide, never wrapping.
+Widget _cardShelf(BuildContext context, List<Widget> cards) {
+  final n = switch (AriaBreakpoint.of(context)) {
+    AriaBreakpoint.desktop => 3,
+    AriaBreakpoint.tablet => 2,
+    AriaBreakpoint.mobile => 1,
+  };
+  const gap = AriaSpace.s6;
+  return LayoutBuilder(
+    builder: (context, box) {
+      final w = (box.maxWidth - (n - 1) * gap) / n;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (i, card) in cards.indexed) ...[
+              if (i > 0) const SizedBox(width: gap),
+              SizedBox(width: w, child: card),
+            ],
+          ],
+        ),
+      );
+    },
+  );
 }
 
 /// Top genres / performers / releases by time listened over a selectable
@@ -683,7 +743,6 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
       (k) => albumById[k]?.title ?? '—',
     );
 
-    final stacked = AriaBreakpoint.of(context) == AriaBreakpoint.mobile;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AriaSpace.s4),
       child: Column(
@@ -691,14 +750,14 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: SegmentedButton<String>(
-              segments: [
+            child: DropdownButton<String>(
+              value: _period,
+              items: [
                 for (final (v, l) in _periods)
-                  ButtonSegment(value: v, label: Text(l)),
+                  DropdownMenuItem(value: v, child: Text(l)),
               ],
-              selected: {_period},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => setState(() => _period = s.first),
+              onChanged: (v) =>
+                  v == null ? null : setState(() => _period = v),
             ),
           ),
           const SizedBox(height: AriaSpace.s4),
@@ -707,28 +766,8 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
               padding: EdgeInsets.only(top: AriaSpace.s6),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (stacked)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                genres,
-                const SizedBox(height: AriaSpace.s5),
-                performers,
-                const SizedBox(height: AriaSpace.s5),
-                releases,
-              ],
-            )
           else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: genres),
-                const SizedBox(width: AriaSpace.s6),
-                Expanded(child: performers),
-                const SizedBox(width: AriaSpace.s6),
-                Expanded(child: releases),
-              ],
-            ),
+            _cardShelf(context, [genres, performers, releases]),
         ],
       ),
     );
@@ -892,30 +931,9 @@ class _WeeklyTimeBox extends StatelessWidget {
       ],
     );
 
-    final stacked = AriaBreakpoint.of(context) == AriaBreakpoint.mobile;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AriaSpace.s4),
-      child: stacked
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                total4w,
-                const SizedBox(height: AriaSpace.s5),
-                time,
-                const SizedBox(height: AriaSpace.s5),
-                dots,
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(child: total4w),
-                const SizedBox(width: AriaSpace.s6),
-                Expanded(child: time),
-                const SizedBox(width: AriaSpace.s6),
-                Expanded(child: dots),
-              ],
-            ),
+      child: _cardShelf(context, [total4w, time, dots]),
     );
   }
 }
