@@ -17,6 +17,13 @@ runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 command: aria
 
+# Force libdir=lib for every module. meson's libdir heuristic picks lib64 in
+# some sandboxes (older flatpak-builder doesn't override it), which drops
+# libplacebo.pc off mpv's pkg-config path and strands libs off the runtime's
+# LD path. This is builder-version-independent (flatpak-builder owns --libdir).
+build-options:
+  libdir: /app/lib
+
 finish-args:
   - --share=network                     # streams the library from the server
   - --share=ipc

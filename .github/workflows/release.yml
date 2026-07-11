@@ -91,14 +91,10 @@ jobs:
         # itself is resolved from flathub on the user's machine at install time.
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak ninja-build libgtk-3-dev libmpv-dev mpv
-          # Install into the --user flatpak so the --user builder finds the Sdk.
-          # org.flatpak.Builder (from flathub) not apt's flatpak-builder: apt's is
-          # stale and omits meson --libdir, so meson picks lib64 and mpv can't find
-          # libplacebo.pc. The flathub builder pins libdir=lib deterministically.
-          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub org.flatpak.Builder \
-            org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
+          sudo apt-get install -y flatpak flatpak-builder \
+            ninja-build libgtk-3-dev libmpv-dev mpv
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
       - name: Build Flutter bundle
         # The manifest packages this host-built bundle (source: type dir).
         run: flutter build linux --release
@@ -108,7 +104,7 @@ jobs:
         # Adds ~10 min for mpv/libplacebo. Add actions/cache on .flatpak-builder
         # if the runtime becomes a bottleneck.
         run: |
-          flatpak run org.flatpak.Builder --user --force-clean --repo=repo \
+          flatpak-builder --user --force-clean --repo=repo \
             build-flatpak packaging/flatpak/dev.aria.aria.yml
           flatpak build-bundle repo aria-linux-x64.flatpak dev.aria.aria
       - name: Upload to release
