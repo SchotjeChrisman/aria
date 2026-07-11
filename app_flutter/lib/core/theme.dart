@@ -102,6 +102,43 @@ enum AriaBreakpoint {
         tablet => 4,
         desktop => 6,
       };
+
+  /// Max width the page content is centered within on wide layouts, so rows
+  /// don't stretch edge-to-edge and read like a blown-up phone. Below this
+  /// width the content just fills the window.
+  static const double maxContentWidth = 1200;
+}
+
+/// Horizontal inset that centers page content within
+/// [AriaBreakpoint.maxContentWidth]. The shell knows the content-area width and
+/// provides it here; each scroll view folds it into its own horizontal padding.
+/// That keeps the scrollable full-width (the mouse wheel works over the
+/// margins) while the visible content stays centered and capped — the cap lives
+/// inside the scroll, not around it.
+class ContentInset extends InheritedWidget {
+  const ContentInset({super.key, required this.inset, required super.child});
+
+  final double inset;
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ContentInset>()?.inset ?? 0;
+
+  @override
+  bool updateShouldNotify(ContentInset old) => old.inset != inset;
+}
+
+/// Page padding that also centers content within [AriaBreakpoint.maxContentWidth].
+/// Drop-in for the scroll-root paddings: [EdgeInsets.all(s6)] becomes
+/// `ariaPagePadding(context)`; `fromLTRB(s6, 0, s6, s6)` becomes
+/// `ariaPagePadding(context, top: 0)`.
+EdgeInsets ariaPagePadding(
+  BuildContext context, {
+  double horizontal = AriaSpace.s6,
+  double top = AriaSpace.s6,
+  double bottom = AriaSpace.s6,
+}) {
+  final h = horizontal + ContentInset.of(context);
+  return EdgeInsets.only(left: h, right: h, top: top, bottom: bottom);
 }
 
 /// Spacing scale — 4px base, same steps as the legacy --sp-* vars.

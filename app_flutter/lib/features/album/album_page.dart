@@ -76,7 +76,7 @@ class _AlbumBody extends ConsumerWidget {
     final queue = ref.read(queueProvider.notifier);
 
     return ListView(
-      padding: const EdgeInsets.all(AriaSpace.s6),
+      padding: ariaPagePadding(context),
       children: [
         _header(context, ref, api, queue),
         const SizedBox(height: AriaSpace.s4),

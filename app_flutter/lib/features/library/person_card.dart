@@ -36,7 +36,9 @@ class PersonCard extends StatelessWidget {
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          // Centered under the round avatar — left-aligned text reads off
+          // against a circle.
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             AspectRatio(
@@ -55,6 +57,7 @@ class PersonCard extends StatelessWidget {
             Text(
               name,
               style: const TextStyle(fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -62,6 +65,7 @@ class PersonCard extends StatelessWidget {
               Text(
                 subtitle!,
                 style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

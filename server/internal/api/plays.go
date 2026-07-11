@@ -94,6 +94,11 @@ func registerPlays(mux *http.ServeMux, d *Deps) {
 
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) { stats(w, r, d) })
 
+	// Per-track play counts within a period (week/month/year/all). The client
+	// already holds each track's duration, genres and performers, so it turns
+	// these counts into time-listened rankings itself — no server-side merge.
+	mux.HandleFunc("GET /api/plays/counts", func(w http.ResponseWriter, r *http.Request) { periodCounts(w, r, d) })
+
 	// memoized: recompute scans 100k tracks + every artist discography blob
 	var nrMemo memo[[]release]
 	mux.HandleFunc("GET /api/newreleases", func(w http.ResponseWriter, r *http.Request) {
@@ -374,6 +379,69 @@ func stats(w http.ResponseWriter, r *http.Request, d *Deps) {
 		resp["playCounts"] = pc
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// periodCounts returns {trackId: plays} over a rolling window: week=7d,
+// month=30d, year=365d, all=no cutoff. Pure SQL over the (unbounded) plays
+// table — scales with distinct played tracks, not history length.
+func periodCounts(w http.ResponseWriter, r *http.Request, d *Deps) {
+	ctx := r.Context()
+	pid := r.URL.Query().Get("profileId")
+	if pid != "" {
+		p, err := d.Profiles.ByID(ctx, pid)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if p == nil {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+	}
+	var days int
+	switch r.URL.Query().Get("period") {
+	case "week":
+		days = 7
+	case "month":
+		days = 30
+	case "year":
+		days = 365
+	case "all", "":
+		days = 0
+	default:
+		httpError(w, http.StatusBadRequest, "invalid period")
+		return
+	}
+
+	q := `SELECT p.trackId, COUNT(*) FROM plays p WHERE (?1 = '' OR p.profileId = ?1)`
+	args := []any{pid}
+	if days > 0 {
+		q += ` AND p.at >= ?2`
+		args = append(args, time.Now().UTC().Add(-time.Duration(days)*24*time.Hour).Format("2006-01-02T15:04:05.000Z"))
+	}
+	q += ` GROUP BY p.trackId`
+
+	rows, err := d.DB.QueryContext(ctx, q, args...)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			fail(w, err)
+			return
+		}
+		counts[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"counts": counts})
 }
 
 type release struct {

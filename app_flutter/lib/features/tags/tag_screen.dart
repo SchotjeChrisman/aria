@@ -58,12 +58,7 @@ class TagScreen extends ConsumerWidget {
     if (tag.folder) {
       final inFolder = tagsInFolder(all, tag.id);
       return ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AriaSpace.s6,
-          0,
-          AriaSpace.s6,
-          AriaSpace.s6,
-        ),
+        padding: ariaPagePadding(context, top: 0),
         children: [
           Text(tag.name, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: AriaSpace.s5),
@@ -105,12 +100,7 @@ class TagScreen extends ConsumerWidget {
     ];
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AriaSpace.s6,
-        0,
-        AriaSpace.s6,
-        AriaSpace.s6,
-      ),
+      padding: ariaPagePadding(context, top: 0),
       children: [
         Text(tag.name, style: Theme.of(context).textTheme.titleLarge),
         if (tag.parent != null) ...[

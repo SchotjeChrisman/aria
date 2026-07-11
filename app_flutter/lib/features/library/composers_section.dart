@@ -92,11 +92,10 @@ class _ComposersSectionState extends ConsumerState<ComposersSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AriaSpace.s6,
-            AriaSpace.s4,
-            AriaSpace.s6,
-            AriaSpace.s4,
+          padding: ariaPagePadding(
+            context,
+            top: AriaSpace.s4,
+            bottom: AriaSpace.s4,
           ),
           child: Row(
             children: [
@@ -112,14 +111,10 @@ class _ComposersSectionState extends ConsumerState<ComposersSection> {
         ),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(
-              AriaSpace.s6,
-              0,
-              AriaSpace.s6,
-              AriaSpace.s6,
-            ),
+            padding: ariaPagePadding(context, top: 0),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: AriaBreakpoint.of(context).gridColumns,
+              // Person cards one column denser than album cards (smaller).
+              crossAxisCount: AriaBreakpoint.of(context).gridColumns + 1,
               mainAxisSpacing: AriaSpace.s5,
               crossAxisSpacing: AriaSpace.s5,
               // Tablet-floor tiles (~103px at a 600px window) need a taller

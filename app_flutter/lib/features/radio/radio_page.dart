@@ -23,7 +23,7 @@ class _RadioPageState extends ConsumerState<RadioPage> {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(AriaSpace.s6),
+          padding: ariaPagePadding(context),
           children: [
             Text('Radio', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: AriaSpace.s4),

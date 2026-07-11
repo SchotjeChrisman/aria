@@ -61,12 +61,7 @@ class PlaylistScreen extends ConsumerWidget {
     final list = tracksAsync.value;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AriaSpace.s6,
-        0,
-        AriaSpace.s6,
-        AriaSpace.s6,
-      ),
+      padding: ariaPagePadding(context, top: 0),
       children: [
         Row(
           children: [

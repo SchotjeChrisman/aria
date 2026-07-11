@@ -116,12 +116,7 @@ class _GenreBody extends ConsumerWidget {
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AriaSpace.s6,
-              AriaSpace.s4,
-              AriaSpace.s6,
-              0,
-            ),
+            padding: ariaPagePadding(context, top: AriaSpace.s4, bottom: 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -181,12 +176,7 @@ class _GenreBody extends ConsumerWidget {
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            AriaSpace.s6,
-            0,
-            AriaSpace.s6,
-            AriaSpace.s6,
-          ),
+          padding: ariaPagePadding(context, top: 0),
           sliver: SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: AriaBreakpoint.of(context).gridColumns,

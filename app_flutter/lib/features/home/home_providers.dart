@@ -22,6 +22,15 @@ final homeStatsProvider = FutureProvider<Stats>((ref) async {
   return ref.watch(apiClientProvider).stats(profileId: pid);
 });
 
+/// Per-track play counts for the active profile over a period (week/month/
+/// year/all) — the Listening ranks card multiplies these by track durations.
+final periodCountsProvider =
+    FutureProvider.family<Map<String, int>, String>((ref, period) async {
+  await ref.watch(profilesProvider.future);
+  final pid = ref.watch(activeProfileIdProvider);
+  return ref.watch(apiClientProvider).playCountsFor(profileId: pid, period: period);
+});
+
 /// Latest addedAt across an album's tracks (legacy addedAt(), ISO strings
 /// compare lexicographically).
 String albumAddedAt(Album a) {

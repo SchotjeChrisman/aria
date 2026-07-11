@@ -70,7 +70,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
       ..sort((x, y) => x.key.compareTo(y.key));
 
     return ListView(
-      padding: const EdgeInsets.all(AriaSpace.s6),
+      padding: ariaPagePadding(context),
       children: [
         Text(name, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s4),

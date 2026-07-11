@@ -3,17 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/connection.dart';
 import '../../core/library_providers.dart';
-import '../../core/player_providers.dart';
 import '../../core/theme.dart';
-import '../../widgets/art_image.dart';
 import '../../widgets/artist_avatar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_cards.dart';
 import '../../widgets/new_releases_shelf.dart';
 import '../../widgets/shelf.dart';
-import '../../widgets/track_actions.dart';
 import 'home_providers.dart';
 import 'mixes.dart';
 
@@ -65,7 +61,7 @@ class _HomeBody extends ConsumerWidget {
       ..sort((x, y) => albumAddedAt(y).compareTo(albumAddedAt(x)));
 
     return ListView(
-      padding: const EdgeInsets.all(AriaSpace.s6),
+      padding: ariaPagePadding(context),
       children: [
         Text('Home', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s4),
@@ -303,16 +299,34 @@ class _MixesShelf extends ConsumerWidget {
       children: [
         Text('Your Mixes', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: AriaSpace.s3),
-        // Full-width horizontal slider — one full-width banner per page.
-        SizedBox(
-          height: 84,
-          child: PageView(
-            controller: PageController(viewportFraction: 1.0),
-            children: [
-              for (final m in mixes)
-                Center(child: _MixBanner(mix: m, looks: _looks[m.id] ?? (Icons.queue_music, c.accent))),
-            ],
-          ),
+        // Horizontal shelf of 3:2 mix cards — 3 visible on desktop, 2 on
+        // tablet, 1 on mobile; scrolls if there are more.
+        LayoutBuilder(
+          builder: (context, box) {
+            const gap = AriaSpace.s5;
+            final n = switch (AriaBreakpoint.of(context)) {
+              AriaBreakpoint.desktop => 3,
+              AriaBreakpoint.tablet => 2,
+              AriaBreakpoint.mobile => 1,
+            };
+            final w = (box.maxWidth - (n - 1) * gap) / n;
+            return SizedBox(
+              height: w * 2 / 3,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: mixes.length,
+                separatorBuilder: (_, _) => const SizedBox(width: gap),
+                itemBuilder: (context, i) => SizedBox(
+                  width: w,
+                  child: _MixBanner(
+                    mix: mixes[i],
+                    looks: _looks[mixes[i].id] ??
+                        (Icons.queue_music, c.accent),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: AriaSpace.s4),
       ],
@@ -334,8 +348,7 @@ class _MixBanner extends StatelessWidget {
       borderRadius: BorderRadius.circular(AriaRadius.md),
       onTap: () => context.push('/mix/${mix.id}'),
       child: Container(
-        height: 76,
-        padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s4),
+        padding: const EdgeInsets.all(AriaSpace.s4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AriaRadius.md),
           gradient: LinearGradient(
@@ -344,7 +357,11 @@ class _MixBanner extends StatelessWidget {
             colors: [c.accent, tint],
           ),
         ),
-        child: Row(
+        // Content sits at the bottom of the taller 3:2 card.
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+        Row(
           children: [
             Icon(icon, color: Colors.white, size: 28),
             const SizedBox(width: AriaSpace.s4),
@@ -376,6 +393,8 @@ class _MixBanner extends StatelessWidget {
               ),
             ),
             const Icon(Icons.chevron_right, color: Colors.white),
+          ],
+        ),
           ],
         ),
       ),
@@ -443,6 +462,8 @@ class _ArtistShelf extends ConsumerWidget {
       // band-derived card width so it scales down with the column count.
       height: 236,
       mobileColumns: 4,
+      // One column denser than album shelves — smaller person cards.
+      extraColumns: 1,
       itemCount: names.length,
       itemBuilder: (context, i) {
         final name = names[i];
@@ -456,7 +477,8 @@ class _ArtistShelf extends ConsumerWidget {
           tracksOf: tracksOf,
           child: LayoutBuilder(
             builder: (context, cons) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              // Centered under the round avatar, like the grid cards.
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 ArtistAvatar(
                   name: name,
@@ -464,9 +486,20 @@ class _ArtistShelf extends ConsumerWidget {
                   size: cons.maxWidth,
                 ),
                 const SizedBox(height: AriaSpace.s2),
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
                 if (sub != null)
-                  Text(sub, style: TextStyle(color: c.fgDim, fontSize: 12)),
+                  Text(
+                    sub,
+                    style: TextStyle(color: c.fgDim, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
               ],
             ),
           ),
@@ -487,49 +520,25 @@ class _Listening extends ConsumerWidget {
     final hist = stats.history;
     if (hist.isEmpty) return const SizedBox.shrink(); // nothing in 30 days
     final byId = ref.watch(trackByIdProvider);
-    final people = ref.watch(peopleProvider).value ?? const {};
-    final api = ref.watch(apiClientProvider);
 
     // Bucket in the viewer's timezone — the server hands raw timestamps.
     final now = DateTime.now();
-    final monthSecs = <int, double>{}; // day-of-month (1..31) -> seconds
-    final artC = <String, int>{};
-    final trkC = <String, int>{};
-    for (final p in hist) {
-      final d = DateTime.tryParse(p.at)?.toLocal();
-      if (d == null) continue;
-      if (d.year == now.year && d.month == now.month) {
-        monthSecs[d.day] = (monthSecs[d.day] ?? 0) + (byId[p.id]?.duration ?? 0);
-      }
-      final t = byId[p.id];
-      final artist = t?.artist;
-      if (artist != null && artist.isNotEmpty) {
-        artC[artist] = (artC[artist] ?? 0) + 1;
-      }
-      trkC[p.id] = (trkC[p.id] ?? 0) + 1;
-    }
 
-    // Listening time (seconds) per week for the last 4 weeks, from the play
-    // log times * each track's tagged duration.
+    // Listening time (seconds) per week for the last 4 weeks, from the
+    // play-log times * each track's tagged duration. dayGrid also splits each
+    // week into its 7 weekdays for the dot column — a rolling 7-day window
+    // holds exactly one of each weekday, so no collisions.
     final weekSecs = List<double>.filled(4, 0);
+    final dayGrid = List.generate(4, (_) => List<double>.filled(7, 0));
     for (final p in hist) {
       final d = DateTime.tryParse(p.at)?.toLocal();
       if (d == null) continue;
       final daysAgo = now.difference(d).inDays;
       if (daysAgo < 0 || daysAgo >= 28) continue;
-      weekSecs[daysAgo ~/ 7] += byId[p.id]?.duration ?? 0;
+      final secs = byId[p.id]?.duration ?? 0;
+      weekSecs[daysAgo ~/ 7] += secs;
+      dayGrid[daysAgo ~/ 7][d.weekday - 1] += secs;
     }
-
-    List<MapEntry<String, int>> top5(Map<String, int> m) =>
-        (m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
-            .take(5)
-            .toList();
-
-    final topArtists = top5(artC);
-    final topTracks = [
-      for (final e in top5(trkC))
-        if (byId[e.key] != null) (track: byId[e.key]!, n: e.value),
-    ];
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AriaSpace.s6),
@@ -551,52 +560,13 @@ class _Listening extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AriaSpace.s3),
-          // Full-width horizontal slider — one card per page.
+          // Full-width slider — one card per page, no background.
           SizedBox(
-            height: 248,
+            height: 360,
             child: PageView(
-              controller: PageController(viewportFraction: 0.92),
               children: [
-                _WeeklyTimeBox(weekSecs: weekSecs),
-                _CalendarDots(daySecs: monthSecs),
-                _MiniList(
-                  title: 'Top artists · 30 days',
-                  rows: [
-                    for (final e in topArtists)
-                      (
-                        label: e.key,
-                        sub: null,
-                        n: e.value,
-                        leading: ArtistAvatar(
-                          name: e.key,
-                          imageUrl: people[e.key],
-                          size: 28,
-                        ),
-                        onTap: () => context.push(artistPath(e.key)),
-                      ),
-                  ],
-                ),
-                _MiniList(
-                  title: 'Top tracks · 30 days',
-                  rows: [
-                    for (final x in topTracks)
-                      (
-                        label: x.track.title ?? '—',
-                        sub: x.track.artist,
-                        n: x.n,
-                        leading: ArtImage(
-                          url: api.artUrl(x.track.albumId,
-                              version: x.track.artVersion),
-                          fallbackText: x.track.title,
-                          size: 28,
-                          borderRadius: AriaRadius.sm,
-                        ),
-                        onTap: () => ref.read(queueProvider.notifier).playQueue([
-                          x.track,
-                        ], 0),
-                      ),
-                  ],
-                ),
+                _WeeklyTimeBox(weekSecs: weekSecs, dayGrid: dayGrid),
+                const _RanksCard(),
               ],
             ),
           ),
@@ -606,144 +576,159 @@ class _Listening extends ConsumerWidget {
   }
 }
 
-class _CalendarDots extends StatelessWidget {
-  const _CalendarDots({required this.daySecs});
-
-  final Map<int, double> daySecs;
+/// Top genres / performers / releases by time listened over a selectable
+/// period. Play counts come windowed from the server; durations are local, so
+/// seconds = count × track.duration aggregated by genre, performer, album.
+class _RanksCard extends ConsumerStatefulWidget {
+  const _RanksCard();
 
   @override
-  Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
-    final now = DateTime.now();
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    // weekday of the 1st: 1=Mon..7=Sun -> leading blanks so columns align Mon..Sun
-    final lead = DateTime(now.year, now.month, 1).weekday - 1;
-    // Relative sizing: scale to THIS month's busiest day so light listeners
-    // still see large dots. Floor of 1 avoids div-by-zero.
-    final maxSecs = daySecs.values.fold<double>(1, (m, v) => v > m ? v : m);
-    const minD = 7.0, maxD = 22.0;
-    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    Widget dot(int day) {
-      final secs = daySecs[day] ?? 0;
-      final has = secs > 0;
-      final size = has ? (minD + (maxD - minD) * (secs / maxSecs)).clamp(minD, maxD) : minD;
-      final isToday = day == now.day;
-      return Container(
-        alignment: Alignment.center,
-        child: Container(
-          width: size.toDouble(),
-          height: size.toDouble(),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: has ? c.accent : c.line,
-            border: isToday ? Border.all(color: c.accent, width: 1.5) : null,
-          ),
-        ),
-      );
-    }
-    final cells = <Widget>[
-      for (var i = 0; i < lead; i++) const SizedBox.shrink(),
-      for (var day = 1; day <= daysInMonth; day++) dot(day),
-    ];
-    return Container(
-      margin: const EdgeInsets.only(right: AriaSpace.s3),
-      padding: const EdgeInsets.all(AriaSpace.s4),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Listening · ${monthNames[now.month - 1]}', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: AriaSpace.s3),
-          GridView.count(
-            crossAxisCount: 7,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            children: cells,
-          ),
-        ],
-      ),
-    );
-  }
+  ConsumerState<_RanksCard> createState() => _RanksCardState();
 }
 
-class _MiniList extends StatelessWidget {
-  const _MiniList({required this.title, required this.rows});
+class _RanksCardState extends ConsumerState<_RanksCard> {
+  String _period = 'month';
 
-  final String title;
-  final List<
-    ({String label, String? sub, int n, Widget leading, VoidCallback onTap})
-  >
-  rows;
+  static const _periods = [
+    ('week', 'Week'),
+    ('month', 'Month'),
+    ('year', 'Year'),
+    ('all', 'All-time'),
+  ];
+
+  static List<MapEntry<String, double>> _top5(Map<String, double> m) =>
+      (m.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+          .take(5)
+          .toList();
 
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
-    return Container(
-      margin: const EdgeInsets.only(right: AriaSpace.s3),
-      padding: const EdgeInsets.all(AriaSpace.s4),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: AriaSpace.s2),
-          if (rows.isEmpty)
-            Text('—', style: TextStyle(color: c.fgDim))
-          else
-            for (final (i, r) in rows.indexed)
-              InkWell(
-                onTap: r.onTap,
-                borderRadius: BorderRadius.circular(AriaRadius.sm),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AriaSpace.s1),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 18,
-                        child: Text(
-                          '${i + 1}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      r.leading,
-                      const SizedBox(width: AriaSpace.s2),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              r.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if ((r.sub ?? '').isNotEmpty)
-                              Text(
-                                r.sub!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        '${r.n}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+    final countsAsync = ref.watch(periodCountsProvider(_period));
+    final counts = countsAsync.value ?? const <String, int>{};
+    final byId = ref.watch(trackByIdProvider);
+    final albumById = ref.watch(homeAlbumByIdProvider);
+
+    final genreSecs = <String, double>{};
+    final perfSecs = <String, double>{};
+    final relSecs = <String, double>{}; // albumId → seconds
+    counts.forEach((id, n) {
+      final t = byId[id];
+      if (t == null) return;
+      final secs = (t.duration ?? 0) * n;
+      if (secs <= 0) return;
+      for (final g in t.genres) {
+        if (g.isNotEmpty) genreSecs[g] = (genreSecs[g] ?? 0) + secs;
+      }
+      for (final p in t.performers) {
+        if (p.name.isNotEmpty) perfSecs[p.name] = (perfSecs[p.name] ?? 0) + secs;
+      }
+      relSecs[t.albumId] = (relSecs[t.albumId] ?? 0) + secs;
+    });
+
+    Widget rankColumn(
+      String title,
+      List<MapEntry<String, double>> rows,
+      String Function(String key) label,
+    ) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: AriaSpace.s3),
+        if (rows.isEmpty)
+          Text('—', style: TextStyle(color: c.fgDim))
+        else
+          for (final (i, e) in rows.indexed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AriaSpace.s1),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    child: Text(
+                      '${i + 1}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: c.fgDim),
+                    ),
                   ),
-                ),
+                  Expanded(
+                    child: Text(
+                      label(e.key),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: AriaSpace.s2),
+                  Text(
+                    fmtHm(e.value),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: c.fgDim),
+                  ),
+                ],
               ),
+            ),
+      ],
+    );
+
+    final genres = rankColumn('Genres', _top5(genreSecs), (k) => k);
+    final performers = rankColumn('Performers', _top5(perfSecs), (k) => k);
+    final releases = rankColumn(
+      'Releases',
+      _top5(relSecs),
+      (k) => albumById[k]?.title ?? '—',
+    );
+
+    final stacked = AriaBreakpoint.of(context) == AriaBreakpoint.mobile;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AriaSpace.s4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<String>(
+              segments: [
+                for (final (v, l) in _periods)
+                  ButtonSegment(value: v, label: Text(l)),
+              ],
+              selected: {_period},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _period = s.first),
+            ),
+          ),
+          const SizedBox(height: AriaSpace.s4),
+          if (countsAsync.isLoading && counts.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: AriaSpace.s6),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (stacked)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                genres,
+                const SizedBox(height: AriaSpace.s5),
+                performers,
+                const SizedBox(height: AriaSpace.s5),
+                releases,
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: genres),
+                const SizedBox(width: AriaSpace.s6),
+                Expanded(child: performers),
+                const SizedBox(width: AriaSpace.s6),
+                Expanded(child: releases),
+              ],
+            ),
         ],
       ),
     );
@@ -751,69 +736,186 @@ class _MiniList extends StatelessWidget {
 }
 
 class _WeeklyTimeBox extends StatelessWidget {
-  const _WeeklyTimeBox({required this.weekSecs});
+  const _WeeklyTimeBox({required this.weekSecs, required this.dayGrid});
 
   /// Index 0 = current 7 days, 1 = prior week, up to 4 weeks back.
   final List<double> weekSecs;
 
+  /// [week][weekday] listening seconds, week 0 = current, weekday 0 = Monday.
+  final List<List<double>> dayGrid;
+
+  // Per-row content height and vertical padding, shared by the bar rows and
+  // the dot rows so weeks line up across columns 2 and 3.
+  static const double _rowH = 16;
+  static const double _rowPad = 7;
+  // Fixed-height stand-in matching the dot column's weekday-label row, so both
+  // columns' data rows start at the same y.
+  static const double _headerH = 16;
+
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
-    const labels = ['This week', 'Last week', '2 wks ago', '3 wks ago'];
-    final max = weekSecs.fold<double>(1, (m, v) => v > m ? v : m);
-    return Container(
-      margin: const EdgeInsets.only(right: AriaSpace.s3),
-      padding: const EdgeInsets.all(AriaSpace.s4),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Listening time · last 4 weeks',
-            style: Theme.of(context).textTheme.bodySmall,
+    final total = weekSecs.fold<double>(0, (s, v) => s + v);
+    final maxWeek = weekSecs.fold<double>(1, (m, v) => v > m ? v : m);
+    final maxDay = dayGrid
+        .expand((r) => r)
+        .fold<double>(1, (m, v) => v > m ? v : m);
+
+    Widget column(String title, Widget header, List<Widget> rows) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: AriaSpace.s3),
+            header,
+            const SizedBox(height: AriaSpace.s2),
+            ...rows,
+          ],
+        );
+
+    // Oldest week first, current week last (indices 3..0) — matches nothing to
+    // label, columns align row-for-row.
+    const weekOrder = [3, 2, 1, 0];
+
+    final time = column(
+      'Listening time · last 4 weeks',
+      const SizedBox(height: _headerH),
+      [
+        for (final w in weekOrder)
+          Builder(builder: (context) {
+            // Variable-width bar, relative to the busiest of the 4 weeks, with
+            // the time label riding directly off its end.
+            final frac = (weekSecs[w] / maxWeek).clamp(0, 1).toDouble();
+            final fill = (frac * 1000).round();
+            final rest = 1000 - fill;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: _rowPad),
+              child: SizedBox(
+                height: _rowH,
+                child: Row(
+                  children: [
+                    if (fill > 0)
+                      Flexible(
+                        flex: fill,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: c.accent,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: AriaSpace.s2),
+                    Text(
+                      _fmtListen(weekSecs[w]),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (rest > 0) Spacer(flex: rest),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+
+    Widget dot(double secs) {
+      final has = secs > 0;
+      const minD = 6.0;
+      final size = has
+          ? (minD + (_rowH - minD) * (secs / maxDay)).clamp(minD, _rowH)
+          : minD;
+      return Center(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: has ? c.accent : c.line,
           ),
-          const SizedBox(height: AriaSpace.s3),
-          for (final (i, secs) in weekSecs.indexed)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+        ),
+      );
+    }
+
+    final dots = column(
+      'Daily · last 4 weeks',
+      SizedBox(
+        height: _headerH,
+        child: Row(
+          children: [
+            for (final d in const ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
+              Expanded(
+                child: Text(
+                  d,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: c.fgDim),
+                ),
+              ),
+          ],
+        ),
+      ),
+      [
+        for (final w in weekOrder)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: _rowPad),
+            child: SizedBox(
+              height: _rowH,
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 78,
-                    child: Text(
-                      labels[i],
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: (secs / max).clamp(0, 1).toDouble(),
-                        minHeight: 8,
-                        backgroundColor: c.line,
-                        color: c.accent,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AriaSpace.s3),
-                  SizedBox(
-                    width: 56,
-                    child: Text(
-                      _fmtListen(secs),
-                      textAlign: TextAlign.right,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
+                  for (var wd = 0; wd < 7; wd++)
+                    Expanded(child: dot(dayGrid[w][wd])),
                 ],
               ),
             ),
-        ],
-      ),
+          ),
+      ],
+    );
+
+    final total4w = Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.schedule_outlined, size: 64, color: c.accent),
+        const SizedBox(height: AriaSpace.s4),
+        Text(
+          _fmtListen(total),
+          style: Theme.of(context).textTheme.displaySmall,
+        ),
+        const SizedBox(height: AriaSpace.s2),
+        Text(
+          'time listened last 4 weeks',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+
+    final stacked = AriaBreakpoint.of(context) == AriaBreakpoint.mobile;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AriaSpace.s4),
+      child: stacked
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                total4w,
+                const SizedBox(height: AriaSpace.s5),
+                time,
+                const SizedBox(height: AriaSpace.s5),
+                dots,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: total4w),
+                const SizedBox(width: AriaSpace.s6),
+                Expanded(child: time),
+                const SizedBox(width: AriaSpace.s6),
+                Expanded(child: dots),
+              ],
+            ),
     );
   }
 }

@@ -19,7 +19,7 @@ class TagsScreen extends ConsumerWidget {
     final tags = ref.watch(tagsProvider);
     return Scaffold(
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s6),
+        padding: ariaPagePadding(context),
         children: [
           Text('Tags', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: AriaSpace.s4),

@@ -75,7 +75,7 @@ class _StatsBody extends ConsumerWidget {
         : null;
 
     return ListView(
-      padding: const EdgeInsets.all(AriaSpace.s6),
+      padding: ariaPagePadding(context),
       children: [
         Text('Stats', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s5),

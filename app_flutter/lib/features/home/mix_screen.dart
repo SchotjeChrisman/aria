@@ -58,12 +58,7 @@ class MixScreen extends ConsumerWidget {
     final list = mix.tracks;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AriaSpace.s6,
-        0,
-        AriaSpace.s6,
-        AriaSpace.s6,
-      ),
+      padding: ariaPagePadding(context, top: 0),
       children: [
         Text(mix.title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s2),

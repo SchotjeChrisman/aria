@@ -42,12 +42,7 @@ class GenresSection extends ConsumerWidget {
     final list = tops.toList()..sort((a, b) => size(b) - size(a));
 
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        AriaSpace.s6,
-        AriaSpace.s4,
-        AriaSpace.s6,
-        AriaSpace.s6,
-      ),
+      padding: ariaPagePadding(context, top: AriaSpace.s4),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         // Genre cards are wider than album tiles (legacy 260px extent), so
         // they get their own band counts instead of the shared 2/4/6.

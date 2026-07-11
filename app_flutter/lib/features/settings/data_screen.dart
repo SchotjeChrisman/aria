@@ -21,7 +21,7 @@ class DataScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Data & Downloads')),
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s6),
+        padding: ariaPagePadding(context),
         children: [
           const _DataUsageSection(),
           const SizedBox(height: AriaSpace.s6),

@@ -216,31 +216,46 @@ class AdaptiveShell extends StatelessWidget {
       ],
     );
 
+    // Rail spans the full height; the bottom bars live in the content column
+    // to its right, so they align to the content area rather than the whole
+    // window. They span the full content width (not the 1200 cap) — only the
+    // scrolling content above them is centered and capped.
     return Scaffold(
-      body: Column(
+      body: Row(
         children: [
+          // Rail doesn't scroll natively; with the library split into
+          // five entries it can overflow short windows.
+          LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(child: rail),
+              ),
+            ),
+          ),
+          VerticalDivider(width: 1, color: c.line),
           Expanded(
-            child: Row(
+            child: Column(
               children: [
-                // Rail doesn't scroll natively; with the library split into
-                // five entries it can overflow short windows.
-                LayoutBuilder(
-                  builder: (context, constraints) => SingleChildScrollView(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: IntrinsicHeight(child: rail),
+                // Provide the centering inset from the content-area width; the
+                // scroll views fold it into their own horizontal padding so the
+                // scrollable stays full-width (wheel works over the margins)
+                // while content is capped + centered. Cap inside the scroll.
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, box) => ContentInset(
+                      inset: ((box.maxWidth - AriaBreakpoint.maxContentWidth) /
+                              2)
+                          .clamp(0.0, double.infinity),
+                      child: shell,
                     ),
                   ),
                 ),
-                VerticalDivider(width: 1, color: c.line),
-                Expanded(child: shell),
+                const SelectionBar(),
+                const now_playing.TransportBar(),
               ],
             ),
           ),
-          const SelectionBar(),
-          const now_playing.TransportBar(),
         ],
       ),
     );

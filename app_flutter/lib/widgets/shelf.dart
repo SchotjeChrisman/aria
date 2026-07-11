@@ -13,6 +13,7 @@ class Shelf extends StatelessWidget {
     required this.itemBuilder,
     this.itemWidth,
     this.mobileColumns = 3,
+    this.extraColumns = 0,
     this.onSeeAll,
   });
 
@@ -38,6 +39,11 @@ class Shelf extends StatelessWidget {
   /// Full cards shown on a mobile-width band (no peek). Album shelves keep 3;
   /// denser content (artist avatars) passes more.
   final int mobileColumns;
+
+  /// Added to the non-mobile band column count. Person shelves pass 1 so their
+  /// cards are one column denser (smaller) than album cards, matching the
+  /// person grids.
+  final int extraColumns;
   final VoidCallback? onSeeAll;
 
   @override
@@ -69,22 +75,19 @@ class Shelf extends StatelessWidget {
           // Genuinely local constraint: the shelf's own width (minus
           // rail/padding) drives the card size, not the window width.
           builder: (context, box) {
-            const gap = AriaSpace.s3;
-            // Band-fixed visible cards. Mobile shows exactly 3 full cards
-            // (no peek — requested); wider bands keep the half-card peek that
-            // signals scrollability. gridColumns stays 2 on mobile (it drives
-            // the 2-col grid pages), so shelf count is decided here.
+            // Match the grid's crossAxisSpacing (s5) so a shelf card and a
+            // grid card come out the same width at the same column count and
+            // side padding (both s6).
+            const gap = AriaSpace.s5;
+            // Band-fixed visible cards, all fully visible — no half-card peek
+            // (cutoff cards are unwanted). Non-mobile bands use gridColumns so
+            // the shelf lines up with the grid pages; mobile keeps its own
+            // count (gridColumns stays 2 there to drive the 2-col grids).
             final band = AriaBreakpoint.of(context);
             final n = band == AriaBreakpoint.mobile
                 ? mobileColumns
-                : band.gridColumns;
-            final peek = band == AriaBreakpoint.mobile ? 0.0 : 0.5;
-            // Gaps rendered between the visible cards: one per full card when a
-            // half-card peeks after them, one fewer when the row ends flush
-            // (peek == 0) — else the cards under-fill and leave a gap of slack
-            // at the right edge.
-            final gaps = peek > 0 ? n : n - 1;
-            final w = itemWidth ?? (box.maxWidth - gaps * gap) / (n + peek);
+                : band.gridColumns + extraColumns;
+            final w = itemWidth ?? (box.maxWidth - (n - 1) * gap) / n;
             return SizedBox(
               height: itemWidth == null ? height + (w - _designWidth) : height,
               child: ListView.separated(

@@ -223,9 +223,18 @@ class AriaClient {
   Future<EnrichStatus> kickEnrich() async =>
       EnrichStatus.fromJson(asMap(await _post('/api/enrich')));
 
-  /// Bulk name -> portrait URL map for avatars.
+  /// Bulk name -> raw portrait URL map for avatars. Avatars load these via the
+  /// LAN proxy first ([peopleImgUrl]) and fall back to the raw CDN URL here, so
+  /// a proxy-less (old) server or a single un-cacheable portrait still shows a
+  /// face instead of initials.
   Future<Map<String, String>> people() async =>
       asMap(await _get('/api/people')).map((k, v) => MapEntry(k, v as String));
+
+  /// Server's caching portrait proxy for [name] — the raw CDN URLs drop under
+  /// burst load, so avatars try this LAN-cached copy first. 404s (old server /
+  /// name not enriched) fall back to the raw URL client-side.
+  String peopleImgUrl(String name) =>
+      '$baseUrl/api/people/img/${Uri.encodeComponent(name)}';
 
   /// Warm faces/bios for names currently on screen; returns queued count.
   Future<int> warmPeople(List<String> names) async =>
@@ -392,6 +401,19 @@ class AriaClient {
         if (profileId != null) 'profileId': profileId,
         if (counts) 'counts': '1',
       })));
+
+  /// Per-track play counts over a rolling window (period: week/month/year/all).
+  /// The caller turns these into time-listened rankings via track durations.
+  Future<Map<String, int>> playCountsFor({
+    String? profileId,
+    required String period,
+  }) async {
+    final j = asMap(await _get('/api/plays/counts', query: {
+      'period': period,
+      if (profileId != null) 'profileId': profileId,
+    }));
+    return asMap(j['counts']).map((k, v) => MapEntry(k, asInt(v) ?? 0));
+  }
 
   Future<Mixes> mixes({String? profileId}) async =>
       Mixes.fromJson(asMap(await _get('/api/mixes', query: {

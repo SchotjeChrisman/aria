@@ -83,11 +83,10 @@ class AlbumsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AriaSpace.s6,
-            AriaSpace.s4,
-            AriaSpace.s6,
-            AriaSpace.s4,
+          padding: ariaPagePadding(
+            context,
+            top: AriaSpace.s4,
+            bottom: AriaSpace.s4,
           ),
           child: Row(
             children: [
@@ -177,12 +176,7 @@ class AlbumsSection extends ConsumerWidget {
                   icon: Icons.album_outlined,
                 )
               : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(
-                    AriaSpace.s6,
-                    0,
-                    AriaSpace.s6,
-                    AriaSpace.s6,
-                  ),
+                  padding: ariaPagePadding(context, top: 0),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: AriaBreakpoint.of(context).gridColumns,
                     mainAxisSpacing: AriaSpace.s5,

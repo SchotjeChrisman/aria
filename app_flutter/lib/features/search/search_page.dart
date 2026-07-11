@@ -151,11 +151,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AriaSpace.s6,
-                AriaSpace.s6,
-                AriaSpace.s6,
-                AriaSpace.s3,
+              padding: ariaPagePadding(
+                context,
+                top: AriaSpace.s6,
+                bottom: AriaSpace.s3,
               ),
               child: TextField(
                 controller: _ctrl,
@@ -210,10 +209,7 @@ class _ResultsList extends ConsumerWidget {
     final mbArtists = mb.value ?? const <ArtistCandidate>[];
 
     return ListView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AriaSpace.s6,
-        vertical: AriaSpace.s3,
-      ),
+      padding: ariaPagePadding(context, top: AriaSpace.s3, bottom: AriaSpace.s3),
       children: [
         if (results.artists.isNotEmpty) ...[
           Text('Artists', style: style),

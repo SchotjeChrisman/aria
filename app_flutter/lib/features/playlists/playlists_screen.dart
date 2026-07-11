@@ -44,7 +44,7 @@ class PlaylistsScreen extends ConsumerWidget {
     final pls = ref.watch(playlistsProvider);
     return Scaffold(
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s6),
+        padding: ariaPagePadding(context),
         children: [
           Text('Playlists', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: AriaSpace.s4),

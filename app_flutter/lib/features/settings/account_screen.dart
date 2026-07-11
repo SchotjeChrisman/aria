@@ -23,7 +23,7 @@ class AccountScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s6),
+        padding: ariaPagePadding(context),
         children: [
           header('Server'),
           const _ServerUrlField(),

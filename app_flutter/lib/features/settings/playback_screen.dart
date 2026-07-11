@@ -16,7 +16,7 @@ class PlaybackScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Playback')),
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s6),
+        padding: ariaPagePadding(context),
         children: [
           // Exclusive access is a desktop-only mpv option (the engine no-ops
           // it on Android) — a dead switch just misleads.

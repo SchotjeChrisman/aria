@@ -14,7 +14,7 @@ class AboutScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s6),
+        padding: ariaPagePadding(context),
         children: const [
           ListTile(
             contentPadding: EdgeInsets.zero,

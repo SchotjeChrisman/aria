@@ -43,7 +43,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       appBar: AppBar(),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(AriaSpace.s6),
+          padding: ariaPagePadding(context),
           children: [
             Row(
               children: [

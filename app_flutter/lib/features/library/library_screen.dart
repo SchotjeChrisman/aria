@@ -112,12 +112,7 @@ class _LibraryBody extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AriaSpace.s6,
-            AriaSpace.s6,
-            AriaSpace.s6,
-            0,
-          ),
+          padding: ariaPagePadding(context, top: AriaSpace.s6, bottom: 0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
