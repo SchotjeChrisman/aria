@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Aria
+GenericName=Music Player
+Comment=Bit-perfect player for your self-hosted music library
+Exec=aria
+Icon=dev.aria.aria
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;audio;player;library;lossless;

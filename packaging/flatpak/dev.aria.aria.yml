@@ -1,0 +1,123 @@
+# Flatpak manifest for Aria (self-contained: bundles libmpv so media_kit plays
+# audio without any system-installed mpv).
+#
+# Build the Flutter bundle on the host FIRST, then build the flatpak:
+#   cd app_flutter && flutter build linux --release && cd ..
+#   flatpak-builder --user --install --force-clean build-flatpak \
+#     packaging/flatpak/dev.aria.aria.yml
+#   flatpak run dev.aria.aria
+#
+# ponytail: packages the host-built Flutter bundle rather than building Flutter
+# inside the sandbox. Works because the freedesktop 25.08 runtime glibc/GTK are
+# newer than the host's. Ceiling: if a glibc/symbol mismatch ever surfaces,
+# the upgrade path is a Flutter-SDK build module that compiles in-sandbox.
+app-id: dev.aria.aria
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: aria
+
+finish-args:
+  - --share=network                     # streams the library from the server
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri                        # Flutter renders its UI via GL
+  - --socket=pulseaudio                 # PulseAudio + PipeWire-pulse
+  - --filesystem=xdg-run/pipewire-0     # native PipeWire (rw: exclusive path negotiates format)
+  - --filesystem=xdg-music:ro           # local music mount, if used
+
+# org.freedesktop.Platform.codecs-extra is an autodownloaded runtime extension
+# on 25.08 (mounted at lib/ffmpeg, LD path wired by the runtime) — no block needed.
+
+modules:
+  # libplacebo — a hard, unconditional dependency of mpv even for audio-only.
+  # EDID deps (hwdata/libdisplay-info) omitted; libplacebo just disables EDID.
+  - name: libplacebo
+    buildsystem: meson
+    config-opts:
+      - -Dvulkan=enabled
+      - -Dshaderc=enabled
+      - -Ddemos=false
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+    sources:
+      - type: git
+        url: https://github.com/haasn/libplacebo.git
+        tag: v7.360.1
+        commit: cee9b076f2c63104ccfd497fa79c39a867293ec4
+
+  # libass — a mandatory dependency of mpv (no meson toggle to disable it).
+  # Its deps (freetype/harfbuzz/fribidi/fontconfig) are in the runtime.
+  - name: libass
+    config-opts:
+      - --disable-static
+      - --enable-harfbuzz
+      - --enable-fontconfig
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+    sources:
+      - type: git
+        url: https://github.com/libass/libass.git
+        tag: 0.17.5
+        commit: 4a05d8127f525943ebf45fdc6497c9e665947f0d
+
+  # libmpv — links against the runtime's FFmpeg (augmented by codecs-extra).
+  # Audio-only: no CLI player, no scripting, no optical/video extras.
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dbuild-date=false
+      - -Dpipewire=enabled
+      - -Dpulse=enabled
+      - -Dalsa=enabled
+      - -Dgl=enabled
+      - -Degl=enabled
+      - -Dlua=disabled
+      - -Djavascript=disabled
+      - -Dlibbluray=disabled
+      - -Dcdda=disabled
+      - -Ddvdnav=disabled
+      - -Ddvbin=disabled
+      - -Dvapoursynth=disabled
+      - -Dzimg=disabled
+      - -Duchardet=disabled
+      - -Drubberband=disabled
+      - -Dwerror=false
+    cleanup:
+      - /bin
+      - /include
+      - /lib/pkgconfig
+      - /share/applications
+      - /share/icons
+    sources:
+      - type: git
+        url: https://github.com/mpv-player/mpv.git
+        tag: v0.41.0
+        commit: 41f6a645068483470267271e1d09966ca3b9f413
+
+  # The Flutter app: install the host-built release bundle under /app/aria,
+  # front it with a launcher on PATH, and register desktop/icon/metainfo.
+  - name: aria
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/aria
+      - cp -a aria lib data /app/aria/
+      - mkdir -p /app/bin
+      - ln -s /app/aria/aria /app/bin/aria
+      - install -Dm644 dev.aria.aria.desktop /app/share/applications/dev.aria.aria.desktop
+      - install -Dm644 dev.aria.aria.metainfo.xml /app/share/metainfo/dev.aria.aria.metainfo.xml
+      - install -Dm644 icon-512.png /app/share/icons/hicolor/512x512/apps/dev.aria.aria.png
+    sources:
+      - type: dir
+        path: ../../app_flutter/build/linux/x64/release/bundle
+      - type: file
+        path: dev.aria.aria.desktop
+      - type: file
+        path: dev.aria.aria.metainfo.xml
+      - type: file
+        path: icon-512.png

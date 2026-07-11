@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.aria.aria</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>Aria</name>
+  <summary>Bit-perfect player for your self-hosted music library</summary>
+  <description>
+    <p>
+      Aria is a desktop client for a self-hosted music server: browse albums,
+      artists, composers, genres and playlists, and play your library with a
+      bit-perfect native audio path.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.aria.aria.desktop</launchable>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="3.0.0" date="2026-07-11" />
+  </releases>
+</component>

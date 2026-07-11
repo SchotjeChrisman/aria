@@ -74,6 +74,45 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" aria-linux-x64.tar.gz --clobber
 
+  flatpak:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install flatpak tooling + runtime
+        # The .flatpak bundle carries only the app; libmpv/libplacebo/libass are
+        # built from source inside the Sdk sandbox by the manifest. The runtime
+        # itself is resolved from flathub on the user's machine at install time.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
+      - name: Build Flutter bundle
+        # The manifest packages this host-built bundle (source: type dir).
+        run: flutter build linux --release
+      - name: Build flatpak bundle
+        working-directory: .
+        # ponytail: build from source each release, no flatpak-builder cache.
+        # Adds ~10 min for mpv/libplacebo. Add actions/cache on .flatpak-builder
+        # if the runtime becomes a bottleneck.
+        run: |
+          flatpak-builder --user --force-clean --repo=repo \
+            build-flatpak packaging/flatpak/dev.aria.aria.yml
+          flatpak build-bundle repo aria-linux-x64.flatpak dev.aria.aria
+      - name: Upload to release
+        if: github.event_name == 'release'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" aria-linux-x64.flatpak --clobber
+
   macos:
     needs: test
     runs-on: macos-latest
