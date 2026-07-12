@@ -145,7 +145,10 @@ void main() {
     container.read(routerProvider).push('/now-playing');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(PhosphorIconsRegular.microphoneStage));
+    // Lyrics/queue links sit below the transport now, so scroll them in first.
+    final lyrics = find.byIcon(PhosphorIconsRegular.microphoneStage);
+    await tester.ensureVisible(lyrics);
+    await tester.tap(lyrics);
     await tester.pumpAndSettle();
 
     expect(find.byType(LyricsScreen), findsOneWidget);
@@ -161,7 +164,9 @@ void main() {
     container.read(routerProvider).push('/now-playing');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(PhosphorIconsRegular.queue));
+    final queueBtn = find.byIcon(PhosphorIconsRegular.queue);
+    await tester.ensureVisible(queueBtn);
+    await tester.tap(queueBtn);
     await tester.pumpAndSettle();
 
     expect(find.byType(QueueScreen), findsOneWidget);
