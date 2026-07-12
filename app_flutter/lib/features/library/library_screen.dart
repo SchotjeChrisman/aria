@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
@@ -14,11 +15,11 @@ import 'tracks_section.dart';
 /// Each section is its own page/route (like the legacy sidebar).
 /// [LibraryHubScreen] fronts them on narrow layouts.
 enum LibrarySection {
-  albums('Albums', Icons.album_outlined, Icons.album),
-  artists('Artists', Icons.person_outline, Icons.person),
-  tracks('Tracks', Icons.music_note_outlined, Icons.music_note),
-  genres('Genres', Icons.category_outlined, Icons.category),
-  composers('Composers', Icons.piano_outlined, Icons.piano);
+  albums('Albums', PhosphorIconsThin.vinylRecord, PhosphorIconsFill.vinylRecord),
+  artists('Artists', PhosphorIconsThin.user, PhosphorIconsFill.user),
+  tracks('Tracks', PhosphorIconsThin.musicNote, PhosphorIconsFill.musicNote),
+  genres('Genres', PhosphorIconsThin.squaresFour, PhosphorIconsFill.squaresFour),
+  composers('Composers', PhosphorIconsThin.pianoKeys, PhosphorIconsFill.pianoKeys);
 
   const LibrarySection(this.label, this.icon, this.selectedIcon);
   final String label;
@@ -50,7 +51,7 @@ class LibraryHubScreen extends StatelessWidget {
               ListTile(
                 leading: Icon(s.icon),
                 title: Text(s.label),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const Icon(PhosphorIconsRegular.caretRight),
                 onTap: () => context.go(s.path),
               ),
           ],
@@ -75,7 +76,7 @@ class LibraryScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => EmptyState(
             message: 'Cannot reach the server — check Settings.',
-            icon: Icons.cloud_off,
+            icon: PhosphorIconsRegular.cloudSlash,
             action: OutlinedButton(
               onPressed: () => ref.invalidate(tracksProvider),
               child: const Text('Retry'),
@@ -85,7 +86,7 @@ class LibraryScreen extends ConsumerWidget {
             if (tracks.isEmpty) {
               return EmptyState(
                 message: 'The library is empty — scan it from Settings.',
-                icon: Icons.library_music_outlined,
+                icon: PhosphorIconsRegular.musicNotes,
                 action: OutlinedButton(
                   onPressed: () => ref.invalidate(tracksProvider),
                   child: const Text('Refresh'),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:aria/core/connection.dart';
+import 'package:aria/core/phosphor_icons.dart';
 import 'package:aria/core/data_usage.dart';
 import 'package:aria/core/downloads.dart';
 import 'package:aria/core/library_providers.dart';
@@ -92,7 +93,7 @@ void main() {
     final container = await pump(tester);
 
     // Rows sort by album/title: One before Two.
-    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.tap(find.byIcon(PhosphorIconsRegular.trash).first);
     await tester.pump();
     expect(container.read(downloadsProvider).index.keys, ['t2']);
     expect(find.text('One'), findsNothing);

@@ -5,6 +5,7 @@ import 'package:aria_player/aria_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/log_sync.dart';
@@ -89,32 +90,32 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         ? _radioMeta(context, radio)
         : _nowMeta(context, track);
     final prevBtn = IconButton(
-      icon: const Icon(Icons.skip_previous),
+      icon: const Icon(PhosphorIconsFill.skipBack),
       color: c.fg,
       tooltip: 'Previous',
       // Live stream: no track skipping (legacy).
       onPressed: track == null ? null : queue.prev,
     );
     final playBtn = IconButton.filled(
-      icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+      icon: Icon(playing ? PhosphorIconsFill.pause : PhosphorIconsFill.play),
       tooltip: 'Play/Pause',
       onPressed: track == null && radio == null ? null : queue.togglePlay,
     );
     final nextBtn = radio != null
         ? IconButton(
-            icon: const Icon(Icons.stop),
+            icon: const Icon(PhosphorIconsFill.stop),
             color: c.fg,
             tooltip: 'Stop station',
             onPressed: ref.read(radioPlaybackProvider.notifier).stop,
           )
         : IconButton(
-            icon: const Icon(Icons.skip_next),
+            icon: const Icon(PhosphorIconsFill.skipForward),
             color: c.fg,
             tooltip: 'Next',
             onPressed: track == null ? null : queue.next,
           );
     final queueBtn = IconButton(
-      icon: const Icon(Icons.queue_music),
+      icon: const Icon(PhosphorIconsRegular.queue),
       color: c.fgDim,
       tooltip: 'Queue',
       onPressed: () => context.push('/queue'),
@@ -250,7 +251,8 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                           width: 130,
                           child: Row(
                             children: [
-                              Icon(Icons.volume_up, size: 16, color: c.fgDim),
+                              Icon(PhosphorIconsRegular.speakerHigh,
+                                  size: 16, color: c.fgDim),
                               Expanded(
                                 child: _slim(
                                   Slider(
@@ -266,7 +268,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.lyrics_outlined),
+                          icon: const Icon(PhosphorIconsRegular.microphoneStage),
                           color: c.fgDim,
                           tooltip: 'Now playing / lyrics',
                           onPressed: track == null
@@ -305,7 +307,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
           child: Row(
             children: [
               Icon(
-                Icons.volume_off,
+                PhosphorIconsRegular.speakerSlash,
                 size: 16,
                 color: Theme.of(context).colorScheme.error,
               ),
@@ -342,7 +344,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
             borderRadius: BorderRadius.circular(AriaRadius.sm),
             border: Border.all(color: c.lineStrong),
           ),
-          child: Icon(Icons.radio, size: 22, color: c.fgDim),
+          child: Icon(PhosphorIconsRegular.radio, size: 22, color: c.fgDim),
         ),
         const SizedBox(width: AriaSpace.s3),
         Flexible(

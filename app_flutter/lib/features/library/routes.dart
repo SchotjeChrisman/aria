@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/router.dart';
 import '../album/routes.dart' as album;
@@ -14,8 +14,8 @@ final featureEntries = <FeatureEntry>[
     destination: const AppDestination(
       path: '/library',
       label: 'Library',
-      icon: Icons.library_music_outlined,
-      selectedIcon: Icons.library_music,
+      icon: PhosphorIconsThin.musicNotes,
+      selectedIcon: PhosphorIconsFill.musicNotes,
       inRail: false,
     ),
     routes: [

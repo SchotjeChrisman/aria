@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
@@ -19,7 +20,7 @@ class GenresSection extends ConsumerWidget {
     if (idx.isEmpty) {
       return const EmptyState(
         message: 'No genres in the library.',
-        icon: Icons.category_outlined,
+        icon: PhosphorIconsRegular.squaresFour,
       );
     }
 

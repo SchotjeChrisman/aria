@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
@@ -80,7 +81,7 @@ class _ArtistsSectionState extends ConsumerState<ArtistsSection> {
     if (list.isEmpty) {
       return const EmptyState(
         message: 'No artists.',
-        icon: Icons.person_outline,
+        icon: PhosphorIconsRegular.user,
       );
     }
 

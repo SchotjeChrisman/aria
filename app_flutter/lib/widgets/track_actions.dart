@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/phosphor_icons.dart';
 
 import '../core/downloads.dart';
 import '../core/player_providers.dart';
@@ -69,7 +70,7 @@ Future<void> showAddToPlaylistMenu(
                   onTap: () => addAll(p.id, p.name),
                 ),
               ListTile(
-                leading: const Icon(Icons.add, size: 18),
+                leading: const Icon(PhosphorIconsRegular.plus, size: 18),
                 title: Text(pls.isEmpty ? 'New playlist…' : '＋ New playlist…'),
                 onTap: () async {
                   final name = await promptName(
@@ -140,11 +141,11 @@ AriaMenuItem downloadMenuItem(WidgetRef ref, List<Track> tracks) {
           for (final t in tracks) {
             downloads.remove(t.id);
           }
-        }, icon: Icons.file_download_off_outlined)
+        }, icon: PhosphorIconsRegular.cloudSlash)
       : AriaMenuItem(
           'Download',
           () => downloads.downloadTracks(tracks),
-          icon: Icons.download_outlined,
+          icon: PhosphorIconsRegular.downloadSimple,
         );
 }
 
@@ -162,45 +163,49 @@ List<AriaMenuItem> trackMenuItems(
 }) {
   final queue = ref.read(queueProvider.notifier);
   return [
-    AriaMenuItem('Play', () => queue.playQueue([t], 0), icon: Icons.play_arrow),
+    AriaMenuItem(
+      'Play',
+      () => queue.playQueue([t], 0),
+      icon: PhosphorIconsRegular.play,
+    ),
     AriaMenuItem(
       'Play next',
       () => queue.queueNext([t]),
-      icon: Icons.queue_play_next,
+      icon: PhosphorIconsRegular.rowsPlusTop,
     ),
     AriaMenuItem(
       'Add to queue',
       () => queue.queueAdd([t]),
-      icon: Icons.playlist_add,
+      icon: PhosphorIconsRegular.listPlus,
     ),
     AriaMenuItem(
       'Add to playlist…',
       () => showAddToPlaylistMenu(context, tracks: [t]),
-      icon: Icons.playlist_add_check,
+      icon: PhosphorIconsRegular.listChecks,
     ),
     AriaMenuItem(
       'Tags…',
       () => showTagPicker(context, kind: 'track', key: t.id),
-      icon: Icons.sell_outlined,
+      icon: PhosphorIconsRegular.tag,
     ),
     downloadMenuItem(ref, [t]),
     if (goToAlbum)
       AriaMenuItem(
         'Go to album',
         () => context.push(albumPath(t.albumId)),
-        icon: Icons.album_outlined,
+        icon: PhosphorIconsRegular.vinylRecord,
       ),
     if (goToArtist && (t.artist ?? '').isNotEmpty)
       AriaMenuItem(
         'Go to artist',
         () => context.push(artistPath(t.artist!)),
-        icon: Icons.person_outline,
+        icon: PhosphorIconsRegular.user,
       ),
     ...extra,
     AriaMenuItem(
       'Select…',
       () => ref.read(selectionProvider.notifier).enter(trackSelectionItem(t)),
-      icon: Icons.check_box_outlined,
+      icon: PhosphorIconsRegular.checkSquare,
     ),
   ];
 }
@@ -220,34 +225,34 @@ List<AriaMenuItem> albumMenuItems(
     AriaMenuItem(
       'Play',
       () => queue.playQueue(tracks, 0),
-      icon: Icons.play_arrow,
+      icon: PhosphorIconsRegular.play,
     ),
     AriaMenuItem(
       'Play next',
       () => queue.queueNext(tracks),
-      icon: Icons.queue_play_next,
+      icon: PhosphorIconsRegular.rowsPlusTop,
     ),
     AriaMenuItem(
       'Add to queue',
       () => queue.queueAdd(tracks),
-      icon: Icons.playlist_add,
+      icon: PhosphorIconsRegular.listPlus,
     ),
     AriaMenuItem(
       'Add to playlist…',
       () => showAddToPlaylistMenu(context, tracks: tracks),
-      icon: Icons.playlist_add_check,
+      icon: PhosphorIconsRegular.listChecks,
     ),
     AriaMenuItem(
       'Tags…',
       () => showTagPicker(context, kind: 'album', key: albumId),
-      icon: Icons.sell_outlined,
+      icon: PhosphorIconsRegular.tag,
     ),
     downloadMenuItem(ref, tracks),
     if (artistName != null && artistName.isNotEmpty)
       AriaMenuItem(
         'Go to artist',
         () => context.push(artistPath(artistName)),
-        icon: Icons.person_outline,
+        icon: PhosphorIconsRegular.user,
       ),
     ...extra,
     AriaMenuItem(
@@ -255,7 +260,7 @@ List<AriaMenuItem> albumMenuItems(
       () => ref
           .read(selectionProvider.notifier)
           .enter(albumSelectionItem(albumId, tracks)),
-      icon: Icons.check_box_outlined,
+      icon: PhosphorIconsRegular.checkSquare,
     ),
   ];
 }
@@ -274,23 +279,23 @@ List<AriaMenuItem> artistMenuItems(
       AriaMenuItem(
         'Play all',
         () => queue.playQueue(tracks, 0),
-        icon: Icons.play_arrow,
+        icon: PhosphorIconsRegular.play,
       ),
       AriaMenuItem(
         'Add to queue',
         () => queue.queueAdd(tracks),
-        icon: Icons.playlist_add,
+        icon: PhosphorIconsRegular.listPlus,
       ),
       AriaMenuItem(
         'Add to playlist…',
         () => showAddToPlaylistMenu(context, tracks: tracks),
-        icon: Icons.playlist_add_check,
+        icon: PhosphorIconsRegular.listChecks,
       ),
     ],
     AriaMenuItem(
       'Tags…',
       () => showTagPicker(context, kind: 'artist', key: name),
-      icon: Icons.sell_outlined,
+      icon: PhosphorIconsRegular.tag,
     ),
     ...extra,
     AriaMenuItem(
@@ -298,7 +303,7 @@ List<AriaMenuItem> artistMenuItems(
       () => ref
           .read(selectionProvider.notifier)
           .enter(artistSelectionItem(name, tracks)),
-      icon: Icons.check_box_outlined,
+      icon: PhosphorIconsRegular.checkSquare,
     ),
   ];
 }

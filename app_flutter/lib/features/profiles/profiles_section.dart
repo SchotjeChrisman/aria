@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import 'profile_menu.dart';
@@ -39,13 +40,13 @@ class ProfilesSection extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 18),
                         tooltip: 'Edit profile',
                         onPressed: () =>
                             showProfileEditor(context, ref, profile: p),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, size: 18),
+                        icon: const Icon(PhosphorIconsRegular.x, size: 18),
                         tooltip: 'Delete profile',
                         onPressed: () => confirmDeleteProfile(context, ref, p),
                       ),

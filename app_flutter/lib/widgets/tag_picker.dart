@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/phosphor_icons.dart';
 
 import '../core/tag_tree.dart';
 import '../core/tags_providers.dart';
@@ -30,14 +31,14 @@ Future<void> showTagPicker(
                 ListTile(
                   title: Text(tagPath(all, tag)),
                   trailing: tagHas(tag, kind, key)
-                      ? Icon(Icons.check, color: c.accent)
+                      ? Icon(PhosphorIconsRegular.check, color: c.accent)
                       : null,
                   onTap: () => ref
                       .read(tagsProvider.notifier)
                       .toggleItem(tag, kind, key),
                 ),
             ListTile(
-              leading: const Icon(Icons.add, size: 18),
+              leading: const Icon(PhosphorIconsRegular.plus, size: 18),
               title: Text(all.isEmpty ? 'New tag…' : '＋ New tag…'),
               onTap: () async {
                 final name = await promptName(
@@ -100,7 +101,7 @@ Future<void> showBulkTagMenu(
                   },
                 ),
             ListTile(
-              leading: const Icon(Icons.add, size: 18),
+              leading: const Icon(PhosphorIconsRegular.plus, size: 18),
               title: Text(all.isEmpty ? 'New tag…' : '＋ New tag…'),
               onTap: () async {
                 final name = await promptName(

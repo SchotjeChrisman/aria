@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
@@ -84,7 +85,7 @@ class _ComposersSectionState extends ConsumerState<ComposersSection> {
     if (list.isEmpty) {
       return const EmptyState(
         message: 'No composer tags in this library.',
-        icon: Icons.piano_outlined,
+        icon: PhosphorIconsRegular.pianoKeys,
       );
     }
 

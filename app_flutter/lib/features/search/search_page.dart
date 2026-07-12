@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/downloads.dart';
@@ -161,7 +162,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 autofocus: true,
                 decoration: const InputDecoration(
                   hintText: 'Search your library and MusicBrainz…',
-                  prefixIcon: Icon(Icons.search),
+                  prefixIcon: Icon(PhosphorIconsRegular.magnifyingGlass),
                 ),
                 onChanged: (v) => ref.read(searchQueryProvider.notifier).set(v),
               ),
@@ -172,16 +173,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               child: switch (library) {
                 AsyncError() => const EmptyState(
                   message: 'Library unavailable — check the server.',
-                  icon: Icons.cloud_off,
+                  icon: PhosphorIconsRegular.cloudSlash,
                 ),
                 AsyncValue(hasValue: true) when query.isEmpty =>
                   const EmptyState(
                     message: 'Type to search titles, artists and albums.',
-                    icon: Icons.search,
+                    icon: PhosphorIconsRegular.magnifyingGlass,
                   ),
                 AsyncValue(hasValue: true) when nothingAnywhere => EmptyState(
                   message: 'Nothing matches "$query".',
-                  icon: Icons.search_off,
+                  icon: PhosphorIconsRegular.magnifyingGlassMinus,
                 ),
                 AsyncValue(hasValue: true) => _ResultsList(results: results),
                 _ => const Center(child: CircularProgressIndicator()),
@@ -299,7 +300,7 @@ class _ResultsList extends ConsumerWidget {
                   a.disambiguation,
                 ].nonNulls.where((s) => s.isNotEmpty).join(' · '),
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: const Icon(PhosphorIconsRegular.caretRight),
               // Same flow as any not-in-library artist (e.g. New Releases):
               // the artist page enriches by name.
               onTap: () => context.push(artistPath(a.name)),

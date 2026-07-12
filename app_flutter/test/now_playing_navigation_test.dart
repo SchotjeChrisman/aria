@@ -1,4 +1,5 @@
 import 'package:aria/core/connection.dart';
+import 'package:aria/core/phosphor_icons.dart';
 import 'package:aria/core/library_providers.dart';
 import 'package:aria/core/player_providers.dart';
 import 'package:aria/core/router.dart';
@@ -144,7 +145,7 @@ void main() {
     container.read(routerProvider).push('/now-playing');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.lyrics_outlined));
+    await tester.tap(find.byIcon(PhosphorIconsRegular.microphoneStage));
     await tester.pumpAndSettle();
 
     expect(find.byType(LyricsScreen), findsOneWidget);
@@ -160,7 +161,7 @@ void main() {
     container.read(routerProvider).push('/now-playing');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.queue_music));
+    await tester.tap(find.byIcon(PhosphorIconsRegular.queue));
     await tester.pumpAndSettle();
 
     expect(find.byType(QueueScreen), findsOneWidget);

@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/library_providers.dart';
@@ -51,13 +52,13 @@ class PlaylistsScreen extends ConsumerWidget {
           Row(
             children: [
               OutlinedButton.icon(
-                icon: const Icon(Icons.add, size: 18),
+                icon: const Icon(PhosphorIconsRegular.plus, size: 18),
                 label: const Text('Playlist'),
                 onPressed: () => _newManual(context, ref),
               ),
               const SizedBox(width: AriaSpace.s3),
               OutlinedButton.icon(
-                icon: const Icon(Icons.auto_awesome, size: 18),
+                icon: const Icon(PhosphorIconsRegular.sparkle, size: 18),
                 label: const Text('Smart playlist'),
                 onPressed: () => showSmartEditor(context),
               ),
@@ -151,7 +152,7 @@ class _PlaylistTile extends ConsumerWidget {
       art = Container(
         decoration: ariaSurface(c, border: c.lineStrong),
         child: Icon(
-          playlist.isSmart ? Icons.auto_awesome : Icons.queue_music,
+          playlist.isSmart ? PhosphorIconsRegular.sparkle : PhosphorIconsRegular.queue,
           size: 36,
           color: c.fgDim,
         ),

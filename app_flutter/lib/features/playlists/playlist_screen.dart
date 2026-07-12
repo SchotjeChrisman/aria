@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/downloads.dart';
 import '../../core/formats.dart';
@@ -92,14 +93,14 @@ class PlaylistScreen extends ConsumerWidget {
           runSpacing: AriaSpace.s2,
           children: [
             FilledButton.icon(
-              icon: const Icon(Icons.play_arrow, size: 18),
+              icon: const Icon(PhosphorIconsFill.play, size: 18),
               label: const Text('Play all'),
               onPressed: list == null || list.isEmpty
                   ? null
                   : () => ref.read(queueProvider.notifier).playQueue(list, 0),
             ),
             OutlinedButton.icon(
-              icon: const Icon(Icons.shuffle, size: 16),
+              icon: const Icon(PhosphorIconsRegular.shuffle, size: 16),
               label: const Text('Shuffle'),
               onPressed: list == null || list.isEmpty
                   ? null
@@ -108,19 +109,19 @@ class PlaylistScreen extends ConsumerWidget {
                         .playQueue(List.of(list)..shuffle(), 0),
             ),
             OutlinedButton.icon(
-              icon: const Icon(Icons.edit_outlined, size: 16),
+              icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
               label: const Text('Rename'),
               onPressed: () => _rename(context, ref, pl),
             ),
             if (pl.isSmart)
               OutlinedButton.icon(
-                icon: const Icon(Icons.tune, size: 16),
+                icon: const Icon(PhosphorIconsRegular.faders, size: 16),
                 label: const Text('Edit rules'),
                 onPressed: () => showSmartEditor(context, playlist: pl),
               ),
             OutlinedButton.icon(
               icon: Icon(
-                Icons.close,
+                PhosphorIconsRegular.x,
                 size: 16,
                 color: Theme.of(context).colorScheme.error,
               ),
@@ -202,7 +203,7 @@ class PlaylistScreen extends ConsumerWidget {
                 () => ref
                     .read(playlistsProvider.notifier)
                     .removeTrack(pl.id, t.id),
-                icon: Icons.close,
+                icon: PhosphorIconsRegular.x,
                 destructive: true,
               ),
           ],
@@ -221,7 +222,7 @@ class PlaylistScreen extends ConsumerWidget {
         children: [
           Expanded(child: row),
           IconButton(
-            icon: const Icon(Icons.close, size: 16),
+            icon: const Icon(PhosphorIconsRegular.x, size: 16),
             tooltip: 'Remove from playlist',
             onPressed: () =>
                 ref.read(playlistsProvider.notifier).removeTrack(pl.id, t.id),

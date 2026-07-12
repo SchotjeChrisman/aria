@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/downloads.dart';
 import '../../core/formats.dart';
@@ -102,7 +103,7 @@ class DownloadsScreen extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: IconButton(
-        icon: const Icon(Icons.delete_outline, size: 18),
+        icon: const Icon(PhosphorIconsRegular.trash, size: 18),
         tooltip: 'Remove download',
         onPressed: () => ref.read(downloadsProvider.notifier).remove(id),
       ),

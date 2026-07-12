@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
@@ -35,7 +36,7 @@ class ArtistOverview extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => const EmptyState(
             message: 'Could not load the library.',
-            icon: Icons.cloud_off,
+            icon: PhosphorIconsRegular.cloudSlash,
           ),
           data: (_) => _body(context, ref),
         );
@@ -76,7 +77,7 @@ class ArtistOverview extends ConsumerWidget {
         if (main.isEmpty && tracks.isEmpty)
           const EmptyState(
             message: 'Not in your library — yet.',
-            icon: Icons.person_outline,
+            icon: PhosphorIconsRegular.user,
           ),
       ],
     );

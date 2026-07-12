@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/router.dart';
 import 'tag_screen.dart';
@@ -10,8 +10,8 @@ final featureEntry = FeatureEntry(
   destination: const AppDestination(
     path: '/tags',
     label: 'Tags',
-    icon: Icons.sell_outlined,
-    selectedIcon: Icons.sell,
+    icon: PhosphorIconsThin.tag,
+    selectedIcon: PhosphorIconsFill.tag,
   ),
   routes: [
     GoRoute(

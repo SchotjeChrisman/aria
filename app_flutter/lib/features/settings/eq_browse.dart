@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
@@ -22,7 +23,7 @@ Widget _status(AsyncValue<Object?> opra, String loadingMsg) => opra.when(
     title: Text(loadingMsg),
   ),
   error: (e, _) => ListTile(
-    leading: const Icon(Icons.error_outline),
+    leading: const Icon(PhosphorIconsRegular.warningCircle),
     title: Text('Could not load the OPRA database: $e'),
   ),
 );
@@ -93,7 +94,7 @@ class _SearchListState extends State<_SearchList> {
             padding: const EdgeInsets.all(AriaSpace.s4),
             child: TextField(
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(PhosphorIconsRegular.magnifyingGlass),
                 hintText: widget.hint,
               ),
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
@@ -127,7 +128,7 @@ class EqBrandsScreen extends ConsumerWidget {
     );
     ListTile brandTile(String v) => ListTile(
           title: Text(v),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const Icon(PhosphorIconsRegular.caretRight),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -185,7 +186,7 @@ class EqHeadphonesScreen extends ConsumerWidget {
                     ),
                     trailing: p.eqs.length == 1
                         ? null
-                        : const Icon(Icons.chevron_right),
+                        : const Icon(PhosphorIconsRegular.caretRight),
                     onTap: () {
                       if (p.eqs.length == 1) {
                         _applyCurve(context, ref, p, p.eqs.single);
@@ -227,7 +228,7 @@ class EqCurvesScreen extends ConsumerWidget {
                   title: Text(e.author ?? 'unknown'),
                   subtitle: e.details == null ? null : Text(e.details!),
                   trailing: IconButton(
-                    icon: Icon(fav ? Icons.star : Icons.star_border),
+                    icon: Icon(fav ? PhosphorIconsFill.star : PhosphorIconsThin.star),
                     onPressed: () => ref
                         .read(favouriteEqProvider.notifier)
                         .toggle(_named(product, e)),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/phosphor_icons.dart';
 
 import '../core/formats.dart';
 import '../core/theme.dart';
@@ -111,7 +112,7 @@ class TrackRow extends StatelessWidget {
                   ),
                   if (downloaded) ...[
                     const SizedBox(width: 14),
-                    Icon(Icons.download_done, size: 14, color: dim),
+                    Icon(PhosphorIconsRegular.checkCircle, size: 14, color: dim),
                   ],
                   const SizedBox(width: 14),
                   FormatBadge(

@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/formats.dart';
@@ -62,12 +63,12 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
         actions: [
           if (q.tracks.isNotEmpty) ...[
             TextButton.icon(
-              icon: const Icon(Icons.playlist_add, size: 18),
+              icon: const Icon(PhosphorIconsRegular.listPlus, size: 18),
               label: const Text('Save as playlist'),
               onPressed: () => _saveAsPlaylist(context),
             ),
             IconButton(
-              icon: const Icon(Icons.clear_all),
+              icon: const Icon(PhosphorIconsRegular.broom),
               tooltip: 'Clear queue',
               onPressed: ref.read(queueProvider.notifier).clear,
             ),
@@ -78,7 +79,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
       body: q.tracks.isEmpty
           ? const EmptyState(
               message: 'Queue is empty.',
-              icon: Icons.queue_music,
+              icon: PhosphorIconsRegular.queue,
             )
           : Column(
               children: [
@@ -200,7 +201,7 @@ class _QueueRow extends ConsumerWidget {
           index: index,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s2),
-            child: Icon(Icons.drag_indicator, size: 18, color: c.fgDim),
+            child: Icon(PhosphorIconsRegular.dotsSixVertical, size: 18, color: c.fgDim),
           ),
         ),
         ArtImage(
@@ -242,7 +243,7 @@ class _QueueRow extends ConsumerWidget {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.close, size: 16),
+          icon: const Icon(PhosphorIconsRegular.x, size: 16),
           color: c.fgDim,
           tooltip: 'Remove',
           onPressed: () => notifier.removeIndices([index]),
@@ -292,41 +293,41 @@ class _QueueRow extends ConsumerWidget {
       AriaMenuItem(
         'Play now',
         () => notifier.playAt(index),
-        icon: Icons.play_arrow,
+        icon: PhosphorIconsRegular.play,
       ),
       AriaMenuItem(
         'Move next',
         // legacy: insert right after the current track
         () => notifier.move([index], ref.read(queueProvider).index + 1),
-        icon: Icons.queue_play_next,
+        icon: PhosphorIconsRegular.rowsPlusTop,
       ),
       AriaMenuItem(
         'Add to playlist…',
         () => showAddToPlaylistMenu(context, tracks: [track]),
-        icon: Icons.playlist_add_check,
+        icon: PhosphorIconsRegular.listChecks,
       ),
       AriaMenuItem(
         'Tags…',
         () => showTagPicker(context, kind: 'track', key: track.id),
-        icon: Icons.sell_outlined,
+        icon: PhosphorIconsRegular.tag,
       ),
       AriaMenuItem(
         'Go to album',
         // go, not push: see now_playing_screen — this screen is above the
         // shell, the destinations are inside shell branches.
         () => context.go(albumPath(track.albumId)),
-        icon: Icons.album_outlined,
+        icon: PhosphorIconsRegular.vinylRecord,
       ),
       if ((track.artist ?? '').isNotEmpty)
         AriaMenuItem(
           'Go to artist',
           () => context.go(artistPath(track.artist!)),
-          icon: Icons.person_outline,
+          icon: PhosphorIconsRegular.user,
         ),
       AriaMenuItem(
         'Remove from queue',
         () => notifier.removeIndices([index]),
-        icon: Icons.close,
+        icon: PhosphorIconsRegular.x,
         destructive: true,
       ),
     ]);

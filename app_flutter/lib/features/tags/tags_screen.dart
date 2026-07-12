@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
@@ -26,13 +27,13 @@ class TagsScreen extends ConsumerWidget {
           Row(
             children: [
               OutlinedButton.icon(
-                icon: const Icon(Icons.add, size: 18),
+                icon: const Icon(PhosphorIconsRegular.plus, size: 18),
                 label: const Text('Tag'),
                 onPressed: () => _create(context, ref, folder: false),
               ),
               const SizedBox(width: AriaSpace.s3),
               OutlinedButton.icon(
-                icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+                icon: const Icon(PhosphorIconsRegular.folderPlus, size: 18),
                 label: const Text('Folder'),
                 onPressed: () => _create(context, ref, folder: true),
               ),
@@ -117,7 +118,7 @@ class _FolderRow extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: AriaSpace.s1),
         child: Row(
           children: [
-            Icon(Icons.folder_outlined, size: 18, color: c.fgDim),
+            Icon(PhosphorIconsRegular.folder, size: 18, color: c.fgDim),
             const SizedBox(width: AriaSpace.s2),
             Expanded(
               child: Text(
@@ -132,12 +133,12 @@ class _FolderRow extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             IconButton(
-              icon: Icon(Icons.close, size: 15, color: c.fgDim),
+              icon: Icon(PhosphorIconsRegular.x, size: 15, color: c.fgDim),
               tooltip: 'Delete folder',
               visualDensity: VisualDensity.compact,
               onPressed: () => _deleteFolder(context, ref),
             ),
-            Icon(Icons.chevron_right, size: 18, color: c.fgDim),
+            Icon(PhosphorIconsRegular.caretRight, size: 18, color: c.fgDim),
           ],
         ),
       ),

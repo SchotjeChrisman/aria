@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
@@ -32,7 +33,7 @@ class GenreScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => const EmptyState(
             message: 'Cannot reach the server.',
-            icon: Icons.cloud_off,
+            icon: PhosphorIconsRegular.cloudSlash,
           ),
           data: (_) => _GenreBody(genre: genre),
         ),
@@ -68,7 +69,7 @@ class _GenreBody extends ConsumerWidget {
     final backRow = Align(
       alignment: Alignment.centerLeft,
       child: IconButton(
-        icon: const Icon(Icons.arrow_back),
+        icon: const Icon(PhosphorIconsRegular.arrowLeft),
         tooltip: 'Back',
         onPressed: () => _back(context),
       ),
@@ -89,7 +90,7 @@ class _GenreBody extends ConsumerWidget {
           const Expanded(
             child: EmptyState(
               message: 'Nothing in this genre.',
-              icon: Icons.category_outlined,
+              icon: PhosphorIconsRegular.squaresFour,
             ),
           ),
         ],

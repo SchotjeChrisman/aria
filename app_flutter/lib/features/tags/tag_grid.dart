@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/library_providers.dart';
@@ -93,7 +94,7 @@ class _TagTile extends ConsumerWidget {
     } else {
       art = Container(
         decoration: ariaSurface(c, border: c.lineStrong),
-        child: Icon(Icons.sell_outlined, size: 36, color: c.fgDim),
+        child: Icon(PhosphorIconsRegular.tag, size: 36, color: c.fgDim),
       );
     }
 
@@ -138,7 +139,7 @@ class _TagTile extends ConsumerWidget {
             shrinkWrap: true,
             children: [
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
+                leading: const Icon(PhosphorIconsRegular.pencilSimple),
                 title: const Text('Rename'),
                 onTap: () {
                   Navigator.of(sheet).pop();
@@ -146,7 +147,7 @@ class _TagTile extends ConsumerWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.drive_file_move_outlined),
+                leading: const Icon(PhosphorIconsRegular.folderOpen),
                 title: const Text('Move to folder…'),
                 onTap: () {
                   Navigator.of(sheet).pop();
@@ -154,7 +155,7 @@ class _TagTile extends ConsumerWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.close),
+                leading: const Icon(PhosphorIconsRegular.x),
                 title: const Text('Delete'),
                 onTap: () {
                   Navigator.of(sheet).pop();
@@ -213,7 +214,7 @@ class _TagTile extends ConsumerWidget {
           children: [
             ListTile(
               title: const Text('(No folder)'),
-              trailing: tag.parent == null ? const Icon(Icons.check) : null,
+              trailing: tag.parent == null ? const Icon(PhosphorIconsRegular.check) : null,
               onTap: () {
                 Navigator.of(sheet).pop();
                 setFolder(null);
@@ -222,7 +223,7 @@ class _TagTile extends ConsumerWidget {
             for (final f in folders(all))
               ListTile(
                 title: Text(f.name),
-                trailing: tag.parent == f.id ? const Icon(Icons.check) : null,
+                trailing: tag.parent == f.id ? const Icon(PhosphorIconsRegular.check) : null,
                 onTap: () {
                   Navigator.of(sheet).pop();
                   setFolder(f.id);

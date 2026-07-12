@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/phosphor_icons.dart';
 
 import '../core/connection.dart';
 import '../core/theme.dart';
@@ -90,7 +91,7 @@ class _NewReleaseCard extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: item.cover == null
-                ? Center(child: Icon(Icons.album_outlined, color: c.fgDim))
+                ? Center(child: Icon(PhosphorIconsRegular.vinylRecord, color: c.fgDim))
                 : LayoutBuilder(
                     // Band-sized cards have no fixed extent (wide windows go
                     // well past 190 logical px) — decode at the laid-out
@@ -103,7 +104,7 @@ class _NewReleaseCard extends StatelessWidget {
                           .round(),
                       gaplessPlayback: true,
                       errorBuilder: (_, _, _) => Center(
-                        child: Icon(Icons.album_outlined, color: c.fgDim),
+                        child: Icon(PhosphorIconsRegular.vinylRecord, color: c.fgDim),
                       ),
                     ),
                   ),

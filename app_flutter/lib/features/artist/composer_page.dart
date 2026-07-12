@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/formats.dart';
 import '../../core/player_providers.dart';
@@ -43,7 +44,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => const EmptyState(
                 message: 'Could not load the library.',
-                icon: Icons.cloud_off,
+                icon: PhosphorIconsRegular.cloudSlash,
               ),
               data: (tracks) => _body(context, c, tracks),
             ),
@@ -117,7 +118,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
         if (works.isEmpty && composerAlbums.isEmpty)
           const EmptyState(
             message: 'No composer tags for this name.',
-            icon: Icons.piano_outlined,
+            icon: PhosphorIconsRegular.pianoKeys,
           ),
       ],
     );
@@ -216,7 +217,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.play_arrow, size: 18),
+            icon: const Icon(PhosphorIconsFill.play, size: 18),
             visualDensity: VisualDensity.compact,
             tooltip: 'Play this recording',
             color: c.fgDim,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 
@@ -28,31 +29,31 @@ class SettingsPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: AriaSpace.s6),
                 const _SettingsTile(
-                  icon: Icons.play_circle_outline,
+                  icon: PhosphorIconsThin.playCircle,
                   title: 'Playback',
                   subtitle: 'Exclusive output, EQ',
                   slug: 'playback',
                 ),
                 const _SettingsTile(
-                  icon: Icons.data_usage,
+                  icon: PhosphorIconsRegular.chartDonut,
                   title: 'Data & Downloads',
                   subtitle: 'Network limits, streaming & download quality, offline tracks',
                   slug: 'data',
                 ),
                 const _SettingsTile(
-                  icon: Icons.library_music_outlined,
+                  icon: PhosphorIconsRegular.musicNotes,
                   title: 'Library',
                   subtitle: 'Rescan and enrich metadata',
                   slug: 'library',
                 ),
                 const _SettingsTile(
-                  icon: Icons.account_circle_outlined,
+                  icon: PhosphorIconsRegular.userCircle,
                   title: 'Account',
                   subtitle: 'Server, scrobbling, profiles',
                   slug: 'account',
                 ),
                 const _SettingsTile(
-                  icon: Icons.info_outline,
+                  icon: PhosphorIconsRegular.info,
                   title: 'About',
                   subtitle: 'Version and diagnostics',
                   slug: 'about',
@@ -86,7 +87,7 @@ class _SettingsTile extends StatelessWidget {
       leading: Icon(icon),
       title: Text(title),
       subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: const Icon(PhosphorIconsRegular.caretRight),
       onTap: () => context.push('/settings/$slug'),
     );
   }

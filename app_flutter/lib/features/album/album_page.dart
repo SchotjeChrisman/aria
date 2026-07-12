@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/downloads.dart';
 import '../../core/formats.dart';
@@ -46,14 +47,14 @@ class AlbumPage extends ConsumerWidget {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => const EmptyState(
                 message: 'Could not load the library.',
-                icon: Icons.cloud_off,
+                icon: PhosphorIconsRegular.cloudSlash,
               ),
               data: (byId) {
                 final album = byId[albumId];
                 if (album == null) {
                   return const EmptyState(
                     message: 'Album not found.',
-                    icon: Icons.album_outlined,
+                    icon: PhosphorIconsRegular.vinylRecord,
                   );
                 }
                 return _AlbumBody(album: album);
@@ -149,13 +150,13 @@ class _AlbumBody extends ConsumerWidget {
                 children: [
                   FilledButton.icon(
                     onPressed: () => queue.playQueue(album.tracks, 0),
-                    icon: const Icon(Icons.play_arrow, size: 18),
+                    icon: const Icon(PhosphorIconsRegular.play, size: 18),
                     label: const Text('Play album'),
                   ),
                   Builder(
                     builder: (bctx) => OutlinedButton.icon(
                       onPressed: () => _editMenu(bctx, context, ref),
-                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
                       label: const Text('Edit'),
                     ),
                   ),
@@ -165,7 +166,7 @@ class _AlbumBody extends ConsumerWidget {
                       case final booklets? when booklets.isNotEmpty)
                     OutlinedButton.icon(
                       onPressed: () => _openBooklet(context, booklets),
-                      icon: const Icon(Icons.menu_book_outlined, size: 16),
+                      icon: const Icon(PhosphorIconsRegular.bookOpen, size: 16),
                       label: const Text('Booklet'),
                     ),
                   // Legacy albumCtx verbs: Play next / Add to queue /
@@ -173,7 +174,7 @@ class _AlbumBody extends ConsumerWidget {
                   Builder(
                     builder: (bctx) => IconButton(
                       tooltip: 'More',
-                      icon: const Icon(Icons.more_horiz),
+                      icon: const Icon(PhosphorIconsRegular.dotsThree),
                       onPressed: () => showAriaContextMenu(
                         bctx,
                         _menuAnchor(bctx),
@@ -210,17 +211,17 @@ class _AlbumBody extends ConsumerWidget {
       AriaMenuItem(
         'Edit metadata…',
         () => showAlbumEditor(pageCtx, ref, album),
-        icon: Icons.edit_outlined,
+        icon: PhosphorIconsRegular.pencilSimple,
       ),
       AriaMenuItem(
         'Tags…',
         () => showTagPicker(pageCtx, kind: 'album', key: album.id),
-        icon: Icons.sell_outlined,
+        icon: PhosphorIconsRegular.tag,
       ),
       AriaMenuItem(
         'Re-identify…',
         () => showAlbumReidentify(pageCtx, ref, album),
-        icon: Icons.sync,
+        icon: PhosphorIconsRegular.arrowsClockwise,
       ),
     ]);
   }
@@ -243,7 +244,7 @@ class _AlbumBody extends ConsumerWidget {
           children: [
             for (final name in booklets)
               ListTile(
-                leading: const Icon(Icons.menu_book_outlined),
+                leading: const Icon(PhosphorIconsRegular.bookOpen),
                 title: Text(name),
                 onTap: () {
                   Navigator.of(sheetCtx).pop();
@@ -387,7 +388,7 @@ class _AlbumBody extends ConsumerWidget {
           AriaMenuItem(
             'Edit track…',
             () => showTrackEditor(context, ref, t),
-            icon: Icons.edit_outlined,
+            icon: PhosphorIconsRegular.pencilSimple,
           ),
         ],
       ),

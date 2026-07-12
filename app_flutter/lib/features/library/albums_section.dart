@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
@@ -173,7 +174,7 @@ class AlbumsSection extends ConsumerWidget {
           child: list.isEmpty
               ? const EmptyState(
                   message: 'No albums.',
-                  icon: Icons.album_outlined,
+                  icon: PhosphorIconsRegular.vinylRecord,
                 )
               : GridView.builder(
                   padding: ariaPagePadding(context, top: 0),
@@ -317,7 +318,11 @@ void _showDecadePicker(BuildContext context) {
                         dense: true,
                         title: const Text('Any'),
                         trailing: current == null
-                            ? Icon(Icons.check, size: 18, color: c.accent)
+                            ? Icon(
+                                PhosphorIconsRegular.check,
+                                size: 18,
+                                color: c.accent,
+                              )
                             : null,
                         onTap: () => pick(null),
                       ),
@@ -326,7 +331,11 @@ void _showDecadePicker(BuildContext context) {
                           dense: true,
                           title: Text('${d}s'),
                           trailing: current == d
-                              ? Icon(Icons.check, size: 18, color: c.accent)
+                              ? Icon(
+                                  PhosphorIconsRegular.check,
+                                  size: 18,
+                                  color: c.accent,
+                                )
                               : null,
                           onTap: () => pick(current == d ? null : d),
                         ),

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/router.dart';
 import 'playlist_screen.dart';
@@ -10,8 +10,8 @@ final featureEntry = FeatureEntry(
   destination: const AppDestination(
     path: '/playlists',
     label: 'Playlists',
-    icon: Icons.queue_music_outlined,
-    selectedIcon: Icons.queue_music,
+    icon: PhosphorIconsThin.queue,
+    selectedIcon: PhosphorIconsFill.queue,
   ),
   routes: [
     GoRoute(

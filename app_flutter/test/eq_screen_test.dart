@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:aria/core/connection.dart';
+import 'package:aria/core/phosphor_icons.dart';
 import 'package:aria/core/eq.dart';
 import 'package:aria/core/player_providers.dart';
 import 'package:aria/features/settings/eq_screen.dart';
@@ -87,7 +88,7 @@ void main() {
     );
 
     // Two clear (×) buttons, one per filled slot.
-    final clears = find.byIcon(Icons.close);
+    final clears = find.byIcon(PhosphorIconsRegular.x);
     expect(clears, findsNWidgets(2));
 
     // Clear the headphone slot (first ×).
@@ -97,7 +98,7 @@ void main() {
     expect(container.read(eqProvider).custom?.name, 'My EQ');
 
     // Clear the custom slot (now the only ×).
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byIcon(PhosphorIconsRegular.x));
     await tester.pump();
     expect(container.read(eqProvider).custom, isNull);
   });
@@ -131,7 +132,7 @@ void main() {
 
     expect(find.text(_fav.name!), findsOneWidget);
     // The filled star trailing un-favourites.
-    await tester.tap(find.byIcon(Icons.star));
+    await tester.tap(find.byIcon(PhosphorIconsFill.star));
     await tester.pump();
 
     expect(container.read(favouriteEqProvider), isEmpty);
@@ -148,7 +149,7 @@ void main() {
       },
     );
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.tap(find.byIcon(PhosphorIconsRegular.trash));
     await tester.pump();
 
     expect(container.read(customEqPresetsProvider), isEmpty);
@@ -165,7 +166,7 @@ void main() {
       },
     );
 
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byIcon(PhosphorIconsRegular.pencilSimple));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
@@ -185,7 +186,7 @@ void main() {
       },
     );
 
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byIcon(PhosphorIconsRegular.pencilSimple));
     await tester.pumpAndSettle();
     // Rename in the dialog's Name field (pre-filled with the old name).
     await tester.enterText(find.widgetWithText(TextField, 'My EQ'), 'My EQ v2');

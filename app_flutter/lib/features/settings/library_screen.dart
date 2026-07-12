@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
@@ -41,7 +42,7 @@ class _LibraryTools extends ConsumerWidget {
               onPressed: scan.running
                   ? null
                   : () => ref.read(scanControllerProvider.notifier).start(),
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: const Icon(PhosphorIconsRegular.arrowClockwise, size: 18),
               label: Text(scan.running ? 'Scanning…' : 'Rescan library'),
             ),
             const SizedBox(width: AriaSpace.s3),
@@ -91,7 +92,7 @@ class _LibraryTools extends ConsumerWidget {
                         /* status poll shows reality */
                       }
                     },
-              icon: const Icon(Icons.auto_awesome, size: 18),
+              icon: const Icon(PhosphorIconsRegular.sparkle, size: 18),
               label: const Text('Enrich metadata'),
             ),
             const SizedBox(width: AriaSpace.s3),

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/formats.dart';
 import '../../core/player_providers.dart';
@@ -70,7 +71,7 @@ class SignalPath extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(Icons.info_outline, size: 13, color: c.fgDim),
+            Icon(PhosphorIconsRegular.info, size: 13, color: c.fgDim),
           ],
         ),
       ),

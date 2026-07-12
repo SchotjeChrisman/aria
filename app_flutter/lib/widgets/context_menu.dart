@@ -21,8 +21,8 @@ class AriaMenuItem {
 /// widget's onSecondary callback:
 ///
 ///   onSecondary: (pos) => showAriaContextMenu(context, pos, [
-///     AriaMenuItem('Play now', play, icon: Icons.play_arrow),
-///     AriaMenuItem('Add to queue', add, icon: Icons.playlist_add),
+///     AriaMenuItem('Play now', play, icon: PhosphorIconsRegular.play),
+///     AriaMenuItem('Add to queue', add, icon: PhosphorIconsRegular.listPlus),
 ///   ]),
 Future<void> showAriaContextMenu(
   BuildContext context,

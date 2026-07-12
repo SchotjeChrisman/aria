@@ -35,7 +35,6 @@ dependencies:
   pdfrx: ^2.4.4
   # Custom cover-art upload: cross-platform image file picking (returns bytes).
   file_picker: ^8.1.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -56,6 +55,18 @@ flutter:
     - family: Nunito
       fonts:
         - asset: assets/fonts/Nunito.ttf
+    # Phosphor icon set as bundled fonts + a plain-IconData shim
+    # (lib/core/phosphor_icons.dart). phosphor_flutter can't be used: it
+    # subclasses IconData, which is `final` in Flutter 3.44.
+    - family: PhosphorThin
+      fonts:
+        - asset: assets/fonts/Phosphor-Thin.ttf
+    - family: PhosphorRegular
+      fonts:
+        - asset: assets/fonts/Phosphor.ttf
+    - family: PhosphorFill
+      fonts:
+        - asset: assets/fonts/Phosphor-Fill.ttf
 
 # App icon: white G-clef on the aria accent (#D13B58). Source art in branding/,
 # regenerate with `dart run flutter_launcher_icons`.

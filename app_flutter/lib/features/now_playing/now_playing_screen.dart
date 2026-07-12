@@ -5,6 +5,7 @@ import 'package:aria_player/aria_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/formats.dart';
@@ -34,7 +35,7 @@ class NowPlayingScreen extends ConsumerWidget {
         backgroundColor: c.bg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.keyboard_arrow_down),
+          icon: const Icon(PhosphorIconsRegular.caretDown),
           tooltip: 'Close',
           onPressed: () => context.pop(),
         ),
@@ -85,7 +86,7 @@ class _FavouriteButton extends ConsumerWidget {
     final c = AriaColors.of(context);
     final fav = ref.watch(favouriteIdsProvider).contains(trackId);
     return IconButton(
-      icon: Icon(fav ? Icons.favorite : Icons.favorite_border),
+      icon: Icon(fav ? PhosphorIconsFill.heart : PhosphorIconsThin.heart),
       color: fav ? c.accent : c.fgDim,
       tooltip: fav ? 'Remove from favourites' : 'Add to favourites',
       onPressed: () =>
@@ -224,28 +225,28 @@ class _Controls extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               IconButton(
-                icon: const Icon(Icons.shuffle),
+                icon: const Icon(PhosphorIconsRegular.shuffle),
                 iconSize: 28,
                 color: shuffle ? c.accent : c.fgDim,
                 tooltip: 'Shuffle',
                 onPressed: queue.toggleShuffle,
               ),
               IconButton(
-                icon: const Icon(Icons.skip_previous),
+                icon: const Icon(PhosphorIconsFill.skipBack),
                 iconSize: 44,
                 color: c.fg,
                 tooltip: 'Previous',
                 onPressed: queue.prev,
               ),
               IconButton.filled(
-                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                icon: Icon(playing ? PhosphorIconsFill.pause : PhosphorIconsFill.play),
                 iconSize: 44,
                 padding: const EdgeInsets.all(AriaSpace.s4),
                 tooltip: 'Play/Pause',
                 onPressed: queue.togglePlay,
               ),
               IconButton(
-                icon: const Icon(Icons.skip_next),
+                icon: const Icon(PhosphorIconsFill.skipForward),
                 iconSize: 44,
                 color: c.fg,
                 tooltip: 'Next',
@@ -253,7 +254,9 @@ class _Controls extends ConsumerWidget {
               ),
               IconButton(
                 icon: Icon(
-                  loop == LoopMode.one ? Icons.repeat_one : Icons.repeat,
+                  loop == LoopMode.one
+                      ? PhosphorIconsFill.repeatOnce
+                      : PhosphorIconsFill.repeat,
                 ),
                 iconSize: 28,
                 color: loop != LoopMode.off ? c.accent : c.fgDim,
@@ -269,14 +272,14 @@ class _Controls extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               IconButton(
-                icon: const Icon(Icons.lyrics_outlined),
+                icon: const Icon(PhosphorIconsRegular.microphoneStage),
                 color: c.fgDim,
                 tooltip: 'Lyrics',
                 onPressed: () => context.push('/lyrics'),
               ),
               if (track != null) _FavouriteButton(trackId: track.id),
               IconButton(
-                icon: const Icon(Icons.queue_music),
+                icon: const Icon(PhosphorIconsRegular.queue),
                 color: c.fgDim,
                 tooltip: 'Queue',
                 onPressed: () => context.push('/queue'),

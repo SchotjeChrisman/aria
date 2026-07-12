@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/phosphor_icons.dart';
 
 import '../core/theme.dart';
 
@@ -156,7 +157,7 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
                                 ),
                               ),
                               if (sel)
-                                Icon(Icons.check, size: 16, color: c.accent),
+                                Icon(PhosphorIconsRegular.check, size: 16, color: c.accent),
                             ],
                           ),
                         ),

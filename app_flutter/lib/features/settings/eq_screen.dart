@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/player_providers.dart';
@@ -66,7 +67,7 @@ class _EqScreenState extends ConsumerState<EqScreen> {
       trailing: p == null
           ? null
           : IconButton(
-              icon: const Icon(Icons.close),
+              icon: const Icon(PhosphorIconsRegular.x),
               tooltip: 'Clear',
               onPressed: clear,
             ),
@@ -105,7 +106,7 @@ class _EqScreenState extends ConsumerState<EqScreen> {
                 onTap: () =>
                     ref.read(eqProvider.notifier).selectHeadphone(f),
                 trailing: IconButton(
-                  icon: const Icon(Icons.star),
+                  icon: const Icon(PhosphorIconsFill.star),
                   tooltip: 'Un-favourite',
                   onPressed: () =>
                       ref.read(favouriteEqProvider.notifier).toggle(f),
@@ -113,9 +114,9 @@ class _EqScreenState extends ConsumerState<EqScreen> {
               ),
           ],
           ListTile(
-            leading: const Icon(Icons.headphones_outlined),
+            leading: const Icon(PhosphorIconsRegular.headphones),
             title: const Text('Choose headphone'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
             onTap: () => pushEqBrands(context),
           ),
           header('Custom EQ'),
@@ -129,11 +130,11 @@ class _EqScreenState extends ConsumerState<EqScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 20),
                     onPressed: () => _editCustom(preset: p, index: i),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20),
+                    icon: const Icon(PhosphorIconsRegular.trash, size: 20),
                     onPressed: () {
                       // Deleting the preset in the custom slot clears it — the
                       // notifier doesn't watch this list, so do it here.
@@ -149,7 +150,7 @@ class _EqScreenState extends ConsumerState<EqScreen> {
               ),
             ),
           ListTile(
-            leading: const Icon(Icons.add),
+            leading: const Icon(PhosphorIconsRegular.plus),
             title: const Text('Add custom EQ'),
             onTap: _editCustom,
           ),
@@ -319,7 +320,7 @@ class _CustomEqDialogState extends State<_CustomEqDialog> {
                       const SizedBox(width: AriaSpace.s2),
                       _num(b.q, 'Q'),
                       IconButton(
-                        icon: const Icon(Icons.remove_circle_outline),
+                        icon: const Icon(PhosphorIconsRegular.minusCircle),
                         onPressed: () =>
                             setState(() => _bands.removeAt(i).dispose()),
                       ),
@@ -329,7 +330,7 @@ class _CustomEqDialogState extends State<_CustomEqDialog> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  icon: const Icon(Icons.add),
+                  icon: const Icon(PhosphorIconsRegular.plus),
                   label: const Text('Add band'),
                   onPressed: () => setState(
                     () => _bands.add(

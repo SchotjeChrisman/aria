@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/library_providers.dart';
 import '../../core/theme.dart';
@@ -27,7 +28,7 @@ class HomeScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => EmptyState(
             message: 'Cannot reach the server — check Settings.',
-            icon: Icons.cloud_off,
+            icon: PhosphorIconsRegular.cloudSlash,
             action: OutlinedButton(
               onPressed: () => ref.invalidate(libraryTracksProvider),
               child: const Text('Retry'),
@@ -36,7 +37,7 @@ class HomeScreen extends ConsumerWidget {
           data: (tracks) => tracks.isEmpty
               ? const EmptyState(
                   message: 'The library is empty — scan it from Settings.',
-                  icon: Icons.library_music_outlined,
+                  icon: PhosphorIconsRegular.musicNotes,
                 )
               : _HomeBody(tracks: tracks),
         ),
@@ -284,16 +285,16 @@ class _StatStrip extends StatelessWidget {
 
     return Row(
       children: [
-        tile('${composers.length}', 'Composers', Icons.edit_note,
+        tile('${composers.length}', 'Composers', PhosphorIconsRegular.notePencil,
             '/library/composers'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${performers.length}', 'Performers', Icons.groups_outlined,
+        tile('${performers.length}', 'Performers', PhosphorIconsRegular.users,
             '/library/artists'),
         const SizedBox(width: AriaSpace.s2),
-        tile('$albumCount', 'Releases', Icons.album_outlined,
+        tile('$albumCount', 'Releases', PhosphorIconsRegular.vinylRecord,
             '/library/albums'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${compositions.length}', 'Compositions', Icons.music_note_outlined,
+        tile('${compositions.length}', 'Compositions', PhosphorIconsThin.musicNote,
             '/library/tracks'),
       ],
     );
@@ -304,10 +305,10 @@ class _MixesShelf extends ConsumerWidget {
   const _MixesShelf();
 
   static const _looks = {
-    'daily': (Icons.wb_sunny_outlined, Color(0xFF7C4DFF)),
-    'weekly': (Icons.calendar_view_week_outlined, Color(0xFF00897B)),
-    'monthly': (Icons.calendar_month_outlined, Color(0xFFEF6C00)),
-    'yearly': (Icons.emoji_events_outlined, Color(0xFF3949AB)),
+    'daily': (PhosphorIconsRegular.sun, Color(0xFF7C4DFF)),
+    'weekly': (PhosphorIconsRegular.calendarBlank, Color(0xFF00897B)),
+    'monthly': (PhosphorIconsRegular.calendarDots, Color(0xFFEF6C00)),
+    'yearly': (PhosphorIconsRegular.trophy, Color(0xFF3949AB)),
   };
 
   @override
@@ -346,7 +347,7 @@ class _MixesShelf extends ConsumerWidget {
                   child: _MixBanner(
                     mix: mixes[i],
                     looks: _looks[mixes[i].id] ??
-                        (Icons.queue_music, c.accent),
+                        (PhosphorIconsRegular.queue, c.accent),
                   ),
                 ),
               ),
@@ -417,7 +418,7 @@ class _MixBanner extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.white),
+            const Icon(PhosphorIconsRegular.caretRight, color: Colors.white),
           ],
         ),
           ],
@@ -913,7 +914,7 @@ class _WeeklyTimeBox extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.schedule_outlined, size: 64, color: c.accent),
+        Icon(PhosphorIconsRegular.clock, size: 64, color: c.accent),
         const SizedBox(height: AriaSpace.s4),
         Text(
           _fmtListen(total),

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/router.dart';
 import 'about_screen.dart';
@@ -16,8 +16,8 @@ final settingsFeatureEntry = FeatureEntry(
   destination: const AppDestination(
     path: '/settings',
     label: 'Settings',
-    icon: Icons.settings_outlined,
-    selectedIcon: Icons.settings,
+    icon: PhosphorIconsThin.gear,
+    selectedIcon: PhosphorIconsFill.gear,
   ),
   routes: [
     GoRoute(

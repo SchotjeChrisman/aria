@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/album_card.dart';
@@ -92,7 +93,7 @@ class ArtistDiscography extends ConsumerWidget {
     if (items.isEmpty && appearAlbums.isEmpty) {
       return const EmptyState(
         message: 'No releases found.',
-        icon: Icons.album_outlined,
+        icon: PhosphorIconsRegular.vinylRecord,
       );
     }
     items.sort((p, q) => (q.year ?? 0) - (p.year ?? 0));

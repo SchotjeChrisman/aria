@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/downloads.dart';
 import '../../core/player_providers.dart';
@@ -36,7 +37,7 @@ class MixScreen extends ConsumerWidget {
       appBar: AppBar(
         actions: [
           IconButton(
-            icon: const Icon(Icons.playlist_add),
+            icon: const Icon(PhosphorIconsRegular.listPlus),
             tooltip: 'Save as playlist',
             onPressed: tracks.isEmpty
                 ? null
@@ -67,7 +68,7 @@ class MixScreen extends ConsumerWidget {
         Row(
           children: [
             FilledButton.icon(
-              icon: const Icon(Icons.play_arrow, size: 18),
+              icon: const Icon(PhosphorIconsRegular.play, size: 18),
               label: const Text('Play all'),
               onPressed: list.isEmpty
                   ? null
@@ -75,7 +76,7 @@ class MixScreen extends ConsumerWidget {
             ),
             const SizedBox(width: AriaSpace.s2),
             FilledButton.tonalIcon(
-              icon: const Icon(Icons.shuffle, size: 18),
+              icon: const Icon(PhosphorIconsRegular.shuffle, size: 18),
               label: const Text('Shuffle'),
               onPressed: list.isEmpty
                   ? null

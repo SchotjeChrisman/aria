@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
@@ -93,7 +94,7 @@ class SortDropdown extends StatelessWidget {
         borderRadius: BorderRadius.circular(AriaRadius.md),
         dropdownColor: c.bgRaised,
         style: TextStyle(fontSize: 13, color: c.fgDim),
-        icon: Icon(Icons.swap_vert, size: 16, color: c.fgDim),
+        icon: Icon(PhosphorIconsRegular.arrowsDownUp, size: 16, color: c.fgDim),
         items: [
           for (final o in options)
             DropdownMenuItem(value: o.key, child: Text(o.label)),

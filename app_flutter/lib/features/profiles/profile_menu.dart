@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/formats.dart';
 import '../../core/theme.dart';
@@ -158,13 +159,13 @@ class _ProfileRow extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 16),
+              icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
               visualDensity: VisualDensity.compact,
               tooltip: 'Edit profile',
               onPressed: onEdit,
             ),
             IconButton(
-              icon: const Icon(Icons.close, size: 16),
+              icon: const Icon(PhosphorIconsRegular.x, size: 16),
               visualDensity: VisualDensity.compact,
               tooltip: 'Delete profile',
               onPressed: onDelete,

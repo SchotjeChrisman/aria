@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
@@ -517,7 +518,7 @@ class _EditorDialogState extends State<_EditorDialog> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.undo, size: 15),
+                icon: const Icon(PhosphorIconsRegular.arrowCounterClockwise, size: 15),
                 visualDensity: VisualDensity.compact,
                 tooltip: f.kind == _FieldKind.long
                     ? 'Drop the override, back to the fetched text'

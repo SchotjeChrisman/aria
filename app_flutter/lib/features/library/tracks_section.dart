@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/formats.dart';
@@ -186,7 +187,7 @@ class TracksSection extends ConsumerWidget {
                       child: list.isEmpty
                           ? const EmptyState(
                               message: 'No tracks.',
-                              icon: Icons.music_note_outlined,
+                              icon: PhosphorIconsThin.musicNote,
                             )
                           : ListView.builder(
                               // Bypasses ariaPagePadding, so add the floating

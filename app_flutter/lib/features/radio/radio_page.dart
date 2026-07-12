@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import '../../widgets/empty_state.dart';
@@ -41,11 +42,11 @@ class _RadioPageState extends ConsumerState<RadioPage> {
             switch (stations) {
               AsyncError() => const EmptyState(
                 message: 'Radio unavailable.',
-                icon: Icons.radio,
+                icon: PhosphorIconsRegular.radio,
               ),
               AsyncData(:final value) when value.isEmpty => const EmptyState(
                 message: 'No stations.',
-                icon: Icons.radio,
+                icon: PhosphorIconsRegular.radio,
               ),
               AsyncData(:final value) => _StationGroups(stations: value),
               _ => const Center(child: CircularProgressIndicator()),
@@ -152,14 +153,14 @@ class _RadioCard extends ConsumerWidget {
               ),
             ),
             IconButton(
-              icon: Icon(Icons.play_arrow, color: c.fg),
+              icon: Icon(PhosphorIconsFill.play, color: c.fg),
               tooltip: 'Play station',
               onPressed: () =>
                   ref.read(radioPlaybackProvider.notifier).play(station),
             ),
             if (!station.builtin)
               IconButton(
-                icon: Icon(Icons.close, size: 18, color: c.fgDim),
+                icon: Icon(PhosphorIconsRegular.x, size: 18, color: c.fgDim),
                 tooltip: 'Remove station',
                 onPressed: () => _confirmDelete(context, ref),
               ),

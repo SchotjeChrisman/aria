@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
@@ -57,7 +58,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                 ),
                 IconButton(
                   tooltip: 'Shuffle all',
-                  icon: const Icon(Icons.shuffle),
+                  icon: const Icon(PhosphorIconsRegular.shuffle),
                   onPressed: () {
                     final tracks = _artistTracks();
                     if (tracks.isEmpty) return;
@@ -70,7 +71,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                 Builder(
                   builder: (bctx) => OutlinedButton.icon(
                     onPressed: () => _editMenu(bctx),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
                     label: const Text('Edit'),
                   ),
                 ),
@@ -79,7 +80,7 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
                 Builder(
                   builder: (bctx) => IconButton(
                     tooltip: 'More',
-                    icon: const Icon(Icons.more_horiz),
+                    icon: const Icon(PhosphorIconsRegular.dotsThree),
                     onPressed: () => _playMenu(bctx),
                   ),
                 ),
@@ -130,17 +131,17 @@ class _ArtistPageState extends ConsumerState<ArtistPage> {
       AriaMenuItem(
         'Edit metadata…',
         () => showArtistEditor(context, ref, widget.name),
-        icon: Icons.edit_outlined,
+        icon: PhosphorIconsRegular.pencilSimple,
       ),
       AriaMenuItem(
         'Tags…',
         () => showTagPicker(context, kind: 'artist', key: widget.name),
-        icon: Icons.sell_outlined,
+        icon: PhosphorIconsRegular.tag,
       ),
       AriaMenuItem(
         'Re-identify…',
         () => showArtistReidentify(context, ref, widget.name),
-        icon: Icons.sync,
+        icon: PhosphorIconsRegular.arrowsClockwise,
       ),
     ]);
   }

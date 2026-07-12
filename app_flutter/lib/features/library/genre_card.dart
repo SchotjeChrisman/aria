@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
 import 'library_providers.dart';
@@ -16,27 +17,59 @@ class GenreArt extends StatelessWidget {
   final String genre;
 
   static const _art = <String, (Color, Color, IconData)>{
-    'Blues': (Color(0xFF2C3E6B), Color(0xFF141B38), Icons.nightlife),
-    'Rock': (Color(0xFF6B2A2A), Color(0xFF2A1215), Icons.graphic_eq),
-    'Pop': (Color(0xFF7A2E6E), Color(0xFF32173F), Icons.auto_awesome),
-    'Classical': (Color(0xFF7A5A2E), Color(0xFF32250F), Icons.piano),
-    'Jazz': (Color(0xFF8A6A2F), Color(0xFF1E2E2E), Icons.mic_external_on),
-    'Soul/R&B': (Color(0xFF6E2E52), Color(0xFF2A1230), Icons.favorite),
-    'Country': (Color(0xFF7A452A), Color(0xFF2E2415), Icons.landscape),
-    'Folk': (Color(0xFF3E5A34), Color(0xFF16241A), Icons.forest),
-    'Metal': (Color(0xFF48505E), Color(0xFF16181E), Icons.bolt),
-    'Christian & Gospel': (Color(0xFF8A7038), Color(0xFF1E2440), Icons.church),
-    'Electronic': (Color(0xFF1F6E7A), Color(0xFF101C38), Icons.equalizer),
-    'Hip-Hop': (Color(0xFF9A5A20), Color(0xFF201612), Icons.headphones),
-    'Reggae': (Color(0xFF2E5A28), Color(0xFF6B5A16), Icons.wb_sunny),
-    'Latin': (Color(0xFF9A3A2E), Color(0xFF5A1430), Icons.celebration),
-    'World': (Color(0xFF2E6E5A), Color(0xFF4A3A20), Icons.public),
-    'New Age': (Color(0xFF5A4A8A), Color(0xFF1E3238), Icons.spa),
-    'Easy Listening': (Color(0xFF6E4A5A), Color(0xFF241820), Icons.radio),
+    'Blues': (Color(0xFF2C3E6B), Color(0xFF141B38), PhosphorIconsRegular.martini),
+    'Rock': (Color(0xFF6B2A2A), Color(0xFF2A1215), PhosphorIconsRegular.waveform),
+    'Pop': (Color(0xFF7A2E6E), Color(0xFF32173F), PhosphorIconsRegular.sparkle),
+    'Classical': (
+      Color(0xFF7A5A2E),
+      Color(0xFF32250F),
+      PhosphorIconsRegular.pianoKeys,
+    ),
+    'Jazz': (
+      Color(0xFF8A6A2F),
+      Color(0xFF1E2E2E),
+      PhosphorIconsRegular.microphoneStage,
+    ),
+    'Soul/R&B': (Color(0xFF6E2E52), Color(0xFF2A1230), PhosphorIconsRegular.heart),
+    'Country': (
+      Color(0xFF7A452A),
+      Color(0xFF2E2415),
+      PhosphorIconsRegular.mountains,
+    ),
+    'Folk': (Color(0xFF3E5A34), Color(0xFF16241A), PhosphorIconsRegular.tree),
+    'Metal': (Color(0xFF48505E), Color(0xFF16181E), PhosphorIconsRegular.lightning),
+    'Christian & Gospel': (
+      Color(0xFF8A7038),
+      Color(0xFF1E2440),
+      PhosphorIconsRegular.church,
+    ),
+    'Electronic': (
+      Color(0xFF1F6E7A),
+      Color(0xFF101C38),
+      PhosphorIconsRegular.equalizer,
+    ),
+    'Hip-Hop': (
+      Color(0xFF9A5A20),
+      Color(0xFF201612),
+      PhosphorIconsRegular.headphones,
+    ),
+    'Reggae': (Color(0xFF2E5A28), Color(0xFF6B5A16), PhosphorIconsRegular.sun),
+    'Latin': (Color(0xFF9A3A2E), Color(0xFF5A1430), PhosphorIconsRegular.confetti),
+    'World': (Color(0xFF2E6E5A), Color(0xFF4A3A20), PhosphorIconsRegular.globe),
+    'New Age': (
+      Color(0xFF5A4A8A),
+      Color(0xFF1E3238),
+      PhosphorIconsRegular.flowerLotus,
+    ),
+    'Easy Listening': (
+      Color(0xFF6E4A5A),
+      Color(0xFF241820),
+      PhosphorIconsRegular.radio,
+    ),
     'Stage & Screen': (
       Color(0xFF6E1E2E),
       Color(0xFF140A10),
-      Icons.theater_comedy,
+      PhosphorIconsRegular.maskHappy,
     ),
   };
 
@@ -50,7 +83,7 @@ class GenreArt extends StatelessWidget {
           return (
             HSLColor.fromAHSL(1, hue, 0.42, 0.30).toColor(),
             HSLColor.fromAHSL(1, hue, 0.42, 0.14).toColor(),
-            Icons.music_note,
+            PhosphorIconsRegular.musicNote,
           );
         }();
 
