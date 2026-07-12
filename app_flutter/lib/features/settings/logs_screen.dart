@@ -90,6 +90,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
                   );
                 }
                 return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: transportFloatInset),
                   itemCount: entries.length,
                   itemBuilder: (context, i) {
                     final e = entries[i];

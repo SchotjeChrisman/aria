@@ -189,8 +189,10 @@ class TracksSection extends ConsumerWidget {
                               icon: Icons.music_note_outlined,
                             )
                           : ListView.builder(
+                              // Bypasses ariaPagePadding, so add the floating
+                              // transport clearance explicitly.
                               padding: const EdgeInsets.only(
-                                bottom: AriaSpace.s6,
+                                bottom: AriaSpace.s6 + transportFloatInset,
                               ),
                               itemCount: list.length,
                               itemExtent: 44,

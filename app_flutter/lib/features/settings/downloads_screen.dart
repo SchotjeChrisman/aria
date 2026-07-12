@@ -42,7 +42,8 @@ class DownloadsScreen extends ConsumerWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(AriaSpace.s4),
+        padding: const EdgeInsets.fromLTRB(AriaSpace.s4, AriaSpace.s4,
+            AriaSpace.s4, AriaSpace.s4 + transportFloatInset),
         children: [
           Text(
             '${dl.index.length} track${dl.index.length == 1 ? '' : 's'} · '

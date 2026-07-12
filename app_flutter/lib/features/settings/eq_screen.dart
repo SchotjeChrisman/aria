@@ -75,6 +75,7 @@ class _EqScreenState extends ConsumerState<EqScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Headphone EQ')),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: transportFloatInset),
         children: [
           SwitchListTile(
             title: const Text('EQ enabled'),

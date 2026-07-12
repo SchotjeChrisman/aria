@@ -37,6 +37,7 @@ class LibraryHubScreen extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: ListView(
+          padding: const EdgeInsets.only(bottom: transportFloatInset),
           children: [
             Padding(
               padding: const EdgeInsets.all(AriaSpace.s6),

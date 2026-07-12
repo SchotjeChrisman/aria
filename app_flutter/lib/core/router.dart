@@ -176,11 +176,13 @@ class AdaptiveShell extends StatelessWidget {
               ),
           ],
         ),
-        body: Column(
+        // Bars float over the content (frosted, shadowed) rather than docking
+        // in the column, so content scrolls under them. Scroll bodies reserve
+        // `transportFloatInset` at the bottom (via ariaPagePadding) to clear it.
+        body: Stack(
           children: [
-            Expanded(child: shell),
-            const SelectionBar(),
-            const now_playing.TransportBar(),
+            Positioned.fill(child: shell),
+            const _FloatingBars(),
           ],
         ),
       );
@@ -193,6 +195,10 @@ class AdaptiveShell extends StatelessWidget {
     final rail = NavigationRail(
       selectedIndex: selected,
       onDestinationSelected: select,
+      // Flat on the canvas — paints the page colour so it's set off only by
+      // the divider at its edge. (NavigationRail asserts elevation > 0, so
+      // flatness comes from the background colour, not elevation.)
+      backgroundColor: c.bg,
       extended: extended,
       labelType: extended
           ? NavigationRailLabelType.none
@@ -233,15 +239,18 @@ class AdaptiveShell extends StatelessWidget {
               ),
             ),
           ),
-          VerticalDivider(width: 1, color: c.line),
+          // Sole rail/content separator — lineStrong (line is invisible on white).
+          VerticalDivider(width: 1, color: c.lineStrong),
           Expanded(
-            child: Column(
+            // Bars float over the content area (aligned to content, not the
+            // whole window, so they clear the rail). Content scrolls under them.
+            child: Stack(
               children: [
                 // Provide the centering inset from the content-area width; the
                 // scroll views fold it into their own horizontal padding so the
                 // scrollable stays full-width (wheel works over the margins)
                 // while content is capped + centered. Cap inside the scroll.
-                Expanded(
+                Positioned.fill(
                   child: LayoutBuilder(
                     builder: (context, box) => ContentInset(
                       inset: ((box.maxWidth - AriaBreakpoint.maxContentWidth) /
@@ -251,11 +260,34 @@ class AdaptiveShell extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SelectionBar(),
-                const now_playing.TransportBar(),
+                const _FloatingBars(),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The selection + transport bars, bottom-anchored and floating over the
+/// content. [SelectionBar] collapses to nothing when no selection is active;
+/// [TransportBar] is always present. `mainAxisSize.min` keeps the stack pinned
+/// to the bottom edge without stealing hit-tests from the content above.
+class _FloatingBars extends StatelessWidget {
+  const _FloatingBars();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SelectionBar(),
+          now_playing.TransportBar(),
         ],
       ),
     );

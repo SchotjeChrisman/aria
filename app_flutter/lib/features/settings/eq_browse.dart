@@ -100,10 +100,13 @@ class _SearchListState extends State<_SearchList> {
             ),
           ),
           Expanded(
-            child: ListView(children: [
-              if (showPinned) ...[...widget.pinned!(), const Divider()],
-              ...capped,
-            ]),
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: transportFloatInset),
+              children: [
+                if (showPinned) ...[...widget.pinned!(), const Divider()],
+                ...capped,
+              ],
+            ),
           ),
         ],
       ),

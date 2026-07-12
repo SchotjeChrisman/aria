@@ -144,7 +144,16 @@ class ContentInset extends InheritedWidget {
   bool updateShouldNotify(ContentInset old) => old.inset != inset;
 }
 
-/// Page padding that also centers content within [AriaBreakpoint.maxContentWidth].
+/// Vertical footprint the floating transport pill reserves at the bottom of
+/// every scroll view: pill height 84 + outer margin (s2) + the SafeArea's
+/// minimum bottom (s2) = 100 on an inset-free (desktop) device. On gesture-nav
+/// devices ariaPagePadding adds MediaQuery's bottom inset on top of this.
+/// Constant sites (that can't reach a BuildContext) use this desktop-correct
+/// value directly.
+const double transportFloatInset = 100;
+
+/// Page padding that also centers content within [AriaBreakpoint.maxContentWidth]
+/// and reserves space for the floating transport bar.
 /// Drop-in for the scroll-root paddings: [EdgeInsets.all(s6)] becomes
 /// `ariaPagePadding(context)`; `fromLTRB(s6, 0, s6, s6)` becomes
 /// `ariaPagePadding(context, top: 0)`.
@@ -155,7 +164,11 @@ EdgeInsets ariaPagePadding(
   double bottom = AriaSpace.s6,
 }) {
   final h = horizontal + ContentInset.of(context);
-  return EdgeInsets.only(left: h, right: h, top: top, bottom: bottom);
+  // Always clear the floating transport: base footprint + the device's bottom
+  // safe-area (gesture nav), which the pill's own SafeArea also consumes.
+  final barInset = transportFloatInset + MediaQuery.paddingOf(context).bottom;
+  return EdgeInsets.only(
+      left: h, right: h, top: top, bottom: bottom + barInset);
 }
 
 /// Spacing scale — 4px base, same steps as the legacy --sp-* vars.
@@ -305,7 +318,9 @@ abstract final class AriaTheme {
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: c.bgRaised,
+        // Flat on the canvas — the rail paints the page colour and is set off
+        // only by the divider at its edge (router.dart). No M3 surface tint.
+        backgroundColor: c.bg,
         // selected = state → accent-tinted pill, accent icon/label
         indicatorColor: c.accent.withValues(alpha: 0.12),
         selectedIconTheme: IconThemeData(color: c.accent),

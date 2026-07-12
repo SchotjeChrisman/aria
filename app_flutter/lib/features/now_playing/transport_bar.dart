@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:aria_api/aria_api.dart';
 import 'package:aria_player/aria_player.dart';
 import 'package:flutter/material.dart';
@@ -118,22 +120,40 @@ class _TransportBarState extends ConsumerState<TransportBar> {
       onPressed: () => context.push('/queue'),
     );
 
-    final bar = Container(
-      padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s3),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        // lineStrong: sole shadowless separator from the white content above.
-        // (Phase 3 replaces this whole surface with a floating shadowed pill.)
-        border: Border(top: BorderSide(color: c.lineStrong)),
-      ),
-      // Bottom safe-area so the bar clears Android gesture handles, with a
-      // little breathing room even without a system inset.
-      child: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.only(bottom: AriaSpace.s2),
-        child: SizedBox(
-          height: 84,
-          child: Builder(
+    // Floating frosted pill: inset from the window edges, soft shadow on the
+    // outer (unclipped) box, translucent fill + backdrop blur inside the clip
+    // so content scrolling under it frosts through.
+    final bar = Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AriaSpace.s3, 0, AriaSpace.s3, AriaSpace.s2),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AriaRadius.lg),
+          boxShadow: surfaceShadow,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AriaRadius.lg),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s3),
+              decoration: BoxDecoration(
+                color: c.bgRaised.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(AriaRadius.lg),
+                border: Border.all(color: c.line),
+              ),
+              // opaque: the pill floats over content, so its whole body must
+              // absorb taps/scrolls rather than leak them to the list behind.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // Bottom safe-area so the bar clears Android gesture handles,
+                // with a little breathing room even without a system inset.
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.only(bottom: AriaSpace.s2),
+                  child: SizedBox(
+                    height: 84,
+                    child: Builder(
             builder: (context) {
               final bp = AriaBreakpoint.of(context);
 
@@ -263,7 +283,12 @@ class _TransportBarState extends ConsumerState<TransportBar> {
           ),
         ),
       ),
-    );
+            ), // GestureDetector (opaque hit area)
+            ), // Container (translucent fill)
+          ), // BackdropFilter
+        ), // ClipRRect
+      ), // DecoratedBox (shadow)
+    ); // Padding (float margin)
 
     if (!unavailable) return bar;
     // No-libmpv degradation must be visible: the app runs, playback doesn't.

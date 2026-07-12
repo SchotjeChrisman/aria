@@ -19,7 +19,8 @@ class SettingsPage extends ConsumerWidget {
             // Readable measure on tablet/desktop; no-op on mobile.
             constraints: const BoxConstraints(maxWidth: 720),
             child: ListView(
-              padding: const EdgeInsets.all(AriaSpace.s6),
+              padding: const EdgeInsets.fromLTRB(AriaSpace.s6, AriaSpace.s6,
+                  AriaSpace.s6, AriaSpace.s6 + transportFloatInset),
               children: [
                 Text(
                   'Settings',
