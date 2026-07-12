@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/phosphor_icons.dart';
+import '../core/toast.dart';
 
 import '../core/downloads.dart';
 import '../core/player_providers.dart';
@@ -42,17 +43,13 @@ Future<void> showAddToPlaylistMenu(
 
         Future<void> addAll(String playlistId, String name) async {
           Navigator.of(context).pop();
-          final messenger = ScaffoldMessenger.of(context);
+          final toast = Toaster.of(context);
           await ref.read(playlistsProvider.notifier).addTracks(playlistId, [
             for (final t in tracks) t.id,
           ]);
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                'Added ${tracks.length} '
-                'track${tracks.length == 1 ? '' : 's'} to "$name"',
-              ),
-            ),
+          toast.show(
+            'Added ${tracks.length} '
+            'track${tracks.length == 1 ? '' : 's'} to "$name"',
           );
         }
 
@@ -86,14 +83,12 @@ Future<void> showAddToPlaylistMenu(
                     if (context.mounted) await addAll(pl.id, pl.name);
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            e is AriaApiException
-                                ? e.message
-                                : 'Could not create playlist.',
-                          ),
-                        ),
+                      showToast(
+                        context,
+                        e is AriaApiException
+                            ? e.message
+                            : 'Could not create playlist.',
+                        error: true,
                       );
                     }
                   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
+import '../../core/toast.dart';
 import '../../widgets/empty_state.dart';
 import 'radio_providers.dart';
 
@@ -192,9 +193,7 @@ class _RadioCard extends ConsumerWidget {
       await ref.read(radioActionsProvider).delete(station.id);
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not remove station.')),
-        );
+        showToast(context, 'Could not remove station.', error: true);
       }
     }
   }
@@ -238,9 +237,7 @@ class _StationFormState extends ConsumerState<_StationForm> {
     } catch (_) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not add station.')));
+        showToast(context, 'Could not add station.', error: true);
       }
     }
   }

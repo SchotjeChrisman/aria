@@ -101,17 +101,19 @@ void main() {
       expect(scaffold.drawer, isA<NavigationDrawer>());
     });
 
-    testWidgets('600: compact NavigationRail (tablet)', (tester) async {
+    testWidgets('600: flat sidebar, no AppBar (tablet)', (tester) async {
       await pumpShell(tester, 600);
       expect(find.byType(AppBar), findsNothing);
-      final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-      expect(rail.extended, isFalse);
+      // Custom flat sidebar (not NavigationRail): brand wordmark + labels.
+      expect(find.byType(NavigationRail), findsNothing);
+      expect(find.text('ARIA'), findsOneWidget);
     });
 
-    testWidgets('1240: extended NavigationRail (desktop)', (tester) async {
+    testWidgets('1240: flat sidebar, no AppBar (desktop)', (tester) async {
       await pumpShell(tester, 1240);
-      final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-      expect(rail.extended, isTrue);
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.byType(NavigationRail), findsNothing);
+      expect(find.text('ARIA'), findsOneWidget);
     });
   });
 

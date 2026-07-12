@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
+import '../../core/connection.dart';
 import '../../core/library_providers.dart';
 import '../../core/theme.dart';
+import '../../widgets/art_image.dart';
 import '../../widgets/artist_avatar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_cards.dart';
@@ -232,6 +234,7 @@ class _StatStrip extends StatelessWidget {
             num,
             style: TextStyle(
               fontSize: 18,
+              fontWeight: FontWeight.bold,
               color: c.fg,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -244,7 +247,8 @@ class _StatStrip extends StatelessWidget {
           ),
         ],
       );
-      final glyph = Icon(icon, size: 24, color: c.accent);
+      // Greyscale like the text (no accent); sized to the two-line text block.
+      final iconColor = c.fg;
       return Expanded(
         child: InkWell(
           borderRadius: BorderRadius.circular(AriaRadius.md),
@@ -256,23 +260,33 @@ class _StatStrip extends StatelessWidget {
               horizontal: AriaSpace.s3,
               vertical: AriaSpace.s4,
             ),
-            decoration: ariaSurface(c),
+            // Flat on the canvas: border only, no lift shadow.
+            decoration: ariaSurface(c).copyWith(boxShadow: const []),
             // Icon beside the text when the tile is wide enough, stacked above
-            // it when it isn't.
+            // it when it isn't. Wide: the icon stretches to the text height (as
+            // tall as the two lines) via a square FittedBox.
             child: LayoutBuilder(
               builder: (context, box) => box.maxWidth >= 150
-                  ? Row(
-                      children: [
-                        glyph,
-                        const SizedBox(width: AriaSpace.s3),
-                        Flexible(child: text),
-                      ],
+                  ? IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 1,
+                            child: FittedBox(
+                              child: Icon(icon, color: iconColor),
+                            ),
+                          ),
+                          const SizedBox(width: AriaSpace.s3),
+                          Flexible(child: text),
+                        ],
+                      ),
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        glyph,
+                        Icon(icon, size: 34, color: iconColor),
                         const SizedBox(height: AriaSpace.s2),
                         text,
                       ],
@@ -285,13 +299,13 @@ class _StatStrip extends StatelessWidget {
 
     return Row(
       children: [
-        tile('${composers.length}', 'Composers', PhosphorIconsRegular.notePencil,
+        tile('${composers.length}', 'Composers', PhosphorIconsThin.notePencil,
             '/library/composers'),
         const SizedBox(width: AriaSpace.s2),
-        tile('${performers.length}', 'Performers', PhosphorIconsRegular.users,
+        tile('${performers.length}', 'Performers', PhosphorIconsThin.users,
             '/library/artists'),
         const SizedBox(width: AriaSpace.s2),
-        tile('$albumCount', 'Releases', PhosphorIconsRegular.vinylRecord,
+        tile('$albumCount', 'Releases', PhosphorIconsThin.vinylRecord,
             '/library/albums'),
         const SizedBox(width: AriaSpace.s2),
         tile('${compositions.length}', 'Compositions', PhosphorIconsThin.musicNote,
@@ -369,7 +383,7 @@ class _MixBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
-    final (icon, tint) = looks;
+    final (icon, _) = looks;
     return InkWell(
       borderRadius: BorderRadius.circular(AriaRadius.md),
       onTap: () => context.push('/mix/${mix.id}'),
@@ -377,11 +391,8 @@ class _MixBanner extends StatelessWidget {
         padding: const EdgeInsets.all(AriaSpace.s4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AriaRadius.md),
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [c.accent, tint],
-          ),
+          // Flat accent — no gradient (the per-mix tints fought for attention).
+          color: c.accent,
         ),
         // Content sits at the bottom of the taller 3:2 card.
         child: Column(
@@ -683,10 +694,14 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
       relSecs[t.albumId] = (relSecs[t.albumId] ?? 0) + secs;
     });
 
+    final api = ref.watch(apiClientProvider);
+    final people = ref.watch(peopleProvider).value ?? const <String, String>{};
+
     Widget rankColumn(
       String title,
       List<MapEntry<String, double>> rows,
       String Function(String key) label,
+      Widget? Function(String key)? leadingFor,
     ) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -698,7 +713,7 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
         else
           for (final (i, e) in rows.indexed)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: AriaSpace.s1),
+              padding: const EdgeInsets.symmetric(vertical: AriaSpace.s2),
               child: Row(
                 children: [
                   SizedBox(
@@ -711,6 +726,10 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
                           ?.copyWith(color: c.fgDim),
                     ),
                   ),
+                  if (leadingFor != null) ...[
+                    SizedBox(width: 28, height: 28, child: leadingFor(e.key)),
+                    const SizedBox(width: AriaSpace.s2),
+                  ],
                   Expanded(
                     child: Text(
                       label(e.key),
@@ -732,12 +751,26 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
       ],
     );
 
-    final genres = rankColumn('Genres', _top5(genreSecs), (k) => k);
-    final performers = rankColumn('Performers', _top5(perfSecs), (k) => k);
+    final genres = rankColumn('Genres', _top5(genreSecs), (k) => k, null);
+    final performers = rankColumn(
+      'Performers',
+      _top5(perfSecs),
+      (k) => k,
+      (k) => ArtistAvatar(name: k, imageUrl: people[k], size: 28),
+    );
     final releases = rankColumn(
       'Releases',
       _top5(relSecs),
       (k) => albumById[k]?.title ?? '—',
+      (k) {
+        final a = albumById[k];
+        return ArtImage(
+          url: a != null && a.hasArt ? api.artUrl(a.id) : null,
+          fallbackText: a?.title,
+          size: 28,
+          borderRadius: AriaRadius.sm,
+        );
+      },
     );
 
     return Padding(
@@ -749,6 +782,11 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
             alignment: Alignment.centerLeft,
             child: DropdownButton<String>(
               value: _period,
+              icon: const Padding(
+                padding: EdgeInsets.only(left: AriaSpace.s1),
+                child: Icon(PhosphorIconsRegular.caretDown, size: 14),
+              ),
+              borderRadius: BorderRadius.circular(AriaRadius.md),
               items: [
                 for (final (v, l) in _periods)
                   DropdownMenuItem(value: v, child: Text(l)),
@@ -914,7 +952,7 @@ class _WeeklyTimeBox extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(PhosphorIconsRegular.clock, size: 64, color: c.accent),
+        Icon(PhosphorIconsThin.clock, size: 64, color: c.accent),
         const SizedBox(height: AriaSpace.s4),
         Text(
           _fmtListen(total),

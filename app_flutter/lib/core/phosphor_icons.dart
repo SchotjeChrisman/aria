@@ -15,6 +15,7 @@ abstract final class PhosphorIconsThin {
   static const IconData calendarBlank = IconData(0xe10a, fontFamily: 'PhosphorThin');
   static const IconData calendarDots = IconData(0xe7b4, fontFamily: 'PhosphorThin');
   static const IconData caretDown = IconData(0xe136, fontFamily: 'PhosphorThin');
+  static const IconData caretLeft = IconData(0xe138, fontFamily: 'PhosphorThin');
   static const IconData caretRight = IconData(0xe13a, fontFamily: 'PhosphorThin');
   static const IconData chartBar = IconData(0xe150, fontFamily: 'PhosphorThin');
   static const IconData chartDonut = IconData(0xeaa6, fontFamily: 'PhosphorThin');
@@ -98,6 +99,7 @@ abstract final class PhosphorIconsRegular {
   static const IconData calendarBlank = IconData(0xe10a, fontFamily: 'PhosphorRegular');
   static const IconData calendarDots = IconData(0xe7b4, fontFamily: 'PhosphorRegular');
   static const IconData caretDown = IconData(0xe136, fontFamily: 'PhosphorRegular');
+  static const IconData caretLeft = IconData(0xe138, fontFamily: 'PhosphorRegular');
   static const IconData caretRight = IconData(0xe13a, fontFamily: 'PhosphorRegular');
   static const IconData chartBar = IconData(0xe150, fontFamily: 'PhosphorRegular');
   static const IconData chartDonut = IconData(0xeaa6, fontFamily: 'PhosphorRegular');
@@ -181,6 +183,7 @@ abstract final class PhosphorIconsFill {
   static const IconData calendarBlank = IconData(0xe10a, fontFamily: 'PhosphorFill');
   static const IconData calendarDots = IconData(0xe7b4, fontFamily: 'PhosphorFill');
   static const IconData caretDown = IconData(0xe136, fontFamily: 'PhosphorFill');
+  static const IconData caretLeft = IconData(0xe138, fontFamily: 'PhosphorFill');
   static const IconData caretRight = IconData(0xe13a, fontFamily: 'PhosphorFill');
   static const IconData chartBar = IconData(0xe150, fontFamily: 'PhosphorFill');
   static const IconData chartDonut = IconData(0xeaa6, fontFamily: 'PhosphorFill');

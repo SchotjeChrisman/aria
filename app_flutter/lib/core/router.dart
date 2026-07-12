@@ -179,10 +179,17 @@ class AdaptiveShell extends StatelessWidget {
         // Bars float over the content (frosted, shadowed) rather than docking
         // in the column, so content scrolls under them. Scroll bodies reserve
         // `transportFloatInset` at the bottom (via ariaPagePadding) to clear it.
-        body: Stack(
+        body: Column(
           children: [
-            Positioned.fill(child: shell),
-            const _FloatingBars(),
+            const now_playing.PlaybackUnavailableBanner(),
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: shell),
+                  const _FloatingBars(),
+                ],
+              ),
+            ),
           ],
         ),
       );
@@ -190,36 +197,15 @@ class AdaptiveShell extends StatelessWidget {
 
     // Sidebar morphs per band: compact icon rail on tablet, expanding to
     // icons+labels on desktop, with the extended width scaling with the
-    // window.
+    // window. Custom (not NavigationRail) so the whole item highlights when
+    // active — no Material icon-background pill.
     final extended = band == AriaBreakpoint.desktop;
-    final rail = NavigationRail(
+    final sidebar = _Sidebar(
+      destinations: visible,
       selectedIndex: selected,
-      onDestinationSelected: select,
-      // Flat on the canvas — paints the page colour so it's set off only by
-      // the divider at its edge. (NavigationRail asserts elevation > 0, so
-      // flatness comes from the background colour, not elevation.)
-      backgroundColor: c.bg,
+      onSelect: select,
       extended: extended,
-      labelType: extended
-          ? NavigationRailLabelType.none
-          : NavigationRailLabelType.all,
-      minExtendedWidth: (width * 0.18).clamp(180.0, 240.0),
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AriaSpace.s6),
-        // Legacy .brand: letterspaced uppercase wordmark.
-        child: Text(
-          'ARIA',
-          style: TextStyle(fontSize: 16, letterSpacing: 4.8, color: c.fg),
-        ),
-      ),
-      destinations: [
-        for (final d in visible)
-          NavigationRailDestination(
-            icon: Icon(d.icon),
-            selectedIcon: Icon(d.selectedIcon ?? d.icon),
-            label: Text(d.label),
-          ),
-      ],
+      width: extended ? (width * 0.16).clamp(150.0, 200.0) : 68,
     );
 
     // Rail spans the full height; the bottom bars live in the content column
@@ -228,43 +214,162 @@ class AdaptiveShell extends StatelessWidget {
     // scrolling content above them is centered and capped.
     return Scaffold(
       body: Row(
+        // Stretch so the sidebar scroll view fills the height and its items
+        // top-align (and scroll when a short window can't fit them all).
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Rail doesn't scroll natively; with the library split into
-          // five entries it can overflow short windows.
-          LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(child: rail),
-              ),
-            ),
-          ),
-          // Sole rail/content separator — lineStrong (line is invisible on white).
-          VerticalDivider(width: 1, color: c.lineStrong),
+          // five entries it can overflow short windows. Flat sidebar (no
+          // full-height fill), so it just scrolls — no stretch-to-viewport.
+          SingleChildScrollView(child: sidebar),
+          // Sole rail/content separator — a soft hairline (lineStrong reads too
+          // heavy for a flat sidebar; plain line is invisible on white).
+          const VerticalDivider(width: 1, color: Color(0xFFE0E0E4)),
           Expanded(
-            // Bars float over the content area (aligned to content, not the
-            // whole window, so they clear the rail). Content scrolls under them.
-            child: Stack(
+            // Top alert strip, then the content. Bars float over the content
+            // area (aligned to content, not the whole window, so they clear the
+            // rail). Content scrolls under them.
+            child: Column(
               children: [
-                // Provide the centering inset from the content-area width; the
-                // scroll views fold it into their own horizontal padding so the
-                // scrollable stays full-width (wheel works over the margins)
-                // while content is capped + centered. Cap inside the scroll.
-                Positioned.fill(
-                  child: LayoutBuilder(
-                    builder: (context, box) => ContentInset(
-                      inset: ((box.maxWidth - AriaBreakpoint.maxContentWidth) /
-                              2)
-                          .clamp(0.0, double.infinity),
-                      child: shell,
-                    ),
+                const now_playing.PlaybackUnavailableBanner(),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      // Provide the centering inset from the content-area width;
+                      // the scroll views fold it into their own horizontal
+                      // padding so the scrollable stays full-width (wheel works
+                      // over the margins) while content is capped + centered.
+                      Positioned.fill(
+                        child: LayoutBuilder(
+                          builder: (context, box) => ContentInset(
+                            inset:
+                                ((box.maxWidth -
+                                            AriaBreakpoint.maxContentWidth) /
+                                        2)
+                                    .clamp(0.0, double.infinity),
+                            child: shell,
+                          ),
+                        ),
+                      ),
+                      const _FloatingBars(),
+                    ],
                   ),
                 ),
-                const _FloatingBars(),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Flat sidebar: brand wordmark + a column of items. Each item highlights as a
+/// whole (rounded accent-tint fill) when active — no NavigationRail icon pill.
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({
+    required this.destinations,
+    required this.selectedIndex,
+    required this.onSelect,
+    required this.extended,
+    required this.width,
+  });
+
+  final List<AppDestination> destinations;
+  final int? selectedIndex;
+  final ValueChanged<int> onSelect;
+  final bool extended;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AriaColors.of(context);
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AriaSpace.s4),
+            // Legacy .brand: letterspaced uppercase wordmark.
+            child: Text(
+              'ARIA',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, letterSpacing: 4, color: c.fg),
+            ),
+          ),
+          for (final (i, d) in destinations.indexed)
+            _SidebarItem(
+              dest: d,
+              selected: i == selectedIndex,
+              extended: extended,
+              onTap: () => onSelect(i),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  const _SidebarItem({
+    required this.dest,
+    required this.selected,
+    required this.extended,
+    required this.onTap,
+  });
+
+  final AppDestination dest;
+  final bool selected;
+  final bool extended;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AriaColors.of(context);
+    final fg = selected ? c.accent : c.fgDim;
+    final icon = Icon(
+      selected ? (dest.selectedIcon ?? dest.icon) : dest.icon,
+      color: fg,
+      size: 22,
+    );
+    final label = Text(
+      dest.label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: fg),
+    );
+    final content = extended
+        ? Row(
+            children: [
+              icon,
+              const SizedBox(width: AriaSpace.s3),
+              Expanded(child: label),
+            ],
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [icon, const SizedBox(height: AriaSpace.s1), label],
+          );
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AriaSpace.s2,
+      ),
+      child: Material(
+        // Active item is marked by colour only (accent icon + label) — no fill.
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AriaRadius.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AriaRadius.md),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: extended ? AriaSpace.s3 : AriaSpace.s1,
+              vertical: AriaSpace.s2,
+            ),
+            child: content,
+          ),
+        ),
       ),
     );
   }

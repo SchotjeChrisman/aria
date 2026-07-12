@@ -45,29 +45,23 @@ class NowPlayingScreen extends ConsumerWidget {
           ? const EmptyState(message: 'Nothing playing.')
           : SafeArea(
               child: LayoutBuilder(
-                builder: (context, box) => Column(
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(AriaSpace.s5),
-                          child: _Meta(
-                            track: track,
-                            artEdge: nowPlayingArtEdge(box.biggest),
-                          ),
+                // Whole block (art + meta + controls) is one unit, vertically
+                // centred on the canvas. Scrolls only when it can't fit.
+                builder: (context, box) => Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AriaSpace.s5),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _Meta(
+                          track: track,
+                          artEdge: nowPlayingArtEdge(box.biggest),
                         ),
-                      ),
+                        const SizedBox(height: AriaSpace.s8),
+                        const _Controls(),
+                      ],
                     ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        AriaSpace.s5,
-                        0,
-                        AriaSpace.s5,
-                        AriaSpace.s5,
-                      ),
-                      child: _Controls(),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -218,7 +212,7 @@ class _Controls extends ConsumerWidget {
           // Position/duration live inside SeekBar so time-pos ticks don't
           // rebuild the controls block.
           const SeekBar(thumbRadius: 9),
-          const SizedBox(height: AriaSpace.s2),
+          const SizedBox(height: AriaSpace.s4),
           Row(
             // Spread across the (480-capped) width: on phones the gaps grow
             // with the screen, so neighbouring targets are hard to mis-hit.
@@ -238,10 +232,12 @@ class _Controls extends ConsumerWidget {
                 tooltip: 'Previous',
                 onPressed: queue.prev,
               ),
-              IconButton.filled(
+              // Flat, full-strength glyph — prominence comes from size, not a
+              // disc; brief reserves fills/accent for states.
+              IconButton(
                 icon: Icon(playing ? PhosphorIconsFill.pause : PhosphorIconsFill.play),
                 iconSize: 44,
-                padding: const EdgeInsets.all(AriaSpace.s4),
+                color: c.fg,
                 tooltip: 'Play/Pause',
                 onPressed: queue.togglePlay,
               ),
@@ -265,6 +261,7 @@ class _Controls extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: AriaSpace.s5),
           Row(
             // Lyrics + queue, moved off the app bar to sit under the transport
             // where a thumb reaches on mobile. Same push targets as before.
@@ -286,6 +283,7 @@ class _Controls extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: AriaSpace.s5),
         ],
       ),
     );

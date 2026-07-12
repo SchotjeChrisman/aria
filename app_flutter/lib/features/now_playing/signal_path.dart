@@ -44,13 +44,13 @@ class SignalPath extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final path = _resolve(ref);
+    final path = _resolvePath(ref);
     if (path == null) return const SizedBox.shrink();
     final c = AriaColors.of(context);
 
     return InkWell(
       borderRadius: BorderRadius.circular(AriaRadius.sm),
-      onTap: () => _showDetails(context, path),
+      onTap: () => _showPathDetails(context, path),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Row(
@@ -78,7 +78,42 @@ class SignalPath extends ConsumerWidget {
     );
   }
 
-  _Path? _resolve(WidgetRef ref) {
+}
+
+/// Just the coloured quality dot, tappable to the same signal-path sheet.
+/// Lives beside the transport controls; the full chain is the sheet.
+class SignalPathDot extends ConsumerWidget {
+  const SignalPathDot({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final path = _resolvePath(ref);
+    if (path == null) return const SizedBox.shrink();
+    return InkWell(
+      borderRadius: BorderRadius.circular(AriaRadius.pill),
+      onTap: () => _showPathDetails(context, path),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Tooltip(
+          message: path.tier.label,
+          // Small solid dot inside a translucent halo of the same tier colour.
+          child: Container(
+            width: 18,
+            height: 18,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: path.tier.color.withValues(alpha: 0.2),
+            ),
+            child: _Dot(color: path.tier.color, size: 7),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+_Path? _resolvePath(WidgetRef ref) {
     final track = ref.watch(currentTrackProvider);
     final radio = track == null ? ref.watch(radioPlaybackProvider) : null;
     if (track == null && radio == null) return null;
@@ -193,7 +228,7 @@ class SignalPath extends ConsumerWidget {
     return (stages: stages, tier: worst, chain: chain, note: note);
   }
 
-  void _showDetails(BuildContext context, _Path path) {
+void _showPathDetails(BuildContext context, _Path path) {
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
@@ -255,7 +290,6 @@ class SignalPath extends ConsumerWidget {
         );
       },
     );
-  }
 }
 
 class _Dot extends StatelessWidget {

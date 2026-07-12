@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'log.dart';
 import 'theme.dart';
+import 'toast.dart';
 
 const kDefaultServerUrl = 'http://localhost:3000';
 const _prefsKeyServerUrl = 'aria.serverUrl';
@@ -98,9 +99,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
       if (!mounted) return;
       await ref.read(serverUrlProvider.notifier).set(url);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connected — ${status.tracks} tracks')),
-      );
+      showToast(context, 'Connected — ${status.tracks} tracks');
       // Router redirect leaves /setup once serverUrl is set.
     } catch (_) {
       if (mounted) {

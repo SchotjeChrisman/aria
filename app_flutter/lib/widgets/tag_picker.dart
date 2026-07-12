@@ -2,6 +2,7 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/phosphor_icons.dart';
+import '../core/toast.dart';
 
 import '../core/tag_tree.dart';
 import '../core/tags_providers.dart';
@@ -56,14 +57,12 @@ Future<void> showTagPicker(
                   ]);
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          e is AriaApiException
-                              ? e.message
-                              : 'Could not create tag.',
-                        ),
-                      ),
+                    showToast(
+                      context,
+                      e is AriaApiException
+                          ? e.message
+                          : 'Could not create tag.',
+                      error: true,
                     );
                   }
                 }
@@ -117,14 +116,12 @@ Future<void> showBulkTagMenu(
                   if (context.mounted) Navigator.of(context).pop();
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          e is AriaApiException
-                              ? e.message
-                              : 'Could not create tag.',
-                        ),
-                      ),
+                    showToast(
+                      context,
+                      e is AriaApiException
+                          ? e.message
+                          : 'Could not create tag.',
+                      error: true,
                     );
                   }
                 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection.dart';
+import '../../core/toast.dart';
 import '../../core/theme.dart';
 import '../profiles/profiles_section.dart';
 import 'settings_providers.dart';
@@ -154,15 +155,11 @@ class _ListenBrainzFieldState extends ConsumerState<_ListenBrainzField> {
           .saveSettings(listenbrainzToken: _ctrl.text.trim());
       ref.invalidate(serverSettingsProvider);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Saved.')));
+        showToast(context, 'Saved.');
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save settings.')),
-        );
+        showToast(context, 'Could not save settings.', error: true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

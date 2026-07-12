@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
+import '../../core/toast.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import 'eq_browse.dart';
@@ -243,13 +244,11 @@ class _CustomEqDialogState extends State<_CustomEqDialog> {
               b.gainDb.abs() > 30,
         );
     if (invalid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Invalid EQ: frequency 1–96000 Hz, Q ≥ 0.1, '
-            'band gain ±30 dB, preamp ±24 dB.',
-          ),
-        ),
+      showToast(
+        context,
+        'Invalid EQ: frequency 1–96000 Hz, Q ≥ 0.1, '
+        'band gain ±30 dB, preamp ±24 dB.',
+        error: true,
       );
       return;
     }

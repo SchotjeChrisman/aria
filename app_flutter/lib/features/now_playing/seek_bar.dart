@@ -57,9 +57,11 @@ class _SeekBarState extends ConsumerState<SeekBar> {
   Widget _slider({required double pos, required double dur}) {
     final enabled = dur > 0;
     final max = enabled ? dur : 1.0;
+    // Soft grey groove; the filled portion stays accent.
     return SliderTheme(
       data: SliderThemeData(
         trackHeight: 3,
+        inactiveTrackColor: AriaColors.of(context).lineStrong,
         thumbShape: RoundSliderThumbShape(
           enabledThumbRadius: widget.thumbRadius,
         ),

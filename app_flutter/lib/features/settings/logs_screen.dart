@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/log.dart';
+import '../../core/toast.dart';
 import '../../core/log_sync.dart';
 import '../../core/theme.dart';
 
@@ -26,9 +27,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     if (!mounted) return;
     setState(() => _syncing = false);
     // syncNow never throws; failures retry quietly on the next tick.
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Log sync attempted.')));
+    showToast(context, 'Log sync attempted.');
   }
 
   @override

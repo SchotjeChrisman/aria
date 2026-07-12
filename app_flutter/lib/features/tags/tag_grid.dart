@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
+import '../../core/toast.dart';
 import '../../core/library_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
@@ -179,10 +180,10 @@ class _TagTile extends ConsumerWidget {
       await ref.read(tagsProvider.notifier).rename(tag.id, name);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e is AriaApiException ? e.message : 'Rename failed.'),
-          ),
+        showToast(
+          context,
+          e is AriaApiException ? e.message : 'Rename failed.',
+          error: true,
         );
       }
     }
@@ -195,12 +196,10 @@ class _TagTile extends ConsumerWidget {
         await ref.read(tagsProvider.notifier).setFolder(tag.id, folderId);
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                e is AriaApiException ? e.message : 'Could not move tag.',
-              ),
-            ),
+          showToast(
+            context,
+            e is AriaApiException ? e.message : 'Could not move tag.',
+            error: true,
           );
         }
       }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/formats.dart';
+import '../../core/toast.dart';
 import '../../core/theme.dart';
 import 'profile_providers.dart';
 
@@ -198,9 +199,7 @@ Future<void> showProfileEditor(
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save profile. ($e)')));
+      showToast(context, 'Could not save profile. ($e)', error: true);
     }
   }
 }
@@ -233,9 +232,7 @@ Future<void> confirmDeleteProfile(
     await ref.read(profileActionsProvider).delete(profile.id);
   } catch (_) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cannot delete profile.')));
+      showToast(context, 'Cannot delete profile.', error: true);
     }
   }
 }

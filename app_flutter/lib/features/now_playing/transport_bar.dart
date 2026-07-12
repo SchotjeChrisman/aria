@@ -11,6 +11,7 @@ import '../../core/connection.dart';
 import '../../core/log_sync.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
+import '../../core/toast.dart';
 import '../../core/library_providers.dart' show enrichRefreshProvider;
 import '../../widgets/art_image.dart';
 import '../../widgets/format_badge.dart';
@@ -29,12 +30,52 @@ class TransportBar extends ConsumerStatefulWidget {
   ConsumerState<TransportBar> createState() => _TransportBarState();
 }
 
+/// No-libmpv degradation strip: the app runs, playback doesn't. Anchored at the
+/// TOP of the shell content (not the bottom transport) so it reads as a
+/// page-level alert, consistent with the top-anchored error toasts.
+class PlaybackUnavailableBanner extends ConsumerWidget {
+  const PlaybackUnavailableBanner({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final init = ref.watch(playerInitProvider);
+    final player = ref.watch(ariaPlayerProvider);
+    if (!init.hasValue || player.isAvailable) return const SizedBox.shrink();
+    final error = Theme.of(context).colorScheme.error;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AriaSpace.s4,
+        vertical: AriaSpace.s2,
+      ),
+      color: error.withValues(alpha: 0.15),
+      child: Row(
+        children: [
+          Icon(PhosphorIconsRegular.speakerSlash, size: 16, color: error),
+          const SizedBox(width: AriaSpace.s2),
+          Expanded(
+            child: Text(
+              'Playback unavailable — '
+              '${player.unavailableReason ?? 'libmpv could not be loaded'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall!.copyWith(color: error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TransportBarState extends ConsumerState<TransportBar> {
   @override
   Widget build(BuildContext context) {
     // Keep the engine initialized and the play-report latch alive for the
     // app's lifetime — this bar is always mounted.
-    final init = ref.watch(playerInitProvider);
+    ref.watch(playerInitProvider);
     ref.watch(playReporterProvider);
     // The persisted queue must rehydrate no matter which tab the app opens
     // on (it used to hang off LibraryScreen, so headset/notification play
@@ -50,9 +91,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     // ride the same SnackBar pathway as audio errors.
     ref.listen(playbackNoticeProvider, (_, notice) {
       if (notice == null) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(notice.message)));
+      showToast(context, notice.message, error: true);
     });
 
     // Audio output died (e.g. exclusive access denied because another app
@@ -60,15 +99,11 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     ref.listen(audioErrorProvider, (_, next) {
       final detail = next.value;
       if (detail == null) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          content: Text(
-            'Playback stopped — the audio device is unavailable ($detail). '
-            'Close other audio apps, or turn off Exclusive output in '
-            'Settings.',
-          ),
-        ),
+      showToast(
+        context,
+        'Playback stopped — the audio device is unavailable ($detail). '
+        'Close other audio apps, or turn off Exclusive output in Settings.',
+        error: true,
       );
     });
 
@@ -83,34 +118,34 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     final fmt = ref.watch(playbackFormatProvider).value;
     final volume = ref.watch(volumeProvider);
     final queue = ref.read(queueProvider.notifier);
-    final player = ref.watch(ariaPlayerProvider);
-    final unavailable = init.hasValue && !player.isAvailable;
-
     final meta = radio != null
         ? _radioMeta(context, radio)
         : _nowMeta(context, track);
+    // Solid (filled) glyphs in dimmed grey — lighter than black, but not thin.
     final prevBtn = IconButton(
       icon: const Icon(PhosphorIconsFill.skipBack),
-      color: c.fg,
+      color: c.fgDim,
       tooltip: 'Previous',
       // Live stream: no track skipping (legacy).
       onPressed: track == null ? null : queue.prev,
     );
-    final playBtn = IconButton.filled(
+    // Same flat style as the skip buttons (no filled circle).
+    final playBtn = IconButton(
       icon: Icon(playing ? PhosphorIconsFill.pause : PhosphorIconsFill.play),
+      color: c.fgDim,
       tooltip: 'Play/Pause',
       onPressed: track == null && radio == null ? null : queue.togglePlay,
     );
     final nextBtn = radio != null
         ? IconButton(
             icon: const Icon(PhosphorIconsFill.stop),
-            color: c.fg,
+            color: c.fgDim,
             tooltip: 'Stop station',
             onPressed: ref.read(radioPlaybackProvider.notifier).stop,
           )
         : IconButton(
             icon: const Icon(PhosphorIconsFill.skipForward),
-            color: c.fg,
+            color: c.fgDim,
             tooltip: 'Next',
             onPressed: track == null ? null : queue.next,
           );
@@ -119,6 +154,12 @@ class _TransportBarState extends ConsumerState<TransportBar> {
       color: c.fgDim,
       tooltip: 'Queue',
       onPressed: () => context.push('/queue'),
+    );
+    final lyricsBtn = IconButton(
+      icon: const Icon(PhosphorIconsRegular.microphoneStage),
+      color: c.fgDim,
+      tooltip: 'Now playing / lyrics',
+      onPressed: track == null ? null : () => context.push('/now-playing'),
     );
 
     // Floating frosted pill: inset from the window edges, soft shadow on the
@@ -135,11 +176,11 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AriaRadius.lg),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s3),
               decoration: BoxDecoration(
-                color: c.bgRaised.withValues(alpha: 0.72),
+                color: c.bgRaised.withValues(alpha: 0.82),
                 borderRadius: BorderRadius.circular(AriaRadius.lg),
                 border: Border.all(color: c.line),
               ),
@@ -190,9 +231,11 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                             ),
                             const SizedBox(width: AriaSpace.s2),
                           ],
+                          if (roomy) const SignalPathDot(),
                           prevBtn,
                           playBtn,
                           nextBtn,
+                          if (roomy) lyricsBtn,
                           queueBtn,
                         ],
                       ),
@@ -212,7 +255,15 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: [prevBtn, playBtn, nextBtn],
+                          spacing: AriaSpace.s5,
+                          children: [
+                            const SignalPathDot(),
+                            prevBtn,
+                            playBtn,
+                            nextBtn,
+                            lyricsBtn,
+                            queueBtn,
+                          ],
                         ),
                         if (radio != null)
                           Row(
@@ -243,10 +294,9 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // Signal path is the desktop-band flourish; the
-                        // stacked layout shows the format badge instead.
-                        const Flexible(child: SignalPath()),
-                        const SizedBox(width: AriaSpace.s3),
+                        // Lyrics/queue moved beside the transport; the quality
+                        // dot (left of prev) now fronts the signal path. Only
+                        // volume rides the right edge here.
                         SizedBox(
                           width: 130,
                           child: Row(
@@ -267,15 +317,6 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(PhosphorIconsRegular.microphoneStage),
-                          color: c.fgDim,
-                          tooltip: 'Now playing / lyrics',
-                          onPressed: track == null
-                              ? null
-                              : () => context.push('/now-playing'),
-                        ),
-                        queueBtn,
                       ],
                     ),
                   ),
@@ -292,43 +333,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
       ), // DecoratedBox (shadow)
     ); // Padding (float margin)
 
-    if (!unavailable) return bar;
-    // No-libmpv degradation must be visible: the app runs, playback doesn't.
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: AriaSpace.s4,
-            vertical: AriaSpace.s2,
-          ),
-          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.15),
-          child: Row(
-            children: [
-              Icon(
-                PhosphorIconsRegular.speakerSlash,
-                size: 16,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(width: AriaSpace.s2),
-              Expanded(
-                child: Text(
-                  'Playback unavailable — '
-                  '${player.unavailableReason ?? 'libmpv could not be loaded'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        bar,
-      ],
-    );
+    return bar;
   }
 
   /// Legacy playRadio now-bar: station name + "Internet Radio", initials art.

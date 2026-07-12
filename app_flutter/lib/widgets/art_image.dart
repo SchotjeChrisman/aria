@@ -55,16 +55,26 @@ class ArtImage extends ConsumerWidget {
     final decodeEdge = size ?? decodeSize;
     final localArtOf = ref.watch(localArtResolverProvider);
 
-    final fallback = Center(
-      child: Text(
-        initials(fallbackText),
-        style: TextStyle(
-          fontSize: (size ?? 96) * 0.3,
-          letterSpacing: 1,
-          color: c.fgDim,
+    // Placeholder box only: needs a load-bearing edge to be visible on the
+    // pure-white canvas. Real covers are borderless (a bare edge around art
+    // looks cheap) — the border lives here, not on the outer container.
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.bgRaised,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: c.lineStrong),
+      ),
+      child: Center(
+        child: Text(
+          initials(fallbackText),
+          style: TextStyle(
+            fontSize: (size ?? 96) * 0.3,
+            letterSpacing: 1,
+            color: c.fgDim,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.clip,
         ),
-        maxLines: 1,
-        overflow: TextOverflow.clip,
       ),
     );
 
@@ -74,10 +84,6 @@ class ArtImage extends ConsumerWidget {
       decoration: BoxDecoration(
         color: c.bgRaised,
         borderRadius: BorderRadius.circular(borderRadius),
-        // Fallback/placeholder box needs a load-bearing edge to be visible on
-        // the pure-white canvas; a real cover clips over it so it stays hidden
-        // on the happy path (no shadow — dense art grids would look noisy).
-        border: Border.all(color: c.lineStrong),
       ),
       clipBehavior: Clip.antiAlias,
       child: url == null

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
+import '../../core/toast.dart';
 import '../../widgets/empty_state.dart';
 import 'name_dialog.dart';
 import 'providers.dart';
@@ -84,14 +85,12 @@ class TagsScreen extends ConsumerWidget {
       await ref.read(tagsProvider.notifier).create(name, folder: folder);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is AriaApiException
-                  ? e.message
-                  : 'Could not create ${folder ? 'folder' : 'tag'}.',
-            ),
-          ),
+        showToast(
+          context,
+          e is AriaApiException
+              ? e.message
+              : 'Could not create ${folder ? 'folder' : 'tag'}.',
+          error: true,
         );
       }
     }

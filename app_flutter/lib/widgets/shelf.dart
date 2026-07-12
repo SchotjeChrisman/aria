@@ -1,10 +1,65 @@
 import 'package:flutter/material.dart';
+import '../core/phosphor_icons.dart';
 
 import '../core/theme.dart';
 
+/// Snaps horizontal scrolling to multiples of [itemExtent] (card width + gap),
+/// so a flick settles with a card aligned to the shelf's left edge instead of
+/// stopping mid-card. Chains onto the platform's default physics.
+class _SnapPhysics extends ScrollPhysics {
+  const _SnapPhysics({required this.itemExtent, super.parent});
+
+  final double itemExtent;
+
+  @override
+  _SnapPhysics applyTo(ScrollPhysics? ancestor) =>
+      _SnapPhysics(itemExtent: itemExtent, parent: buildParent(ancestor));
+
+  double _snapTarget(ScrollMetrics position, double velocity) {
+    final tol = toleranceFor(position);
+    var item = position.pixels / itemExtent;
+    // Bias toward the next/prev card when there's real flick velocity.
+    if (velocity < -tol.velocity) {
+      item = item.floorToDouble();
+    } else if (velocity > tol.velocity) {
+      item = item.ceilToDouble();
+    } else {
+      item = item.roundToDouble();
+    }
+    return (item * itemExtent)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    // Leave over-scroll (past the ends) to the parent's spring.
+    if ((velocity <= 0.0 && position.pixels <= position.minScrollExtent) ||
+        (velocity >= 0.0 && position.pixels >= position.maxScrollExtent)) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+    final tol = toleranceFor(position);
+    final target = _snapTarget(position, velocity);
+    if ((target - position.pixels).abs() < tol.distance) return null;
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity,
+      tolerance: tol,
+    );
+  }
+
+  @override
+  bool get allowImplicitScrolling => false;
+}
+
 /// Horizontal scroller with a section header — home-screen rows of albums,
-/// artists, new releases.
-class Shelf extends StatelessWidget {
+/// artists, new releases. The header carries a pair of slide arrows that page
+/// the row left/right (they no-op when there's nothing to scroll).
+class Shelf extends StatefulWidget {
   const Shelf({
     super.key,
     required this.title,
@@ -47,7 +102,41 @@ class Shelf extends StatelessWidget {
   final VoidCallback? onSeeAll;
 
   @override
+  State<Shelf> createState() => _ShelfState();
+}
+
+class _ShelfState extends State<Shelf> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Page by most of a viewport; clamp inside the scrollable's own extent.
+  void _slide(int dir) {
+    if (!_controller.hasClients) return;
+    final p = _controller.position;
+    final target = (_controller.offset + dir * p.viewportDimension * 0.85)
+        .clamp(0.0, p.maxScrollExtent);
+    _controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final c = AriaColors.of(context);
+    Widget arrow(IconData icon, int dir) => IconButton(
+      icon: Icon(icon, size: 16),
+      color: c.fgDim,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: () => _slide(dir),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -56,13 +145,15 @@ class Shelf extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                title,
+                widget.title,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-            if (onSeeAll != null)
+            arrow(PhosphorIconsRegular.caretLeft, -1),
+            arrow(PhosphorIconsRegular.caretRight, 1),
+            if (widget.onSeeAll != null)
               TextButton(
-                onPressed: onSeeAll,
+                onPressed: widget.onSeeAll,
                 child: Text(
                   'All',
                   style: Theme.of(context).textTheme.bodySmall,
@@ -85,17 +176,24 @@ class Shelf extends StatelessWidget {
             // count (gridColumns stays 2 there to drive the 2-col grids).
             final band = AriaBreakpoint.of(context);
             final n = band == AriaBreakpoint.mobile
-                ? mobileColumns
-                : band.gridColumns + extraColumns;
-            final w = itemWidth ?? (box.maxWidth - (n - 1) * gap) / n;
+                ? widget.mobileColumns
+                : band.gridColumns + widget.extraColumns;
+            final w =
+                widget.itemWidth ?? (box.maxWidth - (n - 1) * gap) / n;
             return SizedBox(
-              height: itemWidth == null ? height + (w - _designWidth) : height,
+              height: widget.itemWidth == null
+                  ? widget.height + (w - Shelf._designWidth)
+                  : widget.height,
               child: ListView.separated(
+                controller: _controller,
                 scrollDirection: Axis.horizontal,
-                itemCount: itemCount,
+                // Snap to card boundaries so a touch flick lands on a card
+                // edge, not mid-card.
+                physics: _SnapPhysics(itemExtent: w + gap),
+                itemCount: widget.itemCount,
                 separatorBuilder: (_, _) => const SizedBox(width: gap),
                 itemBuilder: (context, i) =>
-                    SizedBox(width: w, child: itemBuilder(context, i)),
+                    SizedBox(width: w, child: widget.itemBuilder(context, i)),
               ),
             );
           },

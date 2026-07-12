@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
+import '../../core/toast.dart';
 import '../../core/formats.dart';
 import '../../core/player_providers.dart';
 import '../../core/playlists_providers.dart';
@@ -121,7 +122,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
   Future<void> _saveAsPlaylist(BuildContext context) async {
     final tracks = ref.read(queueProvider).tracks;
     if (tracks.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
+    final toast = Toaster.of(context);
 
     final ctrl = TextEditingController();
     final String? name;
@@ -161,15 +162,11 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
       final notifier = ref.read(playlistsProvider.notifier);
       final pl = await notifier.createManual(trimmed);
       await notifier.addTracks(pl.id, [for (final t in tracks) t.id]);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Saved ${tracks.length} tracks to "$trimmed"')),
-      );
+      toast.show('Saved ${tracks.length} tracks to "$trimmed"');
     } on StateError catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      toast.show(e.message, error: true);
     } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not save playlist.')),
-      );
+      toast.show('Could not save playlist.', error: true);
     }
   }
 }

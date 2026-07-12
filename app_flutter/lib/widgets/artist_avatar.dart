@@ -37,31 +37,32 @@ class ArtistAvatar extends ConsumerWidget {
       ),
     );
 
-    // Only try the network when a portrait is actually known; a null imageUrl
-    // means there's nothing to fetch, so go straight to initials. Proxy first,
-    // raw CDN URL second.
-    final urls = imageUrl == null
-        ? const <String>[]
-        : [ref.watch(apiClientProvider).peopleImgUrl(name), imageUrl!];
+    // Always try the by-name LAN proxy: it resolves portraits from the server's
+    // people map regardless of whether the caller loaded a CDN url, so an
+    // enriched artist shows a face on every screen (not just the ones that pass
+    // imageUrl). Proxy 404 (un-enriched name) falls to the CDN url if known,
+    // then initials. Raw CDN url second.
+    final urls = [
+      ref.watch(apiClientProvider).peopleImgUrl(name),
+      ?imageUrl,
+    ];
 
     return Container(
       width: size,
       height: size,
+      // Borderless like album covers; the grey disc alone carries the initials
+      // fallback and is hidden once a portrait loads over it.
       decoration: BoxDecoration(
         color: c.bgHover,
         shape: BoxShape.circle,
-        border: Border.all(color: c.lineStrong),
       ),
       clipBehavior: Clip.antiAlias,
-      child: urls.isEmpty
-          ? fallback
-          : _ChainImage(
-              urls: urls,
-              fallback: fallback,
-              // Decode at display resolution — portraits can be huge.
-              cacheWidth:
-                  (size * MediaQuery.devicePixelRatioOf(context)).round(),
-            ),
+      child: _ChainImage(
+        urls: urls,
+        fallback: fallback,
+        // Decode at display resolution — portraits can be huge.
+        cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+      ),
     );
   }
 }
