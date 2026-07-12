@@ -28,7 +28,7 @@ class FilterPill extends StatelessWidget {
           ? c.accent.withValues(alpha: 0.10)
           : Colors.transparent,
       shape: StadiumBorder(
-        side: BorderSide(color: selected ? c.accent : c.line),
+        side: BorderSide(color: selected ? c.accent : c.lineStrong),
       ),
       child: InkWell(
         onTap: onTap,

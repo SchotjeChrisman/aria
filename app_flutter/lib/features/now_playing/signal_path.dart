@@ -286,7 +286,7 @@ class _StageRow extends StatelessWidget {
       child: Center(
         child: Container(
           width: 2,
-          color: hidden ? Colors.transparent : c.line,
+          color: hidden ? Colors.transparent : c.lineStrong,
         ),
       ),
     );

@@ -119,11 +119,10 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
           Container(
             margin: const EdgeInsets.only(top: AriaSpace.s1),
             constraints: const BoxConstraints(maxHeight: 180),
-            decoration: BoxDecoration(
-              color: c.bgRaised,
-              border: Border.all(color: c.line),
-              borderRadius: BorderRadius.circular(AriaRadius.sm),
-            ),
+            // Clip the option rows' square InkWell hover to the rounded surface
+            // (shadow is unaffected by the container's own clipBehavior).
+            clipBehavior: Clip.antiAlias,
+            decoration: ariaSurface(c, radius: AriaRadius.sm, fill: c.bgFloat),
             child: hits.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.all(AriaSpace.s3),

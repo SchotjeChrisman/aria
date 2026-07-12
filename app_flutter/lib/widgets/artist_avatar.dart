@@ -50,7 +50,7 @@ class ArtistAvatar extends ConsumerWidget {
       decoration: BoxDecoration(
         color: c.bgHover,
         shape: BoxShape.circle,
-        border: Border.all(color: c.line),
+        border: Border.all(color: c.lineStrong),
       ),
       clipBehavior: Clip.antiAlias,
       child: urls.isEmpty

@@ -342,11 +342,7 @@ class _StatTile extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minWidth: 140),
       padding: const EdgeInsets.all(AriaSpace.s4),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
+      decoration: ariaSurface(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

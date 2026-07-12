@@ -7,6 +7,7 @@ class AriaColors extends ThemeExtension<AriaColors> {
   const AriaColors({
     required this.bg,
     required this.bgRaised,
+    required this.bgFloat,
     required this.bgHover,
     required this.line,
     required this.lineStrong,
@@ -18,9 +19,22 @@ class AriaColors extends ThemeExtension<AriaColors> {
   });
 
   final Color bg;
+
+  /// Inline surfaces (cards, chrome bars). On the pure-white canvas these are
+  /// also white — separation comes from a [lineStrong] hairline + [surfaceShadow],
+  /// not a fill delta. See [ariaSurface].
   final Color bgRaised;
+
+  /// Floating surfaces (menus, dialogs, bottom sheets). Split from [bgRaised]
+  /// so floats and inline cards can diverge later (e.g. dark theme) without
+  /// re-touching every call site. Same value as [bgRaised] under the light theme.
+  final Color bgFloat;
+
   final Color bgHover;
   final Color line;
+
+  /// The load-bearing separator: 3.3:1 on white. Used for card borders and any
+  /// divider that is the *sole* separator (rail edge, chrome tops).
   final Color lineStrong;
   final Color fg;
   final Color fgDim;
@@ -32,8 +46,10 @@ class AriaColors extends ThemeExtension<AriaColors> {
   final Color lossy;
 
   static const light = AriaColors(
-    bg: Color(0xFFFAFAFB),
+    // Pure-white canvas. Surfaces separate by border + shadow, not fill.
+    bg: Color(0xFFFFFFFF),
     bgRaised: Color(0xFFFFFFFF),
+    bgFloat: Color(0xFFFFFFFF),
     bgHover: Color(0xFFECECEE),
     line: Color(0xFFE5E5E8),
     // 3.3:1 against white — WCAG UI-component minimum for input borders
@@ -64,6 +80,7 @@ class AriaColors extends ThemeExtension<AriaColors> {
     return AriaColors(
       bg: l(bg, other.bg),
       bgRaised: l(bgRaised, other.bgRaised),
+      bgFloat: l(bgFloat, other.bgFloat),
       bgHover: l(bgHover, other.bgHover),
       line: l(line, other.line),
       lineStrong: l(lineStrong, other.lineStrong),
@@ -161,6 +178,33 @@ abstract final class AriaRadius {
   static const double lg = 16;
   static const double pill = 999;
 }
+
+/// The app's one surface shadow. Soft, low-alpha — on the white canvas, surfaces
+/// read as a hairline + a faint lift, never a heavy drop. Chrome (transport,
+/// selection bar) uses the same token; dense art tiles rely on the hairline
+/// alone so grids don't read as noisy.
+const surfaceShadow = <BoxShadow>[
+  BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 2)),
+];
+
+/// Standard inline surface on the white canvas: white fill + a subtle [line]
+/// hairline + [surfaceShadow]. The shadow carries the separation (as on
+/// Notion/Linear), so the border stays quiet — a heavy [lineStrong] edge on
+/// every card looks cheap. [lineStrong] is reserved for *shadowless* sole
+/// separators (the flat rail divider, chrome-bar tops).
+/// Pass [border] to override the edge colour (e.g. accent for a current item).
+BoxDecoration ariaSurface(
+  AriaColors c, {
+  double radius = AriaRadius.md,
+  Color? border,
+  Color? fill,
+}) =>
+    BoxDecoration(
+      color: fill ?? c.bgRaised,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: border ?? c.line),
+      boxShadow: surfaceShadow,
+    );
 
 abstract final class AriaTheme {
   static ThemeData light() {

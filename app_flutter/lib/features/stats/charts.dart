@@ -28,11 +28,7 @@ class BarChart extends StatelessWidget {
     final c = AriaColors.of(context);
     return Container(
       padding: const EdgeInsets.all(AriaSpace.s4),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
+      decoration: ariaSurface(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -122,11 +118,7 @@ class MiniList extends StatelessWidget {
     final c = AriaColors.of(context);
     return Container(
       padding: const EdgeInsets.all(AriaSpace.s4),
-      decoration: BoxDecoration(
-        color: c.bgRaised,
-        borderRadius: BorderRadius.circular(AriaRadius.md),
-        border: Border.all(color: c.line),
-      ),
+      decoration: ariaSurface(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

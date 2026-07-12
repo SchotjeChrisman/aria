@@ -74,7 +74,10 @@ class ArtImage extends ConsumerWidget {
       decoration: BoxDecoration(
         color: c.bgRaised,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: c.line),
+        // Fallback/placeholder box needs a load-bearing edge to be visible on
+        // the pure-white canvas; a real cover clips over it so it stays hidden
+        // on the happy path (no shadow — dense art grids would look noisy).
+        border: Border.all(color: c.lineStrong),
       ),
       clipBehavior: Clip.antiAlias,
       child: url == null

@@ -149,7 +149,7 @@ class _PlaylistTile extends ConsumerWidget {
       art = ArtImage(url: urls.first, decodeSize: 190, borderRadius: 0);
     } else {
       art = Container(
-        color: c.bgRaised,
+        decoration: ariaSurface(c, border: c.lineStrong),
         child: Icon(
           playlist.isSmart ? Icons.auto_awesome : Icons.queue_music,
           size: 36,

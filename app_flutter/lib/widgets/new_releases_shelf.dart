@@ -86,7 +86,7 @@ class _NewReleaseCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: c.bgRaised,
               borderRadius: BorderRadius.circular(AriaRadius.md),
-              border: Border.all(color: c.line),
+              border: Border.all(color: c.lineStrong),
             ),
             clipBehavior: Clip.antiAlias,
             child: item.cover == null

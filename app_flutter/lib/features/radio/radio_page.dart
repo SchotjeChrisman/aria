@@ -127,11 +127,7 @@ class _RadioCard extends ConsumerWidget {
       borderRadius: BorderRadius.circular(AriaRadius.md),
       child: Container(
         padding: const EdgeInsets.all(AriaSpace.s4),
-        decoration: BoxDecoration(
-          color: c.bgRaised,
-          borderRadius: BorderRadius.circular(AriaRadius.md),
-          border: Border.all(color: isCurrent ? c.accent : c.line),
-        ),
+        decoration: isCurrent ? ariaSurface(c, border: c.accent) : ariaSurface(c),
         child: Row(
           children: [
             Expanded(

@@ -181,7 +181,7 @@ class TracksSection extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _HeaderRow(sort: sort),
-                    Divider(height: 1, color: c.line),
+                    Divider(height: 1, color: c.lineStrong),
                     Expanded(
                       child: list.isEmpty
                           ? const EmptyState(

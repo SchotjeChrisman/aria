@@ -122,7 +122,9 @@ class _TransportBarState extends ConsumerState<TransportBar> {
       padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s3),
       decoration: BoxDecoration(
         color: c.bgRaised,
-        border: Border(top: BorderSide(color: c.line)),
+        // lineStrong: sole shadowless separator from the white content above.
+        // (Phase 3 replaces this whole surface with a floating shadowed pill.)
+        border: Border(top: BorderSide(color: c.lineStrong)),
       ),
       // Bottom safe-area so the bar clears Android gesture handles, with a
       // little breathing room even without a system inset.
@@ -313,7 +315,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
           decoration: BoxDecoration(
             color: c.bg,
             borderRadius: BorderRadius.circular(AriaRadius.sm),
-            border: Border.all(color: c.line),
+            border: Border.all(color: c.lineStrong),
           ),
           child: Icon(Icons.radio, size: 22, color: c.fgDim),
         ),

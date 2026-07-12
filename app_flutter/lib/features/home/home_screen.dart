@@ -255,11 +255,7 @@ class _StatStrip extends StatelessWidget {
               horizontal: AriaSpace.s3,
               vertical: AriaSpace.s4,
             ),
-            decoration: BoxDecoration(
-              color: c.bgRaised,
-              borderRadius: BorderRadius.circular(AriaRadius.md),
-              border: Border.all(color: c.line),
-            ),
+            decoration: ariaSurface(c),
             // Icon beside the text when the tile is wide enough, stacked above
             // it when it isn't.
             child: LayoutBuilder(
@@ -869,7 +865,7 @@ class _WeeklyTimeBox extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: has ? c.accent : c.line,
+            color: has ? c.accent : c.lineStrong,
           ),
         ),
       );

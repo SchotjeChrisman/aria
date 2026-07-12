@@ -92,7 +92,7 @@ class _TagTile extends ConsumerWidget {
       art = ArtImage(url: urls.first, decodeSize: 190, borderRadius: 0);
     } else {
       art = Container(
-        color: c.bgRaised,
+        decoration: ariaSurface(c, border: c.lineStrong),
         child: Icon(Icons.sell_outlined, size: 36, color: c.fgDim),
       );
     }
