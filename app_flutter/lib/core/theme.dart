@@ -168,6 +168,7 @@ abstract final class AriaTheme {
     final base = ThemeData(
       brightness: Brightness.light,
       useMaterial3: true,
+      fontFamily: 'Nunito',
       colorScheme: ColorScheme.light(
         primary: c.accent,
         onPrimary: Colors.white,

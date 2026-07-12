@@ -49,6 +49,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Variable font: Flutter drives the `wght` axis from TextStyle.fontWeight, so
+  # one file covers w400/w500/w600. Nunito digits are tabular by default (all
+  # 600u wide) — the tabularFigures() calls in the app are harmless no-ops.
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito.ttf
 
 # App icon: white G-clef on the aria accent (#D13B58). Source art in branding/,
 # regenerate with `dart run flutter_launcher_icons`.
