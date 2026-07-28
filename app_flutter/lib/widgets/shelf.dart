@@ -6,14 +6,14 @@ import '../core/theme.dart';
 /// Snaps horizontal scrolling to multiples of [itemExtent] (card width + gap),
 /// so a flick settles with a card aligned to the shelf's left edge instead of
 /// stopping mid-card. Chains onto the platform's default physics.
-class _SnapPhysics extends ScrollPhysics {
-  const _SnapPhysics({required this.itemExtent, super.parent});
+class SnapPhysics extends ScrollPhysics {
+  const SnapPhysics({required this.itemExtent, super.parent});
 
   final double itemExtent;
 
   @override
-  _SnapPhysics applyTo(ScrollPhysics? ancestor) =>
-      _SnapPhysics(itemExtent: itemExtent, parent: buildParent(ancestor));
+  SnapPhysics applyTo(ScrollPhysics? ancestor) =>
+      SnapPhysics(itemExtent: itemExtent, parent: buildParent(ancestor));
 
   double _snapTarget(ScrollMetrics position, double velocity) {
     final tol = toleranceFor(position);
@@ -189,7 +189,7 @@ class _ShelfState extends State<Shelf> {
                 scrollDirection: Axis.horizontal,
                 // Snap to card boundaries so a touch flick lands on a card
                 // edge, not mid-card.
-                physics: _SnapPhysics(itemExtent: w + gap),
+                physics: SnapPhysics(itemExtent: w + gap),
                 itemCount: widget.itemCount,
                 separatorBuilder: (_, _) => const SizedBox(width: gap),
                 itemBuilder: (context, i) =>

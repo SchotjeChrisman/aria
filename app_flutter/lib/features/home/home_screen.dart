@@ -358,6 +358,7 @@ class _MixesShelf extends ConsumerWidget {
               height: w * 2 / 3,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
+                physics: SnapPhysics(itemExtent: w + gap),
                 itemCount: mixes.length,
                 separatorBuilder: (_, _) => const SizedBox(width: gap),
                 itemBuilder: (context, i) => SizedBox(
@@ -634,6 +635,7 @@ Widget _cardShelf(BuildContext context, List<Widget> cards) {
       final w = (box.maxWidth - (n - 1) * gap) / n;
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        physics: SnapPhysics(itemExtent: w + gap),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
