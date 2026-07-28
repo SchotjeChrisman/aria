@@ -76,6 +76,42 @@ final List<FeatureEntry> featureEntries = [
   now_playing.featureEntry,
 ];
 
+/// Paths of routes pushed above the shell (the destination-less features:
+/// now-playing, lyrics, queue). Derived from the registry so it can't drift.
+final Set<String> _overlayPaths = {
+  for (final e in featureEntries)
+    if (e.destination == null)
+      for (final r in e.routes)
+        if (r is GoRoute) r.path,
+};
+
+/// Push a shell-branch page (album/artist/…) from anywhere.
+///
+/// Overlay pages are popped first: pushing a branch route while an overlay
+/// tops the root navigator appends a second shell to the page stack
+/// (duplicate shell page keys), while `go` would replace the whole match
+/// list and leave the destination without a back stack. From inside the
+/// shell this is a plain push.
+void pushInShell(BuildContext context, String path) {
+  final router = GoRouter.of(context);
+  // Count the overlay matches on top of the current configuration, then pop
+  // exactly that many — deterministic, no reliance on pop() timing.
+  final matches = router.routerDelegate.currentConfiguration.matches;
+  var overlays = 0;
+  for (var i = matches.length - 1; i >= 0; i--) {
+    final route = matches[i].route;
+    if (route is GoRoute && _overlayPaths.contains(route.path)) {
+      overlays++;
+    } else {
+      break;
+    }
+  }
+  for (var i = 0; i < overlays && router.canPop(); i++) {
+    router.pop();
+  }
+  router.push(path);
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   // Recreated only when first-run state flips (setup completed / URL cleared).
   final hasServer = ref.watch(serverUrlProvider.select((u) => u != null));

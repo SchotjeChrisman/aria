@@ -4,6 +4,7 @@ import '../../core/phosphor_icons.dart';
 import '../../core/router.dart';
 import '../album/routes.dart' as album;
 import '../artist/routes.dart' as artist;
+import 'composition_screen.dart';
 import 'genre_screen.dart';
 import 'library_screen.dart';
 
@@ -50,6 +51,13 @@ final featureEntries = <FeatureEntry>[
           LibrarySection.albums => album.detailRoutes,
           LibrarySection.artists => artist.artistDetailRoutes,
           LibrarySection.composers => artist.composerDetailRoutes,
+          LibrarySection.tracks => [
+            GoRoute(
+              path: '/composition/:name',
+              builder: (_, state) =>
+                  CompositionScreen(name: state.pathParameters['name'] ?? ''),
+            ),
+          ],
           _ => const <RouteBase>[],
         },
       ],

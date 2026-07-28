@@ -54,11 +54,18 @@ Future<void> showAriaContextMenu(
                 ),
                 const SizedBox(width: 10),
               ],
-              Text(
-                item.label,
-                style: item.destructive
-                    ? TextStyle(color: Theme.of(context).colorScheme.error)
-                    : null,
+              // Flexible: near a screen edge the menu can get tighter
+              // constraints than its intrinsic width; ellipsize, don't
+              // overflow.
+              Flexible(
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: item.destructive
+                      ? TextStyle(color: Theme.of(context).colorScheme.error)
+                      : null,
+                ),
               ),
             ],
           ),

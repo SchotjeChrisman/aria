@@ -6,6 +6,8 @@ import 'package:aria/core/router.dart';
 import 'package:aria/core/theme.dart';
 import 'package:aria/features/album/album_page.dart';
 import 'package:aria/features/artist/artist_page.dart';
+import 'package:aria/features/artist/composer_page.dart';
+import 'package:aria/features/library/composition_screen.dart';
 import 'package:aria/features/now_playing/lyrics_view.dart';
 import 'package:aria/features/now_playing/now_playing_screen.dart';
 import 'package:aria/features/now_playing/queue_screen.dart';
@@ -20,8 +22,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Regression: /now-playing (and /queue) live ABOVE the shell, while
 /// /album/:id and /artist/:name live INSIDE library shell branches.
 /// context.push() across that boundary corrupts the root navigator's page
-/// stack (duplicate shell page keys) and the target page never appears —
-/// these navigations must use context.go().
+/// stack (duplicate shell page keys), and context.go() replaces the whole
+/// match list so the destination has no back stack. These navigations must
+/// use pushInShell(), which pops the overlays and then pushes normally.
 class _NoopMpv implements MpvRaw {
   @override
   int create() => 1;
@@ -49,6 +52,37 @@ class _NoopMpv implements MpvRaw {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  const track = Track(
+    id: 't1',
+    albumId: 'a1b2c3',
+    title: 'So What',
+    artist: 'Miles Davis',
+    album: 'Kind of Blue',
+  );
+  const classical = Track(
+    id: 't2',
+    albumId: 'a2',
+    title: 'Metamorphosis One',
+    artist: 'Sally Whitwell',
+    album: 'Mad Rush',
+    composer: 'Philip Glass',
+    work: 'Metamorphosis',
+  );
+  const cover = Track(
+    id: 't3',
+    albumId: 'a3',
+    title: 'Let the Good Times Roll',
+    artist: 'B.B. King',
+    album: 'Blues on the Bayou',
+  );
+  const original = Track(
+    id: 't4',
+    albumId: 'a4',
+    title: 'Let The Good Times Roll (Remastered)',
+    artist: 'Ray Charles',
+    album: 'The Best Of',
+  );
+
   late AriaPlayer player;
   late ProviderContainer container;
 
@@ -69,6 +103,10 @@ void main() {
         // Inert: the real one keeps a 5s SSE-reconnect timer alive, which
         // trips the pending-timer invariant at test teardown.
         enrichRefreshProvider.overrideWith((ref) {}),
+        // Canned library so composer/composition pages can group offline.
+        libraryTracksProvider.overrideWith(
+          (ref) async => const [track, classical, cover, original],
+        ),
       ],
     );
   });
@@ -95,13 +133,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  const track = Track(
-    id: 't1',
-    albumId: 'a1b2c3',
-    title: 'So What',
-    artist: 'Miles Davis',
-    album: 'Kind of Blue',
-  );
+  Future<void> openNowPlayingMenu(WidgetTester tester) async {
+    await tester.tap(find.descendant(
+      of: find.byType(NowPlayingScreen),
+      matching: find.byIcon(PhosphorIconsRegular.dotsThree),
+    ));
+    await tester.pumpAndSettle();
+  }
 
   testWidgets('album art tap on now-playing opens the album page', (
     tester,
@@ -116,6 +154,81 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AlbumPage), findsOneWidget);
+    // The destination must keep a working back stack (regression: context.go
+    // replaced the whole match list, stranding the album page).
+    final router = container.read(routerProvider);
+    expect(router.canPop(), isTrue);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(AlbumPage), findsNothing);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
+
+  testWidgets('menu: go to composer opens the composer page', (tester) async {
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [classical], 0);
+    container.read(routerProvider).push('/now-playing');
+    await tester.pumpAndSettle();
+
+    await openNowPlayingMenu(tester);
+    await tester.tap(find.text('Go to composer'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ComposerPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
+
+  testWidgets('menu: go to composition lists recordings by other artists', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [cover], 0);
+    container.read(routerProvider).push('/now-playing');
+    await tester.pumpAndSettle();
+
+    await openNowPlayingMenu(tester);
+    await tester.tap(find.text('Go to composition'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CompositionScreen), findsOneWidget);
+    // Both the B.B. King cover and the Ray Charles original match despite
+    // the "(Remastered)" edition suffix.
+    expect(find.textContaining('B.B. King'), findsWidgets);
+    expect(find.textContaining('Ray Charles'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
+
+  testWidgets('queue menu: go to album pops both overlays and pushes', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [track], 0);
+    final router = container.read(routerProvider);
+    router.push('/now-playing');
+    await tester.pumpAndSettle();
+    router.push('/queue');
+    await tester.pumpAndSettle();
+
+    // The current row is titled "▶ So What"; scope to the list so the
+    // transport bar's plain title doesn't match.
+    await tester.longPress(find.descendant(
+      of: find.byType(ReorderableListView),
+      matching: find.textContaining('So What'),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Go to album'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlbumPage), findsOneWidget);
+    expect(find.byType(QueueScreen), findsNothing);
+    expect(find.byType(NowPlayingScreen), findsNothing);
+    expect(router.canPop(), isTrue);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(AlbumPage), findsNothing);
     expect(tester.takeException(), isNull);
     await cleanup(tester);
   });

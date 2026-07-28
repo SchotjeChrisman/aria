@@ -1,7 +1,6 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
@@ -9,6 +8,7 @@ import '../../core/toast.dart';
 import '../../core/formats.dart';
 import '../../core/player_providers.dart';
 import '../../core/playlists_providers.dart';
+import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
 import '../../widgets/context_menu.dart';
@@ -310,15 +310,15 @@ class _QueueRow extends ConsumerWidget {
       ),
       AriaMenuItem(
         'Go to album',
-        // go, not push: see now_playing_screen — this screen is above the
-        // shell, the destinations are inside shell branches.
-        () => context.go(albumPath(track.albumId)),
+        // pushInShell: this screen is above the shell, the destinations are
+        // inside shell branches (see core/router.dart).
+        () => pushInShell(context, albumPath(track.albumId)),
         icon: PhosphorIconsRegular.vinylRecord,
       ),
       if ((track.artist ?? '').isNotEmpty)
         AriaMenuItem(
           'Go to artist',
-          () => context.go(artistPath(track.artist!)),
+          () => pushInShell(context, artistPath(track.artist!)),
           icon: PhosphorIconsRegular.user,
         ),
       AriaMenuItem(

@@ -1,5 +1,9 @@
 import 'package:aria_api/aria_api.dart';
 
+// normTitle moved to core so the composition page (library feature) can share
+// it; re-exported here for this feature's existing importers.
+export '../../core/formats.dart' show normTitle;
+
 /// Path contracts with sibling features (features never import each other).
 String artistPath(String name) => '/artist/${Uri.encodeComponent(name)}';
 String composerPath(String name) => '/composer/${Uri.encodeComponent(name)}';
@@ -34,22 +38,6 @@ const discTypes = [
 ];
 
 const knownDiscTypes = {'album', 'ep', 'single', 'compilation', 'live'};
-
-/// Edition-tolerant title key (legacy normTitle):
-/// "Brothers in Arms (Remastered)" == "Brothers in Arms".
-/// Deviation: no NFD diacritic folding (Dart has no built-in normalizer), so
-/// "Björk" keys as "bj rk" — dedupe is slightly weaker on accented titles.
-String normTitle(String? s) {
-  var x = (s ?? '').toLowerCase();
-  x = x.replaceAll(
-    RegExp(
-      r'\s*[(\[][^)\]]*(remaster|deluxe|edition|version|anniversary|expanded|bonus|live|mono|stereo|\b\d{4}\b)[^)\]]*[)\]]',
-      caseSensitive: false,
-    ),
-    '',
-  );
-  return x.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
-}
 
 /// Canonical genres of a track (legacy tg()): server-annotated list, raw file
 /// tag as fallback.

@@ -11,8 +11,10 @@ import '../../core/connection.dart';
 import '../../core/formats.dart';
 import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
+import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
+import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/track_actions.dart';
 import 'providers.dart';
@@ -39,7 +41,25 @@ class NowPlayingScreen extends ConsumerWidget {
           tooltip: 'Close',
           onPressed: () => context.pop(),
         ),
-        actions: const [],
+        actions: [
+          if (track != null)
+            Builder(
+              // Builder: the menu anchors to this button's own render box.
+              builder: (buttonContext) => IconButton(
+                icon: const Icon(PhosphorIconsRegular.dotsThree),
+                tooltip: 'More',
+                onPressed: () {
+                  final box =
+                      buttonContext.findRenderObject()! as RenderBox;
+                  showAriaContextMenu(
+                    buttonContext,
+                    box.localToGlobal(box.size.bottomLeft(Offset.zero)),
+                    trackMenuItems(buttonContext, ref, track),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
       body: track == null
           ? const EmptyState(message: 'Nothing playing.')
@@ -130,10 +150,10 @@ class _Meta extends ConsumerWidget {
           child: AspectRatio(
             aspectRatio: 1,
             child: GestureDetector(
-              // go, not push: this screen sits above the shell and the album/
-              // artist routes live inside shell branches — pushing across that
-              // boundary corrupts the root navigator (duplicate shell pages).
-              onTap: () => context.go(albumPath(track.albumId)),
+              // pushInShell, not push/go: this screen sits above the shell and
+              // the album/artist routes live inside shell branches (see
+              // core/router.dart).
+              onTap: () => pushInShell(context, albumPath(track.albumId)),
               child: MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: ArtImage(
@@ -158,7 +178,7 @@ class _Meta extends ConsumerWidget {
         GestureDetector(
           onTap: (track.artist ?? '').isEmpty
               ? null
-              : () => context.go(artistPath(track.artist!)),
+              : () => pushInShell(context, artistPath(track.artist!)),
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: Text(

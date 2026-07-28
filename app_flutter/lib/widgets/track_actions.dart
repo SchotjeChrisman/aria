@@ -1,12 +1,12 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../core/phosphor_icons.dart';
 import '../core/toast.dart';
 
 import '../core/downloads.dart';
 import '../core/player_providers.dart';
+import '../core/router.dart';
 import '../core/playlists_providers.dart';
 import '../core/selection.dart';
 import '../core/theme.dart';
@@ -22,6 +22,17 @@ import 'tag_picker.dart';
 /// Route contracts (features never import each other's routes).
 String albumPath(String albumId) => '/album/$albumId';
 String artistPath(String name) => '/artist/${Uri.encodeComponent(name)}';
+String composerPath(String name) => '/composer/${Uri.encodeComponent(name)}';
+String compositionPath(String name) =>
+    '/composition/${Uri.encodeComponent(name)}';
+
+/// The name a track's composition page is keyed by: explicit work tag when
+/// present (classical), otherwise the title (covers match by normalized
+/// title on the page itself).
+String? compositionName(Track t) {
+  final n = t.work ?? t.title;
+  return (n == null || n.isEmpty) ? null : n;
+}
 
 // ------------------------------------------------------------ playlists
 
@@ -147,13 +158,15 @@ AriaMenuItem downloadMenuItem(WidgetRef ref, List<Track> tracks) {
 // ---------------------------------------------------------------- menus
 
 /// Legacy trackCtx: Play / Play next / Add to queue / Add to playlist… /
-/// Tags… / Go to album / Go to artist / [extra] / Select…
+/// Tags… / Go to album / Go to artist / Go to composer / Go to composition /
+/// [extra] / Select…
 List<AriaMenuItem> trackMenuItems(
   BuildContext context,
   WidgetRef ref,
   Track t, {
   bool goToAlbum = true,
   bool goToArtist = true,
+  bool goToComposition = true,
   List<AriaMenuItem> extra = const [],
 }) {
   final queue = ref.read(queueProvider.notifier);
@@ -187,14 +200,26 @@ List<AriaMenuItem> trackMenuItems(
     if (goToAlbum)
       AriaMenuItem(
         'Go to album',
-        () => context.push(albumPath(t.albumId)),
+        () => pushInShell(context, albumPath(t.albumId)),
         icon: PhosphorIconsRegular.vinylRecord,
       ),
     if (goToArtist && (t.artist ?? '').isNotEmpty)
       AriaMenuItem(
         'Go to artist',
-        () => context.push(artistPath(t.artist!)),
+        () => pushInShell(context, artistPath(t.artist!)),
         icon: PhosphorIconsRegular.user,
+      ),
+    if ((t.composer ?? '').isNotEmpty)
+      AriaMenuItem(
+        'Go to composer',
+        () => pushInShell(context, composerPath(t.composer!)),
+        icon: PhosphorIconsRegular.pianoKeys,
+      ),
+    if (goToComposition && compositionName(t) != null)
+      AriaMenuItem(
+        'Go to composition',
+        () => pushInShell(context, compositionPath(compositionName(t)!)),
+        icon: PhosphorIconsRegular.musicNotes,
       ),
     ...extra,
     AriaMenuItem(
@@ -246,7 +271,7 @@ List<AriaMenuItem> albumMenuItems(
     if (artistName != null && artistName.isNotEmpty)
       AriaMenuItem(
         'Go to artist',
-        () => context.push(artistPath(artistName)),
+        () => pushInShell(context, artistPath(artistName)),
         icon: PhosphorIconsRegular.user,
       ),
     ...extra,

@@ -49,6 +49,22 @@ String formatBadgeText({String? format, int? bitsPerSample, int? sampleRate}) {
 bool isHiRes({int? bitsPerSample, int? sampleRate}) =>
     (bitsPerSample ?? 0) > 16 || (sampleRate ?? 0) > 48000;
 
+/// Edition-tolerant title key (legacy normTitle):
+/// "Brothers in Arms (Remastered)" == "Brothers in Arms".
+/// Deviation: no NFD diacritic folding (Dart has no built-in normalizer), so
+/// "Björk" keys as "bj rk" — dedupe is slightly weaker on accented titles.
+String normTitle(String? s) {
+  var x = (s ?? '').toLowerCase();
+  x = x.replaceAll(
+    RegExp(
+      r'\s*[(\[][^)\]]*(remaster|deluxe|edition|version|anniversary|expanded|bonus|live|mono|stereo|\b\d{4}\b)[^)\]]*[)\]]',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  return x.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+}
+
 /// "512 B", "3.4 MB", "1.2 GB" — download sizes, decimal units.
 String formatBytes(int bytes) {
   if (bytes < 1000) return '$bytes B';
