@@ -3,7 +3,7 @@ description: "Aria v2 — self-hosted lossless music player (Flutter client)."
 publish_to: 'none'
 
 # build number tracks release count — Android needs it rising to update in place
-version: 3.2.0+12
+version: 3.3.0+13
 
 environment:
   sdk: ^3.12.0
@@ -76,6 +76,9 @@ flutter_launcher_icons:
   min_sdk_android: 21
   adaptive_icon_background: "#D13B58"
   adaptive_icon_foreground: "branding/icon_foreground.png"
+  # branding/icon.png is RGB with no alpha channel, which is what iOS requires
+  # — no remove_alpha_ios needed.
+  ios: true
   macos:
     generate: true
     image_path: "branding/icon.png"

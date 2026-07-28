@@ -10,10 +10,16 @@ dependencies:
   flutter:
     sdk: flutter
   ffi: ^2.1.4
-  # These three exist solely for their bundled libmpv binaries.
+  # These four exist solely for their bundled libmpv binaries. (Except on
+  # Linux: media_kit_libs_linux bundles nothing, it links the system libmpv —
+  # packaging/appimage/build.sh and the flatpak manifest supply it there.)
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_macos_audio: ^1.1.4
   media_kit_libs_android_audio: ^1.3.8
+  # ponytail: 1.1.4 is the last release (2023) — libmpv 0.36 via
+  # libmpv-darwin-build v0.6.0. Ceiling: a codec/security fix upstream means
+  # forking its Makefile onto a newer libmpv-darwin-build tag.
+  media_kit_libs_ios_audio: ^1.1.4
 
 dev_dependencies:
   flutter_test:

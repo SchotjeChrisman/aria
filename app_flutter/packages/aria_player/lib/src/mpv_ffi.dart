@@ -84,8 +84,13 @@ List<String> libmpvCandidates() {
     // Android: media_kit_libs_android_audio ships libmpv.so in the APK's
     // jniLibs, resolved by the system linker by soname alone.
     if (Platform.isAndroid) 'libmpv.so',
+    // iOS: media_kit_libs_ios_audio embeds Mpv.framework (dynamic, install
+    // name @rpath/Mpv.framework/Mpv) in the .app; CocoaPods links it, so dyld
+    // already holds it under this name. Same string package:media_kit uses.
+    if (Platform.isIOS) 'Mpv.framework/Mpv',
     if (Platform.isLinux) ...[
-      // media_kit_libs_linux bundles libmpv into the app bundle's lib dir.
+      // Packaged builds (packaging/appimage/build.sh, the flatpak manifest)
+      // drop libmpv here; media_kit_libs_linux itself bundles nothing.
       '$exeDir${sep}lib${sep}libmpv.so',
       // System fallbacks.
       'libmpv.so.2',
@@ -134,8 +139,8 @@ void _forceNumericLocaleC() {
   try {
     final setlocale = DynamicLibrary.process()
         .lookupFunction<_SetLocaleC, _SetLocaleD>('setlocale');
-    // glibc/bionic: LC_NUMERIC == 1; BSD libc (macOS): LC_NUMERIC == 4.
-    final lcNumeric = Platform.isMacOS ? 4 : 1;
+    // glibc/bionic: LC_NUMERIC == 1; BSD libc (macOS/iOS): LC_NUMERIC == 4.
+    final lcNumeric = Platform.isMacOS || Platform.isIOS ? 4 : 1;
     final c = 'C'.toNativeUtf8();
     setlocale(lcNumeric, c);
     calloc.free(c);

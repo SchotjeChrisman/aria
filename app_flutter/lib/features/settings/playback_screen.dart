@@ -18,9 +18,9 @@ class PlaybackScreen extends ConsumerWidget {
       body: ListView(
         padding: ariaPagePadding(context),
         children: [
-          // Exclusive access is a desktop-only mpv option (the engine no-ops
-          // it on Android) — a dead switch just misleads.
-          if (!Platform.isAndroid) const _ExclusiveToggle(),
+          // Exclusive access is a desktop-only mpv option (Android's mixer and
+          // iOS's audiounit ao both ignore it) — a dead switch just misleads.
+          if (!Platform.isAndroid && !Platform.isIOS) const _ExclusiveToggle(),
           const _EqTile(),
         ],
       ),

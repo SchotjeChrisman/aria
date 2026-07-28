@@ -2,7 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<!-- Deliberately empty: unsandboxed, like every release shipped so far.
+	     The old ad-hoc re-signing step in CI passed no entitlements, which
+	     silently dropped the app-sandbox declared here, and that accident is
+	     the only reason the app could reach a server: it was never granted
+	     com.apple.security.network.client alongside the sandbox. Re-sandboxing
+	     now would move ~/Library/Application Support/dev.aria.aria into a
+	     container and hide every existing user's prefs, logs and downloads.
+	     ponytail: only worth revisiting for a Mac App Store submission, which
+	     needs network.client and a data migration too. -->
 </dict>
 </plist>

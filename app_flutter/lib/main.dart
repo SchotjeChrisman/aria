@@ -41,10 +41,10 @@ Future<void> main() async {
       appSupportDirProvider.overrideWithValue(support),
     ],
   );
-  // Android: media session + foreground service so playback survives
+  // Mobile: media session (+ Android foreground service) so playback survives
   // backgrounding, and losing the output device pauses. Desktop needs
   // neither — the mpv engine already handles ao errors there.
-  if (Platform.isAndroid) await initBackgroundAudio(container);
+  if (Platform.isAndroid || Platform.isIOS) await initBackgroundAudio(container);
   runApp(
     UncontrolledProviderScope(container: container, child: const AriaApp()),
   );

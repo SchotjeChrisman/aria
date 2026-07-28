@@ -8,5 +8,9 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Debug builds stay sandboxed, so reaching the aria server needs this
+	     explicitly (the template only grants .server, for the VM service). -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>

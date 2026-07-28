@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'connection.dart';
 import 'player_providers.dart';
 
-// Android-only: main() guards the single call site with Platform.isAndroid.
-// A media session + foreground service keep the process (and its HTTP
-// stream) alive in the background; the audio session pauses playback when
-// the output device goes away. Desktop never reaches this code.
+// Mobile-only: main() guards the single call site on Android/iOS. A media
+// session (plus a foreground service on Android) keeps the process — and its
+// HTTP stream — alive in the background; the audio session pauses playback
+// when the output device goes away. Desktop never reaches this code.
+// The android* config fields below are ignored on iOS; there the same
+// AudioServiceConfig drives the now-playing/lock-screen controls.
 
 Future<void> initBackgroundAudio(ProviderContainer container) async {
   await AudioService.init(
@@ -45,7 +47,11 @@ Future<void> initBackgroundAudio(ProviderContainer container) async {
       }
     } else if (pausedByInterruption) {
       pausedByInterruption = false;
-      player.resume();
+      // iOS signals "safe to resume" as type `pause` and "don't" as `unknown`
+      // (AVAudioSession's shouldResume). Resuming on `unknown` would grab a
+      // non-mixing session back from whatever the user started meanwhile.
+      // Android only ever ends an interruption we paused for with `pause`.
+      if (e.type == AudioInterruptionType.pause) player.resume();
     }
   });
   // audio_session only registers the noisy receiver and the focus-change

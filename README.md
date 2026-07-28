@@ -61,21 +61,53 @@ the legacy files. Track/album IDs are unchanged (sha1, see below).
 
 ```sh
 cd app_flutter
-flutter run -d linux      # or: macos, or an Android device
+flutter run -d linux      # or: macos, ios, or an Android device
 flutter build linux --release
 ```
 
 Point it at your server URL on first launch (default `http://localhost:3000`;
 the bundled container publishes on `:3001`).
 
-Playback engine: libmpv is bundled inside the app on **macOS and Android**.
-On **Linux**, bundle it into the build output with
+### Installing a release build
+
+Every release carries `aria-linux-x64.tar.gz`, `aria-linux-x86_64.AppImage`,
+`aria-linux-x64.flatpak`, `aria-macos.zip`, `aria-android.apk` and
+`aria-ios-unsigned.ipa`.
+
+- **Linux — AppImage:** `chmod +x aria-linux-x86_64.AppImage && ./aria-…`.
+  Self-contained for libmpv; GTK and the graphics stack come from the host, and
+  glibc must be at least the build runner's. Older distros: use the flatpak.
+- **macOS:** unless the repo has Apple signing secrets configured, the `.app`
+  is ad-hoc signed but not notarized (that needs a paid Developer account), so
+  macOS quarantines a browser download and refuses to open it — *"Apple could
+  not verify 'aria' is free of malware"*. There is no Control-click bypass any
+  more (removed in macOS 15). Drag `aria.app` to `/Applications`, then run once:
+
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/aria.app
+  ```
+
+  Downloading with `gh release download` or `curl` never sets the quarantine
+  flag, so no command is needed that way.
+- **iOS:** the `.ipa` is unsigned and cannot be installed as-is. iOS has no
+  Developer ID equivalent — an installable build needs an Apple Distribution
+  certificate plus a provisioning profile naming each device, which no public
+  repo can ship. Re-sign it yourself with [AltStore] or [Sideloadly]; a free
+  Apple ID works but the signature expires every 7 days.
+
+[AltStore]: https://altstore.io
+[Sideloadly]: https://sideloadly.io
+
+Playback engine: libmpv is bundled inside the app on **macOS, iOS and
+Android**. On **Linux**, bundle it into the build output with
 `linux/bundle_libmpv.sh` (rootless — extracts distro RPMs into `bundle/lib`;
 re-run after each `flutter build linux`; needs `patchelf`, or point
 `PATCHELF=` at one). Alternatively install system libmpv
 (`dnf install mpv-libs` / `apt install libmpv2`). Without either, the app
 runs and says so, but won't play. For distributable Linux packaging, use
-Flatpak rather than shipping the ffmpeg stack yourself.
+[`packaging/appimage/build.sh`](packaging/appimage/build.sh) (apt-based, copies
+the system libmpv and its deps into the AppDir) or the Flatpak manifest —
+don't ship the ffmpeg stack by hand.
 Playback is a direct FFI binding to libmpv: gapless,
 optional exclusive-mode output on desktop, and a format badge showing the
 actual stream (e.g. FLAC 24/96). A streaming-quality setting picks original vs.
