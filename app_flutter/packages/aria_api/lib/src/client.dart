@@ -423,6 +423,55 @@ class AriaClient {
   Future<List<NewRelease>> newReleases() async =>
       _list(await _get('/api/newreleases'), NewRelease.fromJson);
 
+  // ---- listen later / unowned albums
+
+  /// Album detail for something not in the library. The server resolves
+  /// artist+title to a universal id (MusicBrainz release group, else Deezer)
+  /// and caches the result for 30 days. Null when nothing matches.
+  Future<ExtAlbum?> extAlbum(String artist, String title,
+      {int? deezerId}) async {
+    final j = await _get('/api/extalbum',
+        query: {
+          'artist': artist,
+          'title': title,
+          if (deezerId != null) 'deezerId': '$deezerId',
+        },
+        nullOn404: true);
+    return j == null ? null : ExtAlbum.fromJson(asMap(j));
+  }
+
+  /// Server's caching cover proxy for an unowned album. Deezer's CDN drops
+  /// under burst load and rotates URLs, so load this first and fall back to
+  /// the raw [coverUrl] — same chain as [peopleImgUrl]. The server only
+  /// proxies known cover CDNs; anything else 404s and the fallback takes over.
+  String extAlbumImgUrl(String coverUrl) =>
+      _u('/api/extalbum/img', {'u': coverUrl}).toString();
+
+  Future<List<ListenLaterAlbum>> listenLater({String? profileId}) async =>
+      _list(
+          await _get('/api/listenlater',
+              query: {if (profileId != null) 'profileId': profileId}),
+          ListenLaterAlbum.fromJson);
+
+  /// Saves an album to hear later. Re-adding one already saved is a no-op.
+  /// Costs a lookup on the server the first time (~1-3s, then cached).
+  Future<ListenLaterAlbum> addListenLater({
+    required String artist,
+    required String title,
+    String? profileId,
+    int? deezerId,
+  }) async =>
+      ListenLaterAlbum.fromJson(asMap(await _post('/api/listenlater', {
+        'artist': artist,
+        'title': title,
+        if (profileId != null) 'profileId': profileId,
+        if (deezerId != null) 'deezerId': deezerId,
+      })));
+
+  Future<void> removeListenLater(String id, {String? profileId}) => _delete(
+      '/api/listenlater/${Uri.encodeComponent(id)}'
+      '${profileId == null ? '' : '?profileId=${Uri.encodeComponent(profileId)}'}');
+
   // ---- playlists
 
   Future<List<Playlist>> playlists({String? profileId}) async => _list(

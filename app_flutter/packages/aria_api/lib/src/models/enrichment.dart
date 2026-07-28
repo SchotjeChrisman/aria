@@ -34,18 +34,23 @@ class SimilarArtist {
 
 class DiscographyItem {
   const DiscographyItem(
-      {required this.title, this.cover, this.date, this.type});
+      {required this.title, this.cover, this.date, this.type, this.deezerId});
 
   final String title;
   final String? cover;
   final String? date; // yyyy-mm-dd
   final String? type; // album | ep | single ... (lowercase)
 
+  /// Absent from discographies cached before the id was kept; null only means
+  /// the server falls back to a name search when resolving this album.
+  final int? deezerId;
+
   factory DiscographyItem.fromJson(Map<String, dynamic> j) => DiscographyItem(
         title: j['title'] as String,
         cover: asString(j['cover']),
         date: asString(j['date']),
         type: asString(j['type']),
+        deezerId: asInt(j['deezerId']),
       );
 }
 
@@ -246,6 +251,7 @@ class NewRelease {
     this.cover,
     required this.date,
     required this.type,
+    this.deezerId,
   });
 
   final String artist;
@@ -254,11 +260,129 @@ class NewRelease {
   final String date; // yyyy-mm-dd
   final String type;
 
+  /// Present only once the artist's discography has been re-cached since the
+  /// id started being kept; null just means the server does a name search.
+  final int? deezerId;
+
   factory NewRelease.fromJson(Map<String, dynamic> j) => NewRelease(
         artist: j['artist'] as String,
         title: j['title'] as String,
         cover: asString(j['cover']),
         date: j['date'] as String,
         type: asString(j['type']) ?? 'album',
+        deezerId: asInt(j['deezerId']),
+      );
+}
+
+/// One track of an album that isn't in the library — listable, not playable.
+class ExtTrack {
+  const ExtTrack({
+    required this.title,
+    required this.duration,
+    required this.disc,
+    required this.number,
+  });
+
+  final String title;
+  final int duration; // seconds
+  final int disc;
+  final int number;
+
+  factory ExtTrack.fromJson(Map<String, dynamic> j) => ExtTrack(
+        title: asString(j['title']) ?? '',
+        duration: asInt(j['duration']) ?? 0,
+        disc: asInt(j['disc']) ?? 1,
+        number: asInt(j['number']) ?? 0,
+      );
+}
+
+/// `/api/extalbum`: an album nobody here owns, infused from Deezer and
+/// MusicBrainz. [id] is the universal identity — `rg:<release-group mbid>`, or
+/// `dz:<deezer id>` while MusicBrainz still hasn't ingested the record.
+class ExtAlbum {
+  const ExtAlbum({
+    required this.id,
+    required this.artist,
+    required this.title,
+    this.cover,
+    required this.date,
+    required this.type,
+    this.label,
+    this.link,
+    this.upc,
+    this.deezerId,
+    this.tracks = const [],
+  });
+
+  final String id;
+  final String artist;
+  final String title;
+  final String? cover;
+  final String date;
+  final String type;
+  final String? label;
+  final String? link;
+
+  /// The barcode. Deezer, MusicBrainz and Qobuz all carry it, so it is what
+  /// lets one saved album be recognised in another catalogue.
+  final String? upc;
+  final int? deezerId;
+  final List<ExtTrack> tracks;
+
+  factory ExtAlbum.fromJson(Map<String, dynamic> j) => ExtAlbum(
+        id: asString(j['id']) ?? '',
+        artist: asString(j['artist']) ?? '',
+        title: asString(j['title']) ?? '',
+        cover: asString(j['cover']),
+        date: asString(j['date']) ?? '',
+        type: asString(j['type']) ?? 'album',
+        label: asString(j['label']),
+        link: asString(j['link']),
+        upc: asString(j['upc']),
+        deezerId: asInt(j['deezerId']),
+        tracks: j['tracks'] is List
+            ? (j['tracks'] as List)
+                .whereType<Map<String, dynamic>>()
+                .map(ExtTrack.fromJson)
+                .toList()
+            : const [],
+      );
+}
+
+/// `/api/listenlater` entry: an album saved to hear later, which by definition
+/// is not in the library — the server drops it from this list once it arrives.
+class ListenLaterAlbum {
+  const ListenLaterAlbum({
+    required this.id,
+    required this.artist,
+    required this.title,
+    this.cover,
+    this.date,
+    required this.type,
+    this.upc,
+    this.deezerId,
+    required this.addedAt,
+  });
+
+  final String id;
+  final String artist;
+  final String title;
+  final String? cover;
+  final String? date;
+  final String type;
+  final String? upc;
+  final int? deezerId;
+  final String addedAt;
+
+  factory ListenLaterAlbum.fromJson(Map<String, dynamic> j) => ListenLaterAlbum(
+        id: asString(j['id']) ?? '',
+        artist: asString(j['artist']) ?? '',
+        title: asString(j['title']) ?? '',
+        cover: asString(j['cover']),
+        date: asString(j['date']),
+        type: asString(j['type']) ?? 'album',
+        upc: asString(j['upc']),
+        deezerId: asInt(j['deezerId']),
+        addedAt: asString(j['addedAt']) ?? '',
       );
 }

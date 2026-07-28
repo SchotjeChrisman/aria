@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/home/routes.dart' as home;
 import '../features/library/routes.dart' as library_;
+import '../features/listen_later/routes.dart' as listen_later;
 import '../features/now_playing/routes.dart' as now_playing;
 import '../features/playlists/routes.dart' as playlists;
 import '../features/radio/routes.dart' as radio;
@@ -69,6 +70,7 @@ final List<FeatureEntry> featureEntries = [
   ...library_.featureEntries,
   search.searchFeatureEntry,
   playlists.featureEntry,
+  listen_later.featureEntry,
   tags.featureEntry,
   radio.radioFeatureEntry,
   stats.statsFeatureEntry,

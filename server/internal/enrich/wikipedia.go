@@ -22,21 +22,28 @@ const userAgent = "aria/0.1 (self-hosted music server; contact: local)"
 // failure; lookups map it to a definitive miss.
 var errNotFound = errors.New("not found")
 
+// The per-host schedule is process-global, not per-client. MusicBrainz's
+// 1 req/s is a ban-triggering limit applied to the whole server, so every
+// politeClient — the enricher's, each NewMB/NewDeezer, on-demand route
+// handlers — has to queue against one schedule. Per-instance maps would let
+// two callers hit the same host at twice the agreed rate.
+var (
+	hostMu     sync.Mutex
+	hostNextAt = map[string]time.Time{}
+)
+
 // politeClient enforces the legacy per-host gaps: MusicBrainz hard-requires
 // <=1 req/s (1100ms), everyone else gets 300ms. 503/429 retried after
 // retryWait, 3 attempts total.
 type politeClient struct {
 	hc        *http.Client
 	retryWait time.Duration
-	mu        sync.Mutex
-	nextAt    map[string]time.Time
 }
 
 func newPoliteClient() *politeClient {
 	return &politeClient{
 		hc:        &http.Client{Timeout: 15 * time.Second},
 		retryWait: 3 * time.Second,
-		nextAt:    map[string]time.Time{},
 	}
 }
 
@@ -45,13 +52,13 @@ func (c *politeClient) reserve(host string) time.Duration {
 	if strings.Contains(host, "musicbrainz") {
 		gap = 1100 * time.Millisecond
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	wait := time.Until(c.nextAt[host])
+	hostMu.Lock()
+	defer hostMu.Unlock()
+	wait := time.Until(hostNextAt[host])
 	if wait < 0 {
 		wait = 0
 	}
-	c.nextAt[host] = time.Now().Add(wait + gap)
+	hostNextAt[host] = time.Now().Add(wait + gap)
 	return wait
 }
 

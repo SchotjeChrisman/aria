@@ -445,36 +445,57 @@ func periodCounts(w http.ResponseWriter, r *http.Request, d *Deps) {
 }
 
 type release struct {
-	Artist string  `json:"artist"`
-	Title  string  `json:"title"`
-	Cover  *string `json:"cover"`
-	Date   string  `json:"date"`
-	Type   string  `json:"type"`
-	n      string
+	Artist   string  `json:"artist"`
+	Title    string  `json:"title"`
+	Cover    *string `json:"cover"`
+	Date     string  `json:"date"`
+	Type     string  `json:"type"`
+	DeezerID int64   `json:"deezerId,omitempty"`
+	n        string
+}
+
+// ownedTitles maps albumArtist -> set of normTitle(album) for everything in
+// the library. Shared by /api/newreleases and Listen Later so an album cannot
+// be "not in the library" on the home shelf and "owned" in the saved list at
+// the same time.
+//
+// ponytail: reads raw tracks, so an album retitled through the edits table
+// still looks unowned. Overlay the edits view here if that ever bites; it
+// fixes both callers at once.
+func ownedTitles(ctx context.Context, d *Deps) (map[string]map[string]bool, error) {
+	rows, err := d.DB.QueryContext(ctx, `SELECT DISTINCT albumArtist, album FROM tracks WHERE albumArtist <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]map[string]bool{}
+	for rows.Next() {
+		var aa, al string
+		if err := rows.Scan(&aa, &al); err != nil {
+			return nil, err
+		}
+		// normTitle strips everything outside [a-z0-9], so a symbol-only or
+		// non-Latin title ("÷", "ハウルの動く城") — and an empty album column —
+		// normalizes to "". Keying on that would make every such title equal to
+		// every other, so drop it: an unusable key is worse than a missing one.
+		n := normTitle(al)
+		if n == "" {
+			continue
+		}
+		if out[aa] == nil {
+			out[aa] = map[string]bool{}
+		}
+		out[aa][n] = true
+	}
+	return out, rows.Err()
 }
 
 // newReleases: recently released, not-in-library items from the cached Deezer
 // discographies (enrich_cache kind "artist", field "discography"). Cache only —
 // no network; cold cache or empty library just yields [].
 func newReleases(ctx context.Context, d *Deps) ([]release, error) {
-	rows, err := d.DB.QueryContext(ctx, `SELECT DISTINCT albumArtist, album FROM tracks WHERE albumArtist <> ''`)
+	libTitles, err := ownedTitles(ctx, d)
 	if err != nil {
-		return nil, err
-	}
-	libTitles := map[string]map[string]bool{} // albumArtist -> set of normTitle(owned albums)
-	for rows.Next() {
-		var aa, al string
-		if err := rows.Scan(&aa, &al); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		if libTitles[aa] == nil {
-			libTitles[aa] = map[string]bool{}
-		}
-		libTitles[aa][normTitle(al)] = true
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -497,10 +518,11 @@ func newReleases(ctx context.Context, d *Deps) ([]release, error) {
 	for _, name := range artists {
 		var e struct {
 			Discography []struct {
-				Title string  `json:"title"`
-				Cover *string `json:"cover"`
-				Date  *string `json:"date"`
-				Type  *string `json:"type"`
+				Title    string  `json:"title"`
+				Cover    *string `json:"cover"`
+				Date     *string `json:"date"`
+				Type     *string `json:"type"`
+				DeezerID int64   `json:"deezerId"`
 			} `json:"discography"`
 		}
 		if json.Unmarshal(entries[name], &e) != nil {
@@ -528,7 +550,7 @@ func newReleases(ctx context.Context, d *Deps) ([]release, error) {
 			if cover != nil && *cover == "" { // legacy `x.cover || null`
 				cover = nil
 			}
-			out = append(out, release{Artist: name, Title: x.Title, Cover: cover, Date: *x.Date, Type: typ, n: n})
+			out = append(out, release{Artist: name, Title: x.Title, Cover: cover, Date: *x.Date, Type: typ, DeezerID: x.DeezerID, n: n})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Date > out[j].Date })

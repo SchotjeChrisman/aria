@@ -38,6 +38,7 @@ type Deps struct {
 	Albums      *repo.Albums
 	Tags        *repo.Tags
 	Playlists   *repo.Playlists
+	ListenLater *repo.ListenLaters
 	Profiles    *repo.Profiles
 	Plays       *repo.Plays
 	Edits       *repo.Edits
@@ -111,6 +112,7 @@ func NewDeps(db *sql.DB, cfg config.Config, version string) *Deps {
 		Albums:      repo.NewAlbums(db),
 		Tags:        repo.NewTags(db),
 		Playlists:   repo.NewPlaylists(db),
+		ListenLater: repo.NewListenLaters(db),
 		Profiles:    repo.NewProfiles(db),
 		Plays:       repo.NewPlays(db),
 		Edits:       repo.NewEdits(db),

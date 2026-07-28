@@ -385,6 +385,61 @@ void main() {
         'type': 'album',
       });
       expect(nr.date, '2026-06-20');
+      // Discographies cached before the id was kept simply omit it.
+      expect(nr.deezerId, isNull);
+    });
+
+    test('unowned albums: ExtAlbum / ListenLaterAlbum', () {
+      final a = ExtAlbum.fromJson({
+        'id': 'rg:aa997ea0-2936-40bd-884d-3af8a0e064dc',
+        'rgMbid': 'aa997ea0-2936-40bd-884d-3af8a0e064dc',
+        'upc': '886443927087',
+        'deezerId': 6575789,
+        'artist': 'Daft Punk',
+        'title': 'Random Access Memories',
+        'cover': 'https://cdn/x.jpg',
+        'date': '2013-05-17',
+        'type': 'album',
+        'label': 'Columbia',
+        'link': 'https://www.deezer.com/album/6575789',
+        'tracks': [
+          {'title': 'Give Life Back to Music', 'duration': 274, 'disc': 1,
+              'number': 1},
+        ],
+        'releases': ['5000a285-b67e-4cfc-b54b-2b98f1810d2e'],
+      });
+      expect(a.id, startsWith('rg:'));
+      expect(a.upc, '886443927087');
+      expect(a.tracks.single.duration, 274);
+
+      // MusicBrainz lags new releases, so the Deezer-keyed shape must parse
+      // just as happily — including a null cover and no track listing.
+      final pending = ExtAlbum.fromJson({
+        'id': 'dz:650278821',
+        'deezerId': 650278821,
+        'artist': 'Coldplay',
+        'title': 'Moon Music',
+        'cover': null,
+        'date': '2024-10-04',
+        'type': 'album',
+      });
+      expect(pending.id, 'dz:650278821');
+      expect(pending.upc, isNull);
+      expect(pending.tracks, isEmpty);
+
+      final e = ListenLaterAlbum.fromJson({
+        'id': 'rg:1',
+        'artist': 'Coldplay',
+        'title': 'Moon Music',
+        'cover': null,
+        'date': null,
+        'type': 'album',
+        'upc': null,
+        'deezerId': null,
+        'addedAt': '2026-07-28T10:00:00.000Z',
+      });
+      expect(e.id, 'rg:1');
+      expect(e.date, isNull);
     });
   });
 

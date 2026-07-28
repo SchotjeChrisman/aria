@@ -85,6 +85,7 @@ type mbRelease struct {
 		} `json:"label"`
 	} `json:"label-info"`
 	ReleaseGroup *struct {
+		ID             string   `json:"id"`
 		PrimaryType    string   `json:"primary-type"`
 		SecondaryTypes []string `json:"secondary-types"`
 	} `json:"release-group"`
@@ -98,6 +99,83 @@ func (m *MB) searchReleases(ctx context.Context, album, artist string, limit int
 	}
 	m.get(ctx, fmt.Sprintf("release/?query=%s&limit=%d", q, limit), &out)
 	return out.Releases
+}
+
+// ReleaseGroupByBarcode resolves a UPC to a MusicBrainz release-group MBID —
+// the identity that survives across editions and across catalogues, since
+// Deezer, Qobuz and MusicBrainz all carry the barcode. "" when MB does not
+// know the barcode, which is common for the first weeks of a new release.
+//
+// The release search embeds release-group.id in its hits, so this is one
+// request, not a search followed by a lookup.
+func (m *MB) ReleaseGroupByBarcode(ctx context.Context, upc string) string {
+	if upc == "" {
+		return ""
+	}
+	var out struct {
+		Releases []mbRelease `json:"releases"`
+	}
+	m.get(ctx, "release/?query="+url.QueryEscape("barcode:"+upc)+"&limit=5", &out)
+	// One barcode can legitimately hit several releases (territory variants,
+	// or MB data errors); they nearly always share a group. Highest score wins.
+	best, bestScore := "", -1
+	for _, r := range out.Releases {
+		if r.ReleaseGroup == nil || r.ReleaseGroup.ID == "" {
+			continue
+		}
+		s := 0
+		if r.Score != nil {
+			s = *r.Score
+		}
+		if s > bestScore {
+			best, bestScore = r.ReleaseGroup.ID, s
+		}
+	}
+	return best
+}
+
+// ReleaseGroupByName is the fallback when there is no usable barcode: the
+// legacy artist+title search, narrowed by release date. year is the release
+// year to prefer ("" to skip); a hit within a year of it beats a bare top hit,
+// because a title search alone happily returns a tribute album.
+func (m *MB) ReleaseGroupByName(ctx context.Context, artist, title, year string) string {
+	best, bestScore := "", -1
+	for _, r := range m.searchReleases(ctx, title, artist, 8) {
+		if r.ReleaseGroup == nil || r.ReleaseGroup.ID == "" {
+			continue
+		}
+		s := 0
+		if r.Score != nil {
+			s = *r.Score
+		}
+		if year != "" && len(r.Date) >= 4 && r.Date[:4] == year {
+			s += 50
+		}
+		if s > bestScore {
+			best, bestScore = r.ReleaseGroup.ID, s
+		}
+	}
+	return best
+}
+
+// ReleasesInGroup lists the release MBIDs belonging to a release group. A
+// library rip is tagged with one specific release, so membership in this set
+// is what proves "this album is now owned" regardless of which edition.
+func (m *MB) ReleasesInGroup(ctx context.Context, rgid string) []string {
+	if rgid == "" {
+		return nil
+	}
+	var out struct {
+		Releases []struct {
+			ID string `json:"id"`
+		} `json:"releases"`
+	}
+	m.get(ctx, "release?release-group="+url.QueryEscape(rgid)+"&limit=100", &out)
+	ids := make([]string, 0, len(out.Releases))
+	for _, r := range out.Releases {
+		ids = append(ids, r.ID)
+	}
+	return ids
 }
 
 // release looks one release up with the given inc= set; nil on any failure.

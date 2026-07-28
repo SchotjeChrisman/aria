@@ -81,12 +81,15 @@ func (d *Deezer) Similar(ctx context.Context, name string) ([]SimilarArtist, err
 	return out, nil
 }
 
-// DiscographyItem matches the cached shape: {title, cover|null, date|null, type}.
+// DiscographyItem matches the cached shape: {title, cover|null, date|null,
+// type}. deezerId is additive — blobs cached before it existed simply lack it,
+// and callers fall back to a name search (see AlbumID).
 type DiscographyItem struct {
-	Title string  `json:"title"`
-	Cover *string `json:"cover"`
-	Date  *string `json:"date"`
-	Type  string  `json:"type"`
+	Title    string  `json:"title"`
+	Cover    *string `json:"cover"`
+	Date     *string `json:"date"`
+	Type     string  `json:"type"`
+	DeezerID int64   `json:"deezerId,omitempty"`
 }
 
 // Discography returns all record types (album/single/ep/compilation), max 60.
@@ -104,6 +107,7 @@ func (d *Deezer) Discography(ctx context.Context, name string) ([]DiscographyIte
 	}
 	var raw struct {
 		Data []struct {
+			ID          int64  `json:"id"`
 			Title       string `json:"title"`
 			CoverMedium string `json:"cover_medium"`
 			ReleaseDate string `json:"release_date"`
@@ -118,7 +122,110 @@ func (d *Deezer) Discography(ctx context.Context, name string) ([]DiscographyIte
 		if typ == "" {
 			typ = "album"
 		}
-		out = append(out, DiscographyItem{Title: x.Title, Cover: nullable(x.CoverMedium), Date: nullable(x.ReleaseDate), Type: typ})
+		out = append(out, DiscographyItem{Title: x.Title, Cover: nullable(x.CoverMedium), Date: nullable(x.ReleaseDate), Type: typ, DeezerID: x.ID})
+	}
+	return out, nil
+}
+
+// ExtTrack is one track of an album nobody owns yet — enough to render a
+// listing, not enough to play (there is no file).
+type ExtTrack struct {
+	Title    string `json:"title"`
+	Duration int    `json:"duration"`
+	Disc     int    `json:"disc"`
+	Number   int    `json:"number"`
+}
+
+// ExtAlbum is Deezer's full album object: the UPC that bridges to
+// MusicBrainz/Qobuz, plus the content an unowned-album page shows.
+type ExtAlbum struct {
+	DeezerID int64      `json:"deezerId"`
+	Title    string     `json:"title"`
+	Artist   string     `json:"artist"`
+	UPC      string     `json:"upc"`
+	Cover    *string    `json:"cover"`
+	Date     string     `json:"date"`
+	Type     string     `json:"type"`
+	Label    string     `json:"label"`
+	Link     string     `json:"link"`
+	Tracks   []ExtTrack `json:"tracks"`
+}
+
+// AlbumID finds the Deezer album id for an artist+title. Deezer's field
+// operators (artist:"x" album:"y") return nothing on /search/album, so this
+// uses the same plain-text query as AlbumCoverURL and picks the hit whose
+// artist and title both match; 0 when nothing matches well enough.
+func (d *Deezer) AlbumID(ctx context.Context, artist, title string) (int64, error) {
+	var raw struct {
+		Data []struct {
+			ID     int64  `json:"id"`
+			Title  string `json:"title"`
+			Artist struct {
+				Name string `json:"name"`
+			} `json:"artist"`
+		} `json:"data"`
+	}
+	q := url.QueryEscape(artist + " " + title)
+	if err := d.c.getJSON(ctx, d.base+"/search/album?q="+q, &raw); err != nil {
+		return 0, err
+	}
+	for _, x := range raw.Data {
+		if strings.EqualFold(x.Artist.Name, artist) && strings.EqualFold(x.Title, title) {
+			return x.ID, nil
+		}
+	}
+	// Deezer's top hit for an exact "artist title" query is reliable enough to
+	// use, but only when the artist agrees — "Hounds of Love" must not resolve
+	// to a covers compilation.
+	for _, x := range raw.Data {
+		if strings.EqualFold(x.Artist.Name, artist) {
+			return x.ID, nil
+		}
+	}
+	return 0, nil
+}
+
+// Album fetches one album by Deezer id. (nil, nil) when Deezer 404s it.
+func (d *Deezer) Album(ctx context.Context, id int64) (*ExtAlbum, error) {
+	var raw struct {
+		ID     int64  `json:"id"`
+		Title  string `json:"title"`
+		UPC    string `json:"upc"`
+		Link   string `json:"link"`
+		Label  string `json:"label"`
+		Cover  string `json:"cover_xl"`
+		Date   string `json:"release_date"`
+		Type   string `json:"record_type"`
+		Artist struct {
+			Name string `json:"name"`
+		} `json:"artist"`
+		Tracks struct {
+			Data []struct {
+				Title    string `json:"title"`
+				Duration int    `json:"duration"`
+				Disc     int    `json:"disk_number"`
+				Number   int    `json:"track_position"`
+			} `json:"data"`
+		} `json:"tracks"`
+		Error *struct{} `json:"error"`
+	}
+	if err := d.c.getJSON(ctx, fmt.Sprintf("%s/album/%d", d.base, id), &raw); err != nil {
+		return nil, err
+	}
+	if raw.Error != nil || raw.ID == 0 {
+		return nil, nil
+	}
+	typ := strings.ToLower(raw.Type)
+	if typ == "" {
+		typ = "album"
+	}
+	out := &ExtAlbum{
+		DeezerID: raw.ID, Title: raw.Title, Artist: raw.Artist.Name, UPC: raw.UPC,
+		Cover: nullable(raw.Cover), Date: raw.Date, Type: typ, Label: raw.Label, Link: raw.Link,
+		Tracks: []ExtTrack{},
+	}
+	for _, t := range raw.Tracks.Data {
+		out.Tracks = append(out.Tracks, ExtTrack{Title: t.Title, Duration: t.Duration, Disc: t.Disc, Number: t.Number})
 	}
 	return out, nil
 }

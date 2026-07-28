@@ -23,6 +23,7 @@ tags:
   - name: edits
   - name: tags
   - name: playlists
+  - name: listen-later
   - name: profiles
   - name: plays
   - name: radio
@@ -1026,6 +1027,136 @@ paths:
                 maxItems: 60
                 items: { $ref: '#/components/schemas/NewRelease' }
 
+  # ---- listen later ---------------------------------------------------------------
+
+  /api/extalbum:
+    get:
+      tags: [listen-later]
+      summary: Detail for an album that is not in the library
+      description: |
+        The discovery counterpart of `/api/artist/{name}`, keyed the same
+        human-readable way. Resolves artist+title to a universal identity —
+        Deezer album -> UPC -> MusicBrainz release-group MBID — and returns the
+        content to render alongside it. Cached 30 days in `enrich_cache` (kind
+        `extAlbum`); a fetch failure serves the stale copy and caches nothing,
+        so an outage never becomes a permanent miss.
+      operationId: getExtAlbum
+      parameters:
+        - { name: artist, in: query, required: true, schema: { type: string } }
+        - { name: title, in: query, required: true, schema: { type: string } }
+        - name: deezerId
+          in: query
+          schema: { type: integer }
+          description: Skips the name search when the caller already has the id.
+      responses:
+        '200':
+          description: Album detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExtAlbum' }
+        '400': { description: artist and title are required. }
+        '404': { description: No such album upstream. }
+        '502': { description: Upstream lookup failed and nothing was cached. }
+
+  /api/extalbum/img:
+    get:
+      tags: [listen-later]
+      summary: Caching cover proxy for an unowned album
+      description: |
+        Fetches the remote cover once and serves it from the LAN, like the
+        portrait proxy. Deliberately does NO identity resolution — a shelf of
+        20 cards would otherwise be 20 resolve chains queued behind
+        MusicBrainz's 1 req/s limit just to draw thumbnails — so it takes the
+        cover URL the caller already holds.
+        `u` must be an https URL on a known cover CDN (Deezer, Cover Art
+        Archive); anything else 404s, which is what stops this being an open
+        proxy onto the server's network. Cached under
+        `DATA_DIR/extart/<sha1(u)>.jpg` for 30 days, then re-fetched; swept
+        oldest-first to `EXT_ART_CACHE_MB` (default 512). Clients should fall
+        back to the raw cover URL on 404.
+      operationId: getExtAlbumImg
+      parameters:
+        - name: u
+          in: query
+          required: true
+          schema: { type: string, format: uri }
+          description: Cover URL, https, on an allowlisted CDN host.
+      responses:
+        '200':
+          description: Cover image.
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        '404': { description: Host not allowlisted, no cover, or the fetch failed. }
+
+  /api/listenlater:
+    get:
+      tags: [listen-later]
+      summary: Albums saved to hear later
+      description: |
+        Only albums that are still not in the library. Entries whose albums have
+        arrived are filtered out **and deleted** in the same request, so the
+        cleanup needs no scan hook. "Arrived" means either a library track
+        tagged with a MusicBrainz release in the entry's release group, or a
+        matching albumArtist + edition-tolerant title (the fallback that covers
+        rips carrying no MusicBrainz tags).
+      operationId: getListenLater
+      parameters:
+        - { name: profileId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Saved albums, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ListenLaterAlbum' }
+    post:
+      tags: [listen-later]
+      summary: Save an album to hear later
+      description: |
+        Takes what a shelf card holds; the server resolves the universal id, so
+        clients never handle barcodes or MBIDs. Idempotent — re-saving refreshes
+        the stored fields instead of duplicating. Costs an upstream lookup the
+        first time (~1-3s), then serves from the 30-day cache.
+      operationId: addListenLater
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileId, artist, title]
+              properties:
+                profileId: { type: string }
+                artist:
+                  type: string
+                  description: >
+                    Stored as given. Callers should send the library's own
+                    albumArtist spelling — the ownership check compares against
+                    it, and the upstream catalogue's spelling can differ.
+                title: { type: string }
+                deezerId: { type: integer }
+      responses:
+        '200':
+          description: The saved entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListenLaterAlbum' }
+        '400': { description: artist and title are required, or the profile is unknown. }
+        '404': { description: No such album upstream. }
+        '502': { description: Upstream lookup failed. }
+
+  /api/listenlater/{id}:
+    delete:
+      tags: [listen-later]
+      summary: Remove a saved album
+      operationId: removeListenLater
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: profileId, in: query, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
   # ---- playlists ------------------------------------------------------------------
 
   /api/playlists:
@@ -1623,6 +1754,78 @@ components:
         cover: { type: [string, 'null'] }
         date: { type: string, description: YYYY-MM-DD. }
         type: { type: string, description: Lowercase record type; defaults to "album". }
+        deezerId:
+          type: integer
+          description: >
+            Deezer album id, when the cached discography carries one. Absent for
+            blobs cached before it was kept; the server then falls back to a
+            name search when resolving the album.
+
+    ExtTrack:
+      type: object
+      required: [title, duration, disc, number]
+      properties:
+        title: { type: string }
+        duration: { type: integer, description: Seconds. }
+        disc: { type: integer }
+        number: { type: integer }
+
+    ExtAlbum:
+      type: object
+      description: >
+        An album that is not in the library, infused from Deezer (content, UPC)
+        and MusicBrainz (identity). Cached 30 days.
+      required: [id, artist, title, cover, date, type, tracks]
+      properties:
+        id:
+          type: string
+          description: >
+            Universal album identity — "rg:<MusicBrainz release-group MBID>", or
+            "dz:<Deezer album id>" while MusicBrainz has not ingested the record
+            (normal for the first weeks of a release). Release-group rather than
+            release, so editions of one record share an identity.
+        rgMbid: { type: string, description: MusicBrainz release-group MBID, when resolved. }
+        upc:
+          type: string
+          description: >
+            Barcode. Deezer, MusicBrainz and Qobuz all carry it, so this is the
+            field that bridges catalogues.
+        deezerId: { type: integer }
+        artist: { type: string }
+        title: { type: string }
+        cover: { type: [string, 'null'], description: Remote CDN URL; proxy it via /api/extalbum/img. }
+        date: { type: string, description: YYYY-MM-DD. }
+        type: { type: string }
+        label: { type: string }
+        link: { type: string, description: Deezer album page. }
+        tracks:
+          type: array
+          items: { $ref: '#/components/schemas/ExtTrack' }
+        releases:
+          type: array
+          description: >
+            MusicBrainz release MBIDs in the group. A rip is tagged with one
+            specific release, so membership proves the album has been acquired.
+          items: { type: string }
+
+    ListenLaterAlbum:
+      type: object
+      required: [id, profileId, artist, title, titleKey, type, addedAt]
+      properties:
+        id: { type: string, description: Universal identity, as ExtAlbum.id. }
+        profileId: { type: string }
+        artist: { type: string }
+        title: { type: string }
+        titleKey: { type: string, description: Edition-tolerant normalized title, for the ownership fallback. }
+        upc: { type: [string, 'null'] }
+        deezerId: { type: [integer, 'null'] }
+        cover: { type: [string, 'null'] }
+        date: { type: [string, 'null'] }
+        type: { type: string }
+        releases:
+          type: array
+          items: { type: string }
+        addedAt: { type: string, format: date-time }
 
     PlayRef:
       type: object

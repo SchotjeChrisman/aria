@@ -1,11 +1,11 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/phosphor_icons.dart';
 
 import '../core/connection.dart';
-import '../core/theme.dart';
+import '../features/listen_later/providers.dart';
 import 'shelf.dart';
+import 'unowned_album_card.dart';
 
 /// Cache-only on the server: cold cache yields [] (shelf renders nothing).
 final newReleasesProvider = FutureProvider<List<NewRelease>>(
@@ -56,15 +56,13 @@ class NewReleasesShelf extends ConsumerWidget {
   }
 }
 
-class _NewReleaseCard extends StatelessWidget {
+class _NewReleaseCard extends ConsumerWidget {
   const _NewReleaseCard({required this.item});
 
   final NewRelease item;
 
   @override
-  Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
-
+  Widget build(BuildContext context, WidgetRef ref) {
     // Legacy nrCard: "Mon yyyy" from the release date.
     String mon = '';
     final d = DateTime.tryParse(item.date);
@@ -75,55 +73,23 @@ class _NewReleaseCard extends StatelessWidget {
       item.artist,
       if (mon.isNotEmpty) mon,
       if (ty != 'album') _typeLabel[ty] ?? ty,
+      'Not in library',
     ].join(' · ');
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AspectRatio(
-          aspectRatio: 1,
-          child: Container(
-            decoration: BoxDecoration(
-              color: c.bgRaised,
-              borderRadius: BorderRadius.circular(AriaRadius.md),
-              border: Border.all(color: c.lineStrong),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: item.cover == null
-                ? Center(child: Icon(PhosphorIconsRegular.vinylRecord, color: c.fgDim))
-                : LayoutBuilder(
-                    // Band-sized cards have no fixed extent (wide windows go
-                    // well past 190 logical px) — decode at the laid-out
-                    // size instead of the full remote cover.
-                    builder: (context, box) => Image.network(
-                      item.cover!,
-                      fit: BoxFit.cover,
-                      cacheWidth: (box.maxWidth *
-                              MediaQuery.devicePixelRatioOf(context))
-                          .round(),
-                      gaplessPlayback: true,
-                      errorBuilder: (_, _, _) => Center(
-                        child: Icon(PhosphorIconsRegular.vinylRecord, color: c.fgDim),
-                      ),
-                    ),
-                  ),
-          ),
+    return UnownedAlbumCard(
+      artist: item.artist,
+      title: item.title,
+      subtitle: sub,
+      cover: item.cover,
+      deezerId: item.deezerId,
+      menuItems: (ctx) => [
+        listenLaterMenuItem(
+          ctx,
+          ref,
+          artist: item.artist,
+          title: item.title,
+          deezerId: item.deezerId,
         ),
-        const SizedBox(height: 10),
-        Text(
-          item.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
-        Text(
-          sub,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        Text('Not in library', style: TextStyle(fontSize: 11, color: c.fgDim)),
       ],
     );
   }

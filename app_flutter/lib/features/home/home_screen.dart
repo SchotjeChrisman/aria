@@ -11,6 +11,7 @@ import '../../widgets/art_image.dart';
 import '../../widgets/artist_avatar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_cards.dart';
+import '../../widgets/listen_later_shelf.dart';
 import '../../widgets/new_releases_shelf.dart';
 import '../../widgets/shelf.dart';
 import 'home_providers.dart';
@@ -71,6 +72,8 @@ class _HomeBody extends ConsumerWidget {
         _StatStrip(tracks: tracks, albumCount: albums.length),
         const SizedBox(height: AriaSpace.s6),
         const NewReleasesShelf(),
+        const SizedBox(height: AriaSpace.s6),
+        const ListenLaterShelf(),
         const SizedBox(height: AriaSpace.s6),
         if (added.isNotEmpty) ...[
           _AlbumShelf(title: 'Recently Added', albums: added.take(20).toList()),

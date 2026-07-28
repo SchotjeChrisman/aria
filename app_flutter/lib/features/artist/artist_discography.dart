@@ -9,6 +9,8 @@ import '../../widgets/album_card.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/track_actions.dart' as actions;
+import '../../widgets/unowned_album_card.dart';
+import '../listen_later/providers.dart';
 import 'artist_util.dart';
 import 'providers.dart';
 
@@ -174,16 +176,29 @@ class ArtistDiscography extends ConsumerWidget {
                   );
                 }
                 final x = it.remote!;
-                // ghost card: not in the library, dimmed, not clickable
+                // Not in the library — dimmed, but it opens its own album
+                // page and can be saved to Listen Later. You can't discover
+                // records you're not allowed to look at.
                 return Opacity(
                   opacity: 0.7,
-                  child: AlbumCard(
+                  child: UnownedAlbumCard(
+                    artist: name,
                     title: x.title,
                     subtitle: [
                       if (it.year != null) '${it.year}',
                       'Not in library',
                     ].join(' · '),
-                    artUrl: x.cover,
+                    cover: x.cover,
+                    deezerId: x.deezerId,
+                    menuItems: (ctx) => [
+                      listenLaterMenuItem(
+                        ctx,
+                        ref,
+                        artist: name,
+                        title: x.title,
+                        deezerId: x.deezerId,
+                      ),
+                    ],
                   ),
                 );
               },

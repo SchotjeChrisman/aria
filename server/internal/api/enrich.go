@@ -25,10 +25,12 @@ func init() { register(registerEnrich) }
 // a request goroutine.
 var imgClient = &http.Client{Timeout: 15 * time.Second}
 
-// servePersonImg serves a cached portrait with the immutable album-art cache
-// policy; false when the file is absent or empty. Content-Type is sniffed by
-// ServeContent (portraits are jpeg/png/webp).
-func servePersonImg(w http.ResponseWriter, r *http.Request, path string) bool {
+// serveCachedImg serves a proxied image off disk; false when the file is
+// absent, empty, or older than ttl (ttl 0 = never stale), which tells the
+// caller to re-fetch. maxAge is the client-side cache window in seconds, and
+// must not outlive ttl or the browser keeps showing what the server expired.
+// Content-Type is sniffed by ServeContent (jpeg/png/webp).
+func serveCachedImg(w http.ResponseWriter, r *http.Request, path string, ttl time.Duration, maxAge int) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return false
@@ -38,16 +40,19 @@ func servePersonImg(w http.ResponseWriter, r *http.Request, path string) bool {
 	if err != nil || fi.IsDir() || fi.Size() == 0 {
 		return false
 	}
-	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	if ttl > 0 && time.Since(fi.ModTime()) > ttl {
+		return false
+	}
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAge))
 	w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, fi.ModTime().UnixNano(), fi.Size()))
 	http.ServeContent(w, r, filepath.Base(path), fi.ModTime(), f)
 	return true
 }
 
-// cachePersonImg fetches src and writes it to dst atomically. Verifies the
+// cacheRemoteImg fetches src and writes it to dst atomically. Verifies the
 // payload really is an image (a 200 HTML error page would otherwise be cached
 // and served forever). maxArtBytes cap shared with the upload path.
-func cachePersonImg(ctx context.Context, src, dst string) error {
+func cacheRemoteImg(ctx context.Context, src, dst string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 	if err != nil {
 		return err
@@ -195,14 +200,14 @@ func registerEnrich(mux *http.ServeMux, d *Deps) {
 		// to the proxy path if in-session busting ever matters.
 		sum := sha1.Sum([]byte(src))
 		path := filepath.Join(d.Cfg.DataDir, "people", hex.EncodeToString(sum[:])+".jpg")
-		if servePersonImg(w, r, path) {
+		if serveCachedImg(w, r, path, 0, 31536000) {
 			return
 		}
-		if err := cachePersonImg(r.Context(), src, path); err != nil {
+		if err := cacheRemoteImg(r.Context(), src, path); err != nil {
 			notFound(w)
 			return
 		}
-		servePersonImg(w, r, path)
+		serveCachedImg(w, r, path, 0, 31536000)
 	})
 
 	// warm faces/bios for names currently on the user's screen

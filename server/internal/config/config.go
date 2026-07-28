@@ -13,6 +13,7 @@ type Config struct {
 
 	FFmpegPath       string // env FFMPEG_PATH; feature-gated at startup
 	TranscodeCacheMB int    // env TRANSCODE_CACHE_MB; DATA_DIR/tc sweep budget
+	ExtArtCacheMB    int    // env EXT_ART_CACHE_MB; DATA_DIR/extart sweep budget
 }
 
 func FromEnv() Config {
@@ -23,6 +24,7 @@ func FromEnv() Config {
 
 		FFmpegPath:       getenv("FFMPEG_PATH", "/ffmpeg"),
 		TranscodeCacheMB: getenvInt("TRANSCODE_CACHE_MB", 5000),
+		ExtArtCacheMB:    getenvInt("EXT_ART_CACHE_MB", 512),
 	}
 }
 

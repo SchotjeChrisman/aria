@@ -123,7 +123,7 @@ func serveTranscoded(w http.ResponseWriter, r *http.Request, d *Deps, id, p, tie
 			httpError(w, http.StatusInternalServerError, "transcode failed")
 			return
 		}
-		sweepCache(dir, int64(d.Cfg.TranscodeCacheMB)<<20, cachePath)
+		sweepCache(dir, int64(d.Cfg.TranscodeCacheMB)<<20, cachePath, ".opus")
 	}
 
 	cf, err := os.Open(cachePath)
@@ -143,12 +143,14 @@ func serveTranscoded(w http.ResponseWriter, r *http.Request, d *Deps, id, p, tie
 	http.ServeContent(w, r, filepath.Base(cachePath), cfi.ModTime(), cf)
 }
 
-// sweepCache deletes oldest-by-ModTime .opus files until the dir is under
-// budget bytes. keep is never evicted (the file about to be served), so a
-// single output larger than the whole budget can't delete itself.
+// sweepCache deletes oldest-by-ModTime files with the given suffix until the
+// dir is under budget bytes. keep is never evicted (the file about to be
+// served), so a single output larger than the whole budget can't delete
+// itself.
 // ponytail: O(n) dir scan + oldest-first delete; a real LRU only if the cache
-// dir ever gets huge.
-func sweepCache(dir string, budget int64, keep string) {
+// dir ever gets huge. ModTime is creation order for write-once files, which is
+// fine here because both callers rewrite a file when they refresh it.
+func sweepCache(dir string, budget int64, keep, suffix string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -161,7 +163,7 @@ func sweepCache(dir string, budget int64, keep string) {
 	var files []f
 	var total int64
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".opus") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), suffix) {
 			continue
 		}
 		info, err := e.Info()
