@@ -1,6 +1,7 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
@@ -246,34 +247,38 @@ class _StatsBody extends ConsumerWidget {
               separatorBuilder: (_, _) => const SizedBox(width: AriaSpace.s4),
               itemBuilder: (context, i) {
                 final x = topArtists[i];
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ArtistAvatar(
-                      name: x.name,
-                      imageUrl: people[x.name],
-                      size: 72,
-                    ),
-                    const SizedBox(height: AriaSpace.s2),
-                    SizedBox(
-                      width: 96,
-                      child: Column(
-                        children: [
-                          Text(
-                            x.name,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12.5),
-                          ),
-                          Text(
-                            _plays(x.count),
-                            style: TextStyle(fontSize: 11.5, color: c.fgDim),
-                          ),
-                        ],
+                return InkWell(
+                  onTap: () => context.push(artistPath(x.name)),
+                  borderRadius: BorderRadius.circular(AriaRadius.md),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ArtistAvatar(
+                        name: x.name,
+                        imageUrl: people[x.name],
+                        size: 72,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: AriaSpace.s2),
+                      SizedBox(
+                        width: 96,
+                        child: Column(
+                          children: [
+                            Text(
+                              x.name,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12.5),
+                            ),
+                            Text(
+                              _plays(x.count),
+                              style: TextStyle(fontSize: 11.5, color: c.fgDim),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             ),

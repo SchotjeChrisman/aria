@@ -9,12 +9,10 @@ import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/formats.dart';
-import '../../core/library_providers.dart';
 import '../../core/player_providers.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
-import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/track_actions.dart';
 import 'providers.dart';
@@ -41,25 +39,7 @@ class NowPlayingScreen extends ConsumerWidget {
           tooltip: 'Close',
           onPressed: () => context.pop(),
         ),
-        actions: [
-          if (track != null)
-            Builder(
-              // Builder: the menu anchors to this button's own render box.
-              builder: (buttonContext) => IconButton(
-                icon: const Icon(PhosphorIconsRegular.dotsThree),
-                tooltip: 'More',
-                onPressed: () {
-                  final box =
-                      buttonContext.findRenderObject()! as RenderBox;
-                  showAriaContextMenu(
-                    buttonContext,
-                    box.localToGlobal(box.size.bottomLeft(Offset.zero)),
-                    trackMenuItems(buttonContext, ref, track),
-                  );
-                },
-              ),
-            ),
-        ],
+        actions: [if (track != null) TrackMenuButton(track: track)],
       ),
       body: track == null
           ? const EmptyState(message: 'Nothing playing.')
@@ -85,26 +65,6 @@ class NowPlayingScreen extends ConsumerWidget {
                 ),
               ),
             ),
-    );
-  }
-}
-
-/// Dedicated ♥ toggle for the current track (independent favourite flag).
-class _FavouriteButton extends ConsumerWidget {
-  const _FavouriteButton({required this.trackId});
-
-  final String trackId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = AriaColors.of(context);
-    final fav = ref.watch(favouriteIdsProvider).contains(trackId);
-    return IconButton(
-      icon: Icon(fav ? PhosphorIconsFill.heart : PhosphorIconsThin.heart),
-      color: fav ? c.accent : c.fgDim,
-      tooltip: fav ? 'Remove from favourites' : 'Add to favourites',
-      onPressed: () =>
-          ref.read(favouriteIdsProvider.notifier).toggle(trackId),
     );
   }
 }
@@ -294,7 +254,7 @@ class _Controls extends ConsumerWidget {
                 tooltip: 'Lyrics',
                 onPressed: () => context.push('/lyrics'),
               ),
-              if (track != null) _FavouriteButton(trackId: track.id),
+              if (track != null) FavouriteButton(trackId: track.id),
               IconButton(
                 icon: const Icon(PhosphorIconsRegular.queue),
                 color: c.fgDim,

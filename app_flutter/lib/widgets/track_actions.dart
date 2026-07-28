@@ -5,6 +5,7 @@ import '../core/phosphor_icons.dart';
 import '../core/toast.dart';
 
 import '../core/downloads.dart';
+import '../core/library_providers.dart';
 import '../core/player_providers.dart';
 import '../core/router.dart';
 import '../core/playlists_providers.dart';
@@ -25,6 +26,7 @@ String artistPath(String name) => '/artist/${Uri.encodeComponent(name)}';
 String composerPath(String name) => '/composer/${Uri.encodeComponent(name)}';
 String compositionPath(String name) =>
     '/composition/${Uri.encodeComponent(name)}';
+String genrePath(String genre) => '/library/genres/${Uri.encodeComponent(genre)}';
 
 /// The name a track's composition page is keyed by: explicit work tag when
 /// present (classical), otherwise the title (covers match by normalized
@@ -326,4 +328,55 @@ List<AriaMenuItem> artistMenuItems(
       icon: PhosphorIconsRegular.checkSquare,
     ),
   ];
+}
+
+// ------------------------------------------------------------------ buttons
+
+/// ♥ toggle for one track (a flag of its own, unrelated to playlists/tags).
+/// Shared by the now-playing header and the desktop transport bar.
+class FavouriteButton extends ConsumerWidget {
+  const FavouriteButton({super.key, required this.trackId});
+
+  final String trackId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = AriaColors.of(context);
+    final fav = ref.watch(favouriteIdsProvider).contains(trackId);
+    return IconButton(
+      icon: Icon(fav ? PhosphorIconsFill.heart : PhosphorIconsThin.heart),
+      color: fav ? c.accent : c.fgDim,
+      tooltip: fav ? 'Remove from favourites' : 'Add to favourites',
+      onPressed: () => ref.read(favouriteIdsProvider.notifier).toggle(trackId),
+    );
+  }
+}
+
+/// "…" button opening [trackMenuItems] anchored under itself. Near a screen
+/// edge showMenu flips it back into view on its own.
+class TrackMenuButton extends ConsumerWidget {
+  const TrackMenuButton({super.key, required this.track, this.color});
+
+  final Track track;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Builder: the menu anchors to this button's own render box.
+    return Builder(
+      builder: (buttonContext) => IconButton(
+        icon: const Icon(PhosphorIconsRegular.dotsThree),
+        color: color,
+        tooltip: 'More',
+        onPressed: () {
+          final box = buttonContext.findRenderObject()! as RenderBox;
+          showAriaContextMenu(
+            buttonContext,
+            box.localToGlobal(box.size.bottomLeft(Offset.zero)),
+            trackMenuItems(buttonContext, ref, track),
+          );
+        },
+      ),
+    );
+  }
 }

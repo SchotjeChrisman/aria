@@ -34,12 +34,19 @@ class _ExclusiveToggle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final on = ref.watch(audioExclusiveProvider);
+    // mpv renames the output when exclusive actually engages (macOS reports
+    // "coreaudio_exclusive" instead of "coreaudio"), and silently ignores the
+    // option on outputs that don't support it at all — ALSA and PulseAudio
+    // among them. Showing the live ao is the only honest feedback: the switch
+    // alone says nothing about whether the device agreed.
+    final ao = ref.watch(audioDeviceProvider).value;
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       title: const Text('Exclusive audio access'),
-      subtitle: const Text(
+      subtitle: Text(
         'Bit-perfect output: the audio device is opened exclusively '
-        '(desktop only; other apps go silent while playing).',
+        '(desktop only; other apps go silent while playing).'
+        '\nOutput in use: ${ao == null || ao.isEmpty ? '— (play something)' : ao}',
       ),
       value: on,
       onChanged: (v) => ref.read(audioExclusiveProvider.notifier).set(v),

@@ -35,6 +35,18 @@ dependencies:
   pdfrx: ^2.4.4
   # Custom cover-art upload: cross-platform image file picking (returns bytes).
   file_picker: ^8.1.0
+# The pub.dev media_kit libs packages fetch a libmpv whose ffmpeg is built
+# `--disable-all --enable-filter=equalizer --enable-filter=overlay`. Every other
+# filter core/eq.dart emits is missing, and libavfilter graph parsing is
+# all-or-nothing, so turning on a headphone EQ dropped the chain and aborted
+# playback. third_party/ holds byte-identical copies with one flavor swapped to
+# audio-encodersgpl (same mpv 0.36.0, ffmpeg --enable-filters).
+dependency_overrides:
+  media_kit_libs_macos_audio:
+    path: third_party/media_kit_libs_macos_audio
+  media_kit_libs_ios_audio:
+    path: third_party/media_kit_libs_ios_audio
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

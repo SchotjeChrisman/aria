@@ -83,36 +83,41 @@ class _ComposersSectionState extends ConsumerState<ComposersSection> {
     }
 
     if (list.isEmpty) {
-      return const EmptyState(
-        message: 'No composer tags in this library.',
-        icon: PhosphorIconsRegular.pianoKeys,
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: EmptyState(
+          message: 'No composer tags in this library.',
+          icon: PhosphorIconsRegular.pianoKeys,
+        ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: ariaPagePadding(
-            context,
-            top: AriaSpace.s4,
-            bottom: AriaSpace.s4,
-          ),
-          child: Row(
-            children: [
-              const Spacer(),
-              SortDropdown(
-                options: composerSortOptions,
-                value: key,
-                onChanged: (k) =>
-                    ref.read(composerSortProvider.notifier).set(k),
-              ),
-            ],
+    // Slivers, not a Column: the whole library page is one scroll view, so the
+    // sort row scrolls away with the grid (see LibraryScreen).
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: ariaPagePadding(
+              context,
+              top: AriaSpace.s4,
+            ).copyWith(bottom: AriaSpace.s4),
+            child: Row(
+              children: [
+                const Spacer(),
+                SortDropdown(
+                  options: composerSortOptions,
+                  value: key,
+                  onChanged: (k) =>
+                      ref.read(composerSortProvider.notifier).set(k),
+                ),
+              ],
+            ),
           ),
         ),
-        Expanded(
-          child: GridView.builder(
-            padding: ariaPagePadding(context, top: 0),
+        SliverPadding(
+          padding: ariaPagePadding(context, top: 0),
+          sliver: SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               // Person cards one column denser than album cards (smaller).
               crossAxisCount: AriaBreakpoint.of(context).gridColumns + 1,

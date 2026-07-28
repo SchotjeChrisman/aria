@@ -15,6 +15,7 @@ import '../../core/toast.dart';
 import '../../core/library_providers.dart' show enrichRefreshProvider;
 import '../../widgets/art_image.dart';
 import '../../widgets/format_badge.dart';
+import '../../widgets/track_actions.dart';
 import '../library/library_providers.dart' show queueRestoreProvider;
 import 'providers.dart';
 import 'seek_bar.dart';
@@ -295,8 +296,14 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         // Lyrics/queue moved beside the transport; the quality
-                        // dot (left of prev) now fronts the signal path. Only
-                        // volume rides the right edge here.
+                        // dot (left of prev) now fronts the signal path. Track
+                        // actions and volume ride the right edge here. Desktop
+                        // only — the stacked layouts below this breakpoint are
+                        // already tight, and radio has no track to act on.
+                        if (track != null) ...[
+                          FavouriteButton(trackId: track.id),
+                          TrackMenuButton(track: track, color: c.fgDim),
+                        ],
                         SizedBox(
                           width: 130,
                           child: Row(

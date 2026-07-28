@@ -110,38 +110,51 @@ class _LibraryBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final trackCount = ref.watch(loadedTracksProvider).length;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: ariaPagePadding(context, top: AriaSpace.s6, bottom: 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                section.label,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(width: AriaSpace.s3),
-              // legacy #lib-count
-              Text(
-                '$trackCount tracks',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+    // One scroll view for the whole page: the title and each section's filter
+    // row scroll away with the grid. They used to sit in a Column above an
+    // Expanded scroller, which pinned them and left only the grid moving.
+    // Sections therefore return slivers, not boxes.
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            // ariaPagePadding reserves the floating transport at the bottom,
+            // which only the LAST sliver should carry — the header used to add
+            // that ~100px as dead space under the title.
+            padding: ariaPagePadding(
+              context,
+              top: AriaSpace.s6,
+            ).copyWith(bottom: AriaSpace.s4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  section.label,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(width: AriaSpace.s3),
+                // legacy #lib-count
+                Text(
+                  '$trackCount tracks',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: AriaSpace.s4),
-        Expanded(
-          child: switch (section) {
-            LibrarySection.albums => const AlbumsSection(),
-            LibrarySection.artists => const ArtistsSection(),
-            LibrarySection.tracks => const TracksSection(),
-            LibrarySection.genres => const GenresSection(),
-            LibrarySection.composers => const ComposersSection(),
-          },
-        ),
+        switch (section) {
+          LibrarySection.albums => const AlbumsSection(),
+          LibrarySection.artists => const ArtistsSection(),
+          LibrarySection.genres => const GenresSection(),
+          LibrarySection.composers => const ComposersSection(),
+          // The track table is a two-axis viewport with its own sticky column
+          // header — it keeps scrolling itself, filling what the title leaves.
+          LibrarySection.tracks => const SliverFillRemaining(
+            hasScrollBody: true,
+            child: TracksSection(),
+          ),
+        },
       ],
     );
   }

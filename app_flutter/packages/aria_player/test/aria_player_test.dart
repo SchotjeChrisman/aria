@@ -274,6 +274,22 @@ void main() {
       await player.dispose();
     });
 
+    test('setAudioFilter leaves audio-exclusive alone', () async {
+      // It used to force exclusive off whenever a filter was set, so an enabled
+      // EQ silently cancelled bit-perfect output on every launch while the
+      // Settings switch still read On.
+      final (player, fake) = await makePlayer(exclusive: true);
+      player.setAudioExclusive(true);
+      final before = fake.log.length;
+      player.setAudioFilter('lavfi=[equalizer=f=105:t=q:w=0.7:g=3.1]');
+      player.setAudioFilter('');
+      expect(
+        fake.log.sublist(before).where((l) => l.contains('audio-exclusive')),
+        isEmpty,
+      );
+      await player.dispose();
+    });
+
     test('play with startAt seeks to the position once the file starts', () async {
       final (player, fake) = await makePlayer();
       // Reload-in-place path (EQ change): fresh loadfile, resume at the spot.
@@ -582,6 +598,31 @@ void main() {
       fake.events.addAll([startFile, aoError('device busy')]);
       player.debugPoll();
       expect(errors, ['no target node available', 'device busy']);
+      await player.dispose();
+    });
+
+    test('a rejected filter chain surfaces instead of playing silently',
+        () async {
+      // mpv accepts any `af` string and only rejects it at load time. Without
+      // this the load aborts with no sound and no message.
+      final (player, fake) = await makePlayer();
+      final errors = <String>[];
+      player.audioError.listen(errors.add);
+
+      player.setAudioFilter('lavfi=[lowshelf=f=105:t=q:w=0.7:g=3]');
+      player.play('http://x/t.flac');
+      fake.events.addAll([
+        startFile,
+        const MpvEventData(
+          MpvEventId.logMessage,
+          logPrefix: 'user_filter_wrapper',
+          logText: "Creating filter 'lavfi' failed.",
+        ),
+      ]);
+      player.debugPoll();
+
+      expect(errors, ["Creating filter 'lavfi' failed."]);
+      expect(player.currentState, PlaybackState.stopped);
       await player.dispose();
     });
 

@@ -2,6 +2,12 @@
 /music/
 
 # build outputs
+# The vendored media_kit libs packages download and unpack ~40MB of
+# xcframeworks here at pod-install time — artifacts, not source.
+app_flutter/third_party/*/macos/.cache/
+app_flutter/third_party/*/macos/Frameworks/
+app_flutter/third_party/*/ios/.cache/
+app_flutter/third_party/*/ios/Frameworks/
 app_flutter/build/
 app_flutter/.dart_tool/
 app_flutter/packages/*/.dart_tool/

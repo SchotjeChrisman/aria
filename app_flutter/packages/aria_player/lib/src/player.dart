@@ -154,10 +154,6 @@ class AriaPlayer {
   /// can never race the queue.
   bool _deadStopped = false;
 
-  /// User's desired exclusive-output state, tracked so setAudioFilter can
-  /// force it off while an EQ filter is active (desktop only) and restore it.
-  bool _exclusiveIntent = false;
-
   TrackMeta? _meta;
   int? _fmtRate;
   int? _fmtChannels;
@@ -280,7 +276,6 @@ class AriaPlayer {
     // Surface audio-output failures (see [audioError]).
     raw.requestLogMessages(handle, 'error');
 
-    _exclusiveIntent = audioExclusive;
     _raw = raw;
     _handle = handle;
     _syncPollRate();
@@ -402,28 +397,25 @@ class AriaPlayer {
   }
 
   /// Replace the mpv audio filter chain ('' clears it) — the EQ hook. Callers
-  /// that change this mid-playback should reload the current file afterwards
-  /// (see QueueNotifier.reapplyForFilterChange): a live `af` swap reconfigures
-  /// the open output and fails on some devices.
+  /// still reload the current file afterwards (QueueNotifier
+  /// .reapplyForFilterChange) so the chain lands on a clean init.
+  ///
+  /// This used to also force `audio-exclusive` off whenever a filter was set,
+  /// on the theory that swapping `af` reconfigures a held device and fails. The
+  /// symptom that theory was built on — EQ on, no sound, queue racing through —
+  /// was really a libmpv whose ffmpeg lacked the EQ filters (see
+  /// third_party/media_kit_libs_macos_audio), and the side effect was that any
+  /// enabled EQ silently cancelled exclusive output on every launch while the
+  /// Settings switch still read On. The two settings are independent now.
   void setAudioFilter(String af) {
     if (!isAvailable) return;
-    // Exclusive off must land BEFORE the filter: the af change reconfigures the
-    // audio output, which fails against a held (exclusive) device. EQ and
-    // bit-perfect exclusive output are mutually exclusive; clearing the filter
-    // restores the user's intent. Desktop-only — a no-op on Android.
-    if (!Platform.isAndroid) {
-      _raw!.setPropertyString(
-        _handle,
-        'audio-exclusive',
-        af.isNotEmpty ? 'no' : (_exclusiveIntent ? 'yes' : 'no'),
-      );
-    }
     _raw!.setPropertyString(_handle, 'af', af);
   }
 
-  /// Runtime toggle for exclusive device access (desktop).
+  /// Runtime toggle for exclusive device access (desktop). mpv's
+  /// `audio-exclusive` carries UPDATE_AUDIO, so this reinitialises the output
+  /// on its own — no file reload needed.
   void setAudioExclusive(bool on) {
-    _exclusiveIntent = on;
     if (!isAvailable || Platform.isAndroid) return;
     _raw!.setPropertyString(_handle, 'audio-exclusive', on ? 'yes' : 'no');
   }
@@ -533,11 +525,20 @@ class AriaPlayer {
   /// Error-level mpv log lines (requestLogMessages 'error'). An `ao`-prefixed
   /// error while a file is active means the output is broken; stop instead of
   /// letting mpv race through the queue silently.
+  ///
+  /// `user_filter_wrapper` counts too: mpv only *stores* the `af` string when
+  /// it is set (set_property returns success even for a graph it can never
+  /// build) and rejects it later, at load time, as "Creating filter 'lavfi'
+  /// failed." Without this the load aborts with no sound and no message at all,
+  /// which is what made the missing-filter bug so hard to see.
   void _handleLogMessage(String? prefix, String? text) {
     // Remember the last error text regardless of prefix so the no-sound
     // safety net can surface the real mpv error (see endFile eof handling).
     _lastErrorText = (text ?? '').trim();
-    if (prefix == null || !prefix.startsWith('ao')) return;
+    if (prefix == null ||
+        !(prefix.startsWith('ao') || prefix == 'user_filter_wrapper')) {
+      return;
+    }
     if (_aoErrorNotified || (!_fileActive && !_loadPending)) return;
     _aoErrorNotified = true;
     _deadAudioStop((text ?? 'audio output error').trim());

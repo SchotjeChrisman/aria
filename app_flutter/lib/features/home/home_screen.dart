@@ -14,6 +14,7 @@ import '../../widgets/library_cards.dart';
 import '../../widgets/listen_later_shelf.dart';
 import '../../widgets/new_releases_shelf.dart';
 import '../../widgets/shelf.dart';
+import '../../widgets/track_actions.dart';
 import 'home_providers.dart';
 import 'mixes.dart';
 
@@ -700,11 +701,15 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
     final api = ref.watch(apiClientProvider);
     final people = ref.watch(peopleProvider).value ?? const <String, String>{};
 
+    // [pathFor] makes a row tappable — it returns the destination route for
+    // that row's key, or null when there is nothing to open (an album the
+    // library no longer has).
     Widget rankColumn(
       String title,
       List<MapEntry<String, double>> rows,
       String Function(String key) label,
       Widget? Function(String key)? leadingFor,
+      String? Function(String key) pathFor,
     ) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -715,51 +720,76 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
           Text('—', style: TextStyle(color: c.fgDim))
         else
           for (final (i, e) in rows.indexed)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AriaSpace.s2),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    child: Text(
-                      '${i + 1}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: c.fgDim),
-                    ),
+            Builder(
+              builder: (context) {
+                final path = pathFor(e.key);
+                final row = Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AriaSpace.s2,
+                    vertical: AriaSpace.s2,
                   ),
-                  if (leadingFor != null) ...[
-                    SizedBox(width: 28, height: 28, child: leadingFor(e.key)),
-                    const SizedBox(width: AriaSpace.s2),
-                  ],
-                  Expanded(
-                    child: Text(
-                      label(e.key),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        child: Text(
+                          '${i + 1}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: c.fgDim),
+                        ),
+                      ),
+                      if (leadingFor != null) ...[
+                        SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: leadingFor(e.key),
+                        ),
+                        const SizedBox(width: AriaSpace.s2),
+                      ],
+                      Expanded(
+                        child: Text(
+                          label(e.key),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AriaSpace.s2),
+                      Text(
+                        fmtHm(e.value),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: c.fgDim),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: AriaSpace.s2),
-                  Text(
-                    fmtHm(e.value),
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: c.fgDim),
-                  ),
-                ],
-              ),
+                );
+                if (path == null) return row;
+                return InkWell(
+                  onTap: () => context.push(path),
+                  borderRadius: BorderRadius.circular(AriaRadius.md),
+                  child: row,
+                );
+              },
             ),
       ],
     );
 
-    final genres = rankColumn('Genres', _top5(genreSecs), (k) => k, null);
+    final genres = rankColumn(
+      'Genres',
+      _top5(genreSecs),
+      (k) => k,
+      null,
+      genrePath,
+    );
     final performers = rankColumn(
       'Performers',
       _top5(perfSecs),
       (k) => k,
       (k) => ArtistAvatar(name: k, imageUrl: people[k], size: 28),
+      artistPath,
     );
     final releases = rankColumn(
       'Releases',
@@ -774,6 +804,9 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
           borderRadius: AriaRadius.sm,
         );
       },
+      // The row is keyed by albumId, but it only renders a title (and can only
+      // be opened) when the album is still in the library.
+      (k) => albumById[k] == null ? null : albumPath(k),
     );
 
     return Padding(

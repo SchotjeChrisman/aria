@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/theme.dart';
+import '../../widgets/track_actions.dart';
 import 'library_providers.dart';
 import 'person_card.dart';
 
@@ -137,7 +138,7 @@ class GenreCard extends ConsumerWidget {
     final kids = genreChildren(parents, genre).where(idx.containsKey).toList();
 
     return GestureDetector(
-      onTap: () => context.push('/library/genres/${Uri.encodeComponent(genre)}'),
+      onTap: () => context.push(genrePath(genre)),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: Column(
@@ -187,7 +188,7 @@ class GenrePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     return GestureDetector(
-      onTap: () => context.push('/library/genres/${Uri.encodeComponent(genre)}'),
+      onTap: () => context.push(genrePath(genre)),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: 10,

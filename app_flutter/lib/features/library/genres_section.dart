@@ -18,9 +18,12 @@ class GenresSection extends ConsumerWidget {
     final parents = ref.watch(genreParentsProvider);
 
     if (idx.isEmpty) {
-      return const EmptyState(
-        message: 'No genres in the library.',
-        icon: PhosphorIconsRegular.squaresFour,
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: EmptyState(
+          message: 'No genres in the library.',
+          icon: PhosphorIconsRegular.squaresFour,
+        ),
       );
     }
 
@@ -42,22 +45,26 @@ class GenresSection extends ConsumerWidget {
     ).fold(0, (s, x) => s + idx[x]!.tracks.length);
     final list = tops.toList()..sort((a, b) => size(b) - size(a));
 
-    return GridView.builder(
+    // A sliver, not a GridView: the whole library page is one scroll view
+    // (see LibraryScreen).
+    return SliverPadding(
       padding: ariaPagePadding(context, top: AriaSpace.s4),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        // Genre cards are wider than album tiles (legacy 260px extent), so
-        // they get their own band counts instead of the shared 2/4/6.
-        crossAxisCount: switch (AriaBreakpoint.of(context)) {
-          AriaBreakpoint.mobile => 2,
-          AriaBreakpoint.tablet => 3,
-          AriaBreakpoint.desktop => 5,
-        },
-        mainAxisSpacing: AriaSpace.s5,
-        crossAxisSpacing: AriaSpace.s5,
-        childAspectRatio: 0.78,
+      sliver: SliverGrid.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          // Genre cards are wider than album tiles (legacy 260px extent), so
+          // they get their own band counts instead of the shared 2/4/6.
+          crossAxisCount: switch (AriaBreakpoint.of(context)) {
+            AriaBreakpoint.mobile => 2,
+            AriaBreakpoint.tablet => 3,
+            AriaBreakpoint.desktop => 5,
+          },
+          mainAxisSpacing: AriaSpace.s5,
+          crossAxisSpacing: AriaSpace.s5,
+          childAspectRatio: 0.78,
+        ),
+        itemCount: list.length,
+        itemBuilder: (_, i) => GenreCard(genre: list[i]),
       ),
-      itemCount: list.length,
-      itemBuilder: (_, i) => GenreCard(genre: list[i]),
     );
   }
 }

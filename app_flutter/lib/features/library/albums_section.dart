@@ -80,136 +80,142 @@ class AlbumsSection extends ConsumerWidget {
     final sortKey = ref.watch(albumSortProvider);
     final list = ref.watch(visibleAlbumsProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: ariaPagePadding(
-            context,
-            top: AriaSpace.s4,
-            bottom: AriaSpace.s4,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilterBar(
-                  children: [
-                    FilterPill(
-                      label: 'Genre',
-                      selected: filters.genres.isNotEmpty,
-                      count: filters.genres.length,
-                      onTap: () => _showMultiPicker(
-                        context,
-                        title: 'Genre',
-                        options: genreOptionsProvider,
-                        selectedOf: (f) => f.genres,
-                        onToggle: (ref, v) => ref
-                            .read(albumFiltersProvider.notifier)
-                            .toggleGenre(v),
-                      ),
-                    ),
-                    FilterPill(
-                      label: filters.decade == null
-                          ? 'Decade'
-                          : '${filters.decade}s',
-                      selected: filters.decade != null,
-                      onTap: () => _showDecadePicker(context),
-                    ),
-                    FilterPill(
-                      label: 'Format',
-                      selected: filters.formats.isNotEmpty,
-                      count: filters.formats.length,
-                      onTap: () => _showMultiPicker(
-                        context,
-                        title: 'Format',
-                        options: formatOptionsProvider,
-                        selectedOf: (f) => f.formats,
-                        onToggle: (ref, v) => ref
-                            .read(albumFiltersProvider.notifier)
-                            .toggleFormat(v),
-                      ),
-                    ),
-                    FilterPill(
-                      label: 'Tag',
-                      selected: filters.tags.isNotEmpty,
-                      count: filters.tags.length,
-                      onTap: () => _showMultiPicker(
-                        context,
-                        title: 'Tag',
-                        options: tagOptionsProvider,
-                        selectedOf: (f) => f.tags,
-                        onToggle: (ref, v) => ref
-                            .read(albumFiltersProvider.notifier)
-                            .toggleTag(v),
-                      ),
-                    ),
-                    FilterPill(
-                      label: filters.combine == 'any'
-                          ? 'Match: Any'
-                          : 'Match: All',
-                      selected: filters.combine == 'any',
-                      onTap: () => ref
-                          .read(albumFiltersProvider.notifier)
-                          .toggleCombine(),
-                    ),
-                    if (!filters.isEmpty)
+    // Slivers, not a Column: the whole library page is one scroll view, so the
+    // filter row scrolls away with the grid (see LibraryScreen).
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: ariaPagePadding(
+              context,
+              top: AriaSpace.s4,
+            ).copyWith(bottom: AriaSpace.s4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilterBar(
+                    children: [
                       FilterPill(
-                        label: 'Clear',
-                        onTap: () =>
-                            ref.read(albumFiltersProvider.notifier).clear(),
+                        label: 'Genre',
+                        selected: filters.genres.isNotEmpty,
+                        count: filters.genres.length,
+                        onTap: () => _showMultiPicker(
+                          context,
+                          title: 'Genre',
+                          options: genreOptionsProvider,
+                          selectedOf: (f) => f.genres,
+                          onToggle: (ref, v) => ref
+                              .read(albumFiltersProvider.notifier)
+                              .toggleGenre(v),
+                        ),
                       ),
-                  ],
+                      FilterPill(
+                        label: filters.decade == null
+                            ? 'Decade'
+                            : '${filters.decade}s',
+                        selected: filters.decade != null,
+                        onTap: () => _showDecadePicker(context),
+                      ),
+                      FilterPill(
+                        label: 'Format',
+                        selected: filters.formats.isNotEmpty,
+                        count: filters.formats.length,
+                        onTap: () => _showMultiPicker(
+                          context,
+                          title: 'Format',
+                          options: formatOptionsProvider,
+                          selectedOf: (f) => f.formats,
+                          onToggle: (ref, v) => ref
+                              .read(albumFiltersProvider.notifier)
+                              .toggleFormat(v),
+                        ),
+                      ),
+                      FilterPill(
+                        label: 'Tag',
+                        selected: filters.tags.isNotEmpty,
+                        count: filters.tags.length,
+                        onTap: () => _showMultiPicker(
+                          context,
+                          title: 'Tag',
+                          options: tagOptionsProvider,
+                          selectedOf: (f) => f.tags,
+                          onToggle: (ref, v) => ref
+                              .read(albumFiltersProvider.notifier)
+                              .toggleTag(v),
+                        ),
+                      ),
+                      FilterPill(
+                        label: filters.combine == 'any'
+                            ? 'Match: Any'
+                            : 'Match: All',
+                        selected: filters.combine == 'any',
+                        onTap: () => ref
+                            .read(albumFiltersProvider.notifier)
+                            .toggleCombine(),
+                      ),
+                      if (!filters.isEmpty)
+                        FilterPill(
+                          label: 'Clear',
+                          onTap: () =>
+                              ref.read(albumFiltersProvider.notifier).clear(),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: AriaSpace.s3),
-              SortDropdown(
-                options: albumSortOptions,
-                value: sortKey,
-                onChanged: (k) => ref.read(albumSortProvider.notifier).set(k),
-              ),
-            ],
+                const SizedBox(width: AriaSpace.s3),
+                SortDropdown(
+                  options: albumSortOptions,
+                  value: sortKey,
+                  onChanged: (k) => ref.read(albumSortProvider.notifier).set(k),
+                ),
+              ],
+            ),
           ),
         ),
-        Expanded(
-          child: list.isEmpty
-              ? const EmptyState(
-                  message: 'No albums.',
-                  icon: PhosphorIconsRegular.vinylRecord,
-                )
-              : GridView.builder(
-                  padding: ariaPagePadding(context, top: 0),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: AriaBreakpoint.of(context).gridColumns,
-                    mainAxisSpacing: AriaSpace.s5,
-                    crossAxisSpacing: AriaSpace.s5,
-                    // Tablet-floor tiles (~103px at a 600px window) need a
-                    // taller cell: the ~49px text block under the square art
-                    // doesn't shrink with the tile.
-                    childAspectRatio:
-                        AriaBreakpoint.of(context) == AriaBreakpoint.tablet
-                        ? 0.67
-                        : 0.72,
-                  ),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) {
-                    final a = list[i];
-                    final type = a.releaseType;
-                    final sub = [
-                      a.albumArtist,
-                      if (a.year != null) '${a.year}',
-                      if (type != null && type != 'Album') type,
-                    ].join(' · ');
-                    return AlbumGridCard(
-                      albumId: a.id,
-                      title: a.title,
-                      artistName: a.albumArtist,
-                      tracks: a.tracks,
-                      hasArt: a.hasArt,
-                      subtitle: sub,
-                    );
-                  },
-                ),
-        ),
+        if (list.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              message: 'No albums.',
+              icon: PhosphorIconsRegular.vinylRecord,
+            ),
+          )
+        else
+          SliverPadding(
+            padding: ariaPagePadding(context, top: 0),
+            sliver: SliverGrid.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: AriaBreakpoint.of(context).gridColumns,
+                mainAxisSpacing: AriaSpace.s5,
+                crossAxisSpacing: AriaSpace.s5,
+                // Tablet-floor tiles (~103px at a 600px window) need a
+                // taller cell: the ~49px text block under the square art
+                // doesn't shrink with the tile.
+                childAspectRatio:
+                    AriaBreakpoint.of(context) == AriaBreakpoint.tablet
+                    ? 0.67
+                    : 0.72,
+              ),
+              itemCount: list.length,
+              itemBuilder: (context, i) {
+                final a = list[i];
+                final type = a.releaseType;
+                final sub = [
+                  a.albumArtist,
+                  if (a.year != null) '${a.year}',
+                  if (type != null && type != 'Album') type,
+                ].join(' · ');
+                return AlbumGridCard(
+                  albumId: a.id,
+                  title: a.title,
+                  artistName: a.albumArtist,
+                  tracks: a.tracks,
+                  hasArt: a.hasArt,
+                  subtitle: sub,
+                );
+              },
+            ),
+          ),
       ],
     );
   }
