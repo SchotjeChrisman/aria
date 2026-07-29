@@ -22,8 +22,9 @@ import 'seek_bar.dart';
 import 'signal_path.dart';
 
 /// Persistent bottom transport (legacy #now-bar): art + title/artist,
-/// prev/play/next, seek with times, volume, format badge (actual stream
-/// format), signal path, lyrics/queue buttons. Mount below the router shell.
+/// prev/play/next with shuffle/repeat, seek with times, volume, format badge
+/// (actual stream format), signal path, lyrics/queue buttons. Mount below the
+/// router shell.
 class TransportBar extends ConsumerStatefulWidget {
   const TransportBar({super.key});
 
@@ -119,9 +120,56 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     final fmt = ref.watch(playbackFormatProvider).value;
     final volume = ref.watch(volumeProvider);
     final queue = ref.read(queueProvider.notifier);
+    // Same MediaQuery the inner Builder reads for `bp` — SafeArea changes
+    // padding, not size. Needed out here because meta/playBtn are built
+    // before the branch.
+    final desktop = AriaBreakpoint.of(context) == AriaBreakpoint.desktop;
+    final shuffle = ref.watch(queueProvider.select((q) => q.shuffle));
+    final loop = ref.watch(queueProvider.select((q) => q.loop));
+    // ponytail: same expression as _Meta in now_playing_screen.dart — three
+    // lines, not worth a shared provider.
+    final queuePos = ref.watch(
+      queueProvider.select(
+        (q) =>
+            q.tracks.length > 1 ? '${q.index + 1} of ${q.tracks.length}' : null,
+      ),
+    );
+    // Desktop is the only band with no format badge (the stacked branch
+    // shows one) and no queue position, and its meta column has ~19px of
+    // unused height. Both children Flexible: the column is only 226px wide
+    // at 1240, narrower than the line's natural width. That ~19px is measured
+    // at text scale 1.0 — past ~1.4x the three lines no longer fit the 84px
+    // pill, so drop the bonus line rather than clip the column.
+    final formatLine =
+        !desktop ||
+            track == null ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.4
+        ? null
+        : Row(
+            spacing: AriaSpace.s2,
+            children: [
+              Flexible(
+                child: FormatBadge(
+                  format: track.format,
+                  bitsPerSample: fmt?.bitDepth ?? track.bitsPerSample,
+                  sampleRate: fmt?.sampleRate ?? track.sampleRate,
+                  lossless: track.lossless,
+                ),
+              ),
+              if (queuePos != null)
+                Flexible(
+                  child: Text(
+                    'Track $queuePos',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          );
     final meta = radio != null
         ? _radioMeta(context, radio)
-        : _nowMeta(context, track);
+        : _nowMeta(context, track, formatLine);
     // Solid (filled) glyphs in dimmed grey — lighter than black, but not thin.
     final prevBtn = IconButton(
       icon: const Icon(PhosphorIconsFill.skipBack),
@@ -133,7 +181,12 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     // Same flat style as the skip buttons (no filled circle).
     final playBtn = IconButton(
       icon: Icon(playing ? PhosphorIconsFill.pause : PhosphorIconsFill.play),
-      color: c.fgDim,
+      // Desktop is the primary display: play is the anchor of the cluster.
+      // Prominence via size + full-strength grey; accent stays for states.
+      // iconSize 32 + IconButton's 8px padding is exactly the 48px minimum
+      // tap target, so the row does not grow.
+      iconSize: desktop ? 32 : null,
+      color: desktop ? c.fg : c.fgDim,
       tooltip: 'Play/Pause',
       onPressed: track == null && radio == null ? null : queue.togglePlay,
     );
@@ -150,6 +203,21 @@ class _TransportBarState extends ConsumerState<TransportBar> {
             tooltip: 'Next',
             onPressed: track == null ? null : queue.next,
           );
+    final shuffleBtn = IconButton(
+      icon: const Icon(PhosphorIconsRegular.shuffle),
+      color: shuffle ? c.accent : c.fgDim,
+      tooltip: 'Shuffle',
+      // No queue to shuffle on radio/idle — same gate as prev.
+      onPressed: track == null ? null : queue.toggleShuffle,
+    );
+    final repeatBtn = IconButton(
+      icon: Icon(loop == LoopMode.one
+          ? PhosphorIconsFill.repeatOnce
+          : PhosphorIconsFill.repeat),
+      color: loop != LoopMode.off ? c.accent : c.fgDim,
+      tooltip: 'Repeat',
+      onPressed: track == null ? null : queue.cycleLoop,
+    );
     final queueBtn = IconButton(
       icon: const Icon(PhosphorIconsRegular.queue),
       color: c.fgDim,
@@ -259,11 +327,11 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                           spacing: AriaSpace.s5,
                           children: [
                             const SignalPathDot(),
+                            shuffleBtn,
                             prevBtn,
                             playBtn,
                             nextBtn,
-                            lyricsBtn,
-                            queueBtn,
+                            repeatBtn,
                           ],
                         ),
                         if (radio != null)
@@ -295,33 +363,42 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // Lyrics/queue moved beside the transport; the quality
-                        // dot (left of prev) now fronts the signal path. Track
-                        // actions and volume ride the right edge here. Desktop
-                        // only — the stacked layouts below this breakpoint are
-                        // already tight, and radio has no track to act on.
+                        // Navigation (lyrics/queue) is not transport, so it
+                        // rides the right edge with the track actions; the
+                        // quality dot fronts the signal path beside the
+                        // controls. Desktop only — the stacked layouts below
+                        // this breakpoint are already tight, and radio has no
+                        // track to act on.
+                        lyricsBtn,
+                        queueBtn,
                         if (track != null) ...[
                           FavouriteButton(trackId: track.id),
                           TrackMenuButton(track: track, color: c.fgDim),
                         ],
-                        SizedBox(
-                          width: 130,
-                          child: Row(
-                            children: [
-                              Icon(PhosphorIconsRegular.speakerHigh,
-                                  size: 16, color: c.fgDim),
-                              Expanded(
-                                child: _slim(
-                                  Slider(
-                                    value: volume,
-                                    max: 100,
-                                    onChanged: (v) => ref
-                                        .read(volumeProvider.notifier)
-                                        .set(v),
+                        // Flexible, not fixed: SizedBox clamps to the incoming
+                        // max, so the volume block is min(130, remaining) — 98
+                        // at 1240, the full 130 from ~1400 up. Makes this
+                        // column structurally overflow-proof at any width.
+                        Flexible(
+                          child: SizedBox(
+                            width: 130,
+                            child: Row(
+                              children: [
+                                Icon(PhosphorIconsRegular.speakerHigh,
+                                    size: 16, color: c.fgDim),
+                                Expanded(
+                                  child: _slim(
+                                    Slider(
+                                      value: volume,
+                                      max: 100,
+                                      onChanged: (v) => ref
+                                          .read(volumeProvider.notifier)
+                                          .set(v),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -383,7 +460,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
     );
   }
 
-  Widget _nowMeta(BuildContext context, Track? track) {
+  Widget _nowMeta(BuildContext context, Track? track, Widget? formatLine) {
     final c = AriaColors.of(context);
     if (track == null) {
       return Align(
@@ -423,6 +500,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                ?formatLine,
               ],
             ),
           ),
