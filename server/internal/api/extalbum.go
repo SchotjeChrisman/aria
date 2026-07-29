@@ -157,7 +157,11 @@ func fetchExtAlbum(ctx context.Context, artist, title string, deezerID int64) (*
 	if rg != "" {
 		out.RGMbid = rg
 		out.ID = "rg:" + rg
-		out.Releases = extMB.ReleasesInGroup(ctx, rg)
+		// only the ids are wanted here; ReleasesInGroup now returns whole
+		// releases because the matcher needs their media structure.
+		for _, rel := range extMB.ReleasesInGroup(ctx, rg) {
+			out.Releases = append(out.Releases, rel.ID)
+		}
 	} else {
 		// MusicBrainz lags streaming by days to weeks, and this feature lives
 		// in exactly that window. A Deezer-keyed entry still works; the 30-day

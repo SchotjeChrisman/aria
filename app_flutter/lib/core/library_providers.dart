@@ -168,10 +168,15 @@ bool enrichBusy(Object? statusJson) =>
     statusJson is Map &&
     (statusJson['running'] == true || statusJson['phase'] != 'idle');
 
-/// App-lifetime `enrich` SSE watcher: when a server pass finishes
+/// App-lifetime `enrich`/`analyze` SSE watcher: when a server pass finishes
 /// (busy -> idle) the library caches refresh, no matter which screen is
-/// open — enrichment is server-side work, the app just reacts to it.
+/// open — both are server-side work, the app just reacts to it.
 /// Watched by TransportBar; the Settings poller only renders progress.
+///
+/// The three passes (enrich, fingerprint, analyze) are tracked separately
+/// rather than through one shared `wasBusy`: the analyzer runs for hours after
+/// enrichment has gone idle, and a single flag would read every interleaving as
+/// a spurious transition and refresh the whole library on each one.
 final enrichRefreshProvider = Provider<void>((ref) {
   final client = ref.watch(apiClientProvider);
   var disposed = false;
@@ -182,12 +187,12 @@ final enrichRefreshProvider = Provider<void>((ref) {
     disposed = true;
     retry?.cancel();
   });
-  var wasBusy = false;
+  final wasBusy = {'enrich': false, 'analyze': false, 'fingerprint': false};
 
-  void seen(bool busy) {
-    if (wasBusy != busy) Log.i('enrich', busy ? 'pass started' : 'pass finished');
-    if (wasBusy && !busy) invalidateLibrary(ref);
-    wasBusy = busy;
+  void seen(String src, bool busy) {
+    if (wasBusy[src] != busy) Log.i(src, busy ? 'pass started' : 'pass finished');
+    if (wasBusy[src]! && !busy) invalidateLibrary(ref);
+    wasBusy[src] = busy;
   }
 
   Future<void> tick() async {
@@ -196,12 +201,17 @@ final enrichRefreshProvider = Provider<void>((ref) {
       // (re)connect closes that gap before we trust the stream.
       final s = await client.enrichStatus();
       if (disposed) return;
-      seen(s.phase != 'idle');
+      seen('enrich', s.phase != 'idle');
       await for (final e in client.events()) {
         if (disposed) return;
-        if (e.event != 'enrich') continue;
+        if (e.event != 'enrich' &&
+            e.event != 'analyze' &&
+            e.event != 'fingerprint') {
+          continue;
+        }
         try {
-          seen(enrichBusy(jsonDecode(e.data)));
+          // All three statuses are deliberately the same {phase,running} shape.
+          seen(e.event, enrichBusy(jsonDecode(e.data)));
         } on FormatException {
           // malformed frame — ignore, the next one corrects us
         }

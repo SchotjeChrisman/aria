@@ -25,15 +25,59 @@ import (
 	"aria/internal/repo"
 )
 
+// The gate on what gets indexed at all. Deliberately a subset of the 37
+// extensions TagLib dispatches on: every entry here must ALSO be decodable by
+// the ffmpeg the high/low tiers shell out to, or serveTranscoded 500s on a row
+// the library happily shows. That rules out .dff/.dsdiff (TagLib tags it,
+// ffmpeg has no DSDIFF demuxer — only dsf), the tracker modules (.mod/.it/.xm
+// need libopenmpt, absent from the pinned static-ffmpeg), .m4p (FairPlay),
+// .mp4/.m4v/.3g2 (video would be indexed as tracks, and we ship no ffprobe to
+// tell them apart) and .mka/.caf/.w64 (TagLib mis-sniffs them into zero-length
+// ghost rows). Adding here is safe for existing installs: a previously
+// ineligible file has no tracks row, so the mtime+size skip in Scan() misses
+// and it is parsed on the next scan — no migration, no forced full rescan.
 var exts = map[string]bool{
 	".flac": true, ".mp3": true, ".m4a": true, ".ogg": true, ".opus": true,
 	".wav": true, ".aiff": true, ".ape": true, ".wv": true, ".dsf": true,
+	// .aif is the commoner spelling of .aiff (and what Apple tools write);
+	// .aifc/.afc are AIFF-C, which may hold COMPRESSED audio — hence the
+	// InnerCodec check in isLossless, not a blanket "aiff is lossless".
+	".aif": true, ".aifc": true, ".afc": true,
+	// .oga is Ogg with any payload: vorbis, opus, or FLAC. taglib reports Ogg
+	// FLAC as format "flac" (it reuses FLAC::Properties and is indistinguishable),
+	// so lossless already comes out right without a new clause.
+	".oga": true, ".spx": true,
+	// ponytail: .m4b turns a 14-hour audiobook into one track in one album —
+	// chapter atoms are not modeled. Keep audiobooks out of MUSIC_DIR, or model
+	// chapters if that ever matters.
+	".m4b": true,
+	".wma": true, ".tta": true, ".shn": true, ".mpc": true,
 }
 
-// taglib format names that are always lossless; mp4 needs the alac codec check.
+// taglib format names that are lossless whatever the payload. The three
+// containers that can hold either live in isLossless instead.
 var losslessFmt = map[string]bool{
-	"flac": true, "wav": true, "aiff": true, "ape": true, "wavpack": true,
-	"dsf": true, "dsdiff": true, "tta": true, "shorten": true,
+	"flac": true, "ape": true, "wavpack": true, "dsf": true,
+	"tta": true, "shorten": true,
+}
+
+// isLossless: the container name settles it for most formats, but four carry
+// either kind of payload and taglib exposes exactly the signal to tell them
+// apart (taglib.cpp extract_format_codec_depth). wav/aiff were previously
+// trusted on the container alone, which marked ADPCM wav and compressed
+// AIFF-C as lossless; InnerCodec is set to "pcm" only for wFormatTag 1/3 and
+// AIFF compression NONE/sowt. Gating on "pcm" does not regress hi-res or
+// multichannel WAVE_FORMAT_EXTENSIBLE — taglib still reports pcm for those.
+func isLossless(format, codec string) bool {
+	switch format {
+	case "mp4":
+		return codec == "alac"
+	case "asf":
+		return codec == "wma9lossless" // wma1/wma2/wma9pro are lossy
+	case "wav", "aiff":
+		return codec == "pcm"
+	}
+	return losslessFmt[format]
 }
 
 // "Work: Movement" / "Work - Movement" where the movement starts with a roman
@@ -95,6 +139,14 @@ func (s *Scanner) Status() any {
 		Done     int  `json:"done"`
 		Total    int  `json:"total"`
 	}{s.scanning, s.done, s.total}
+}
+
+// Busy reports whether a scan is in flight. The loudness-analysis job reads it
+// to stay off the disk while the scanner is walking it.
+func (s *Scanner) Busy() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.scanning
 }
 
 type fileEntry struct {
@@ -341,7 +393,7 @@ func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[stri
 		SampleRate:      intPtr(int(props.SampleRate)),
 		BitsPerSample:   intPtr(int(props.BitDepth)),
 		Channels:        intPtr(int(props.Channels)),
-		Lossless:        losslessFmt[props.Format] || (props.Format == "mp4" && props.InnerCodec == "alac"),
+		Lossless:        isLossless(props.Format, props.InnerCodec),
 		HasArt:          false, // set in the post-pool pass
 	}, true
 }

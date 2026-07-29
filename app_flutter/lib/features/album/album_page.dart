@@ -272,6 +272,7 @@ class _AlbumBody extends ConsumerWidget {
             if (d == null) return const SizedBox.shrink();
             final facts = [
               d.label,
+              d.catno, // Discogs; absent without a server DISCOGS_TOKEN
               d.date,
               d.country,
             ].whereType<String>().join(' · ');

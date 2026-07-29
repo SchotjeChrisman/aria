@@ -35,6 +35,15 @@ class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
   late final _added = TextEditingController(
     text: _st.addedDays?.toString() ?? '',
   );
+  late final _loudFrom = TextEditingController(
+    text: _st.loudnessFrom?.toString() ?? '',
+  );
+  late final _loudTo = TextEditingController(
+    text: _st.loudnessTo?.toString() ?? '',
+  );
+  late final _range = TextEditingController(
+    text: _st.minDynamicRange?.toString() ?? '',
+  );
   late String _match = widget.playlist?.rules?.match ?? 'all';
   String? _error;
   bool _saving = false;
@@ -45,16 +54,25 @@ class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
     _yearFrom.dispose();
     _yearTo.dispose();
     _added.dispose();
+    _loudFrom.dispose();
+    _loudTo.dispose();
+    _range.dispose();
     super.dispose();
   }
 
   // Legacy applyScalarFilters(): read scalar inputs back into the state.
   void _applyScalars() {
     int? numVal(TextEditingController c) => int.tryParse(c.text.trim());
+    double? dblVal(TextEditingController c) => double.tryParse(c.text.trim());
     _st.yearFrom = numVal(_yearFrom);
     _st.yearTo = numVal(_yearTo);
     _st.addedDays = numVal(_added);
-    // lossless / releaseType / played bind to _st directly via the dropdowns.
+    // LUFS are negative and fractional, so these are doubles, not ints.
+    _st.loudnessFrom = dblVal(_loudFrom);
+    _st.loudnessTo = dblVal(_loudTo);
+    _st.minDynamicRange = dblVal(_range);
+    // lossless / releaseType / played / sample rate / bit depth / suspect bind
+    // to _st directly via the dropdowns.
   }
 
   Future<void> _save() async {
@@ -199,6 +217,70 @@ class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
                         'Added (days)',
                         _numField(_added, 'e.g. 30'),
                       ),
+                      // Everything below needs the analysis pass: a track the
+                      // server has not decoded matches none of these rows.
+                      _row(
+                        context,
+                        'Minimum sample rate',
+                        _anySelect(
+                          value: _st.minSampleRate?.toString(),
+                          options: const [
+                            ('44100', '44.1 kHz'),
+                            ('48000', '48 kHz'),
+                            ('88200', '88.2 kHz'),
+                            ('96000', '96 kHz'),
+                            ('192000', '192 kHz'),
+                          ],
+                          onChanged: (v) => setState(
+                            () => _st.minSampleRate = v == null
+                                ? null
+                                : int.parse(v),
+                          ),
+                        ),
+                      ),
+                      _row(
+                        context,
+                        'Minimum bit depth',
+                        _anySelect(
+                          value: _st.minBits?.toString(),
+                          options: const [('16', '16-bit'), ('24', '24-bit')],
+                          onChanged: (v) => setState(
+                            () => _st.minBits = v == null ? null : int.parse(v),
+                          ),
+                        ),
+                      ),
+                      _row(
+                        context,
+                        'Loudness (LUFS)',
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _numField(_loudFrom, 'louder than -14'),
+                            ),
+                            const SizedBox(width: AriaSpace.s2),
+                            Expanded(
+                              child: _numField(_loudTo, 'quieter than -20'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _row(
+                        context,
+                        'Dynamic range over (LU)',
+                        _numField(_range, 'e.g. 8'),
+                      ),
+                      _row(
+                        context,
+                        'Suspect files',
+                        _anySelect(
+                          value: _st.suspect,
+                          options: const [
+                            ('false', 'Exclude transcodes'),
+                            ('true', 'Only transcodes'),
+                          ],
+                          onChanged: (v) => setState(() => _st.suspect = v),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -248,7 +330,8 @@ class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
 
   Widget _numField(TextEditingController ctrl, String hint) => TextField(
     controller: ctrl,
-    keyboardType: TextInputType.number,
+    // signed: LUFS values are negative
+    keyboardType: const TextInputType.numberWithOptions(signed: true),
     decoration: InputDecoration(hintText: hint),
   );
 

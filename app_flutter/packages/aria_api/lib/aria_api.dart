@@ -6,6 +6,7 @@ export 'src/exceptions.dart';
 export 'src/models/album.dart';
 export 'src/models/enrichment.dart';
 export 'src/models/eq.dart';
+export 'src/models/health.dart';
 export 'src/models/misc.dart';
 export 'src/models/mixes.dart';
 export 'src/models/playlist.dart';

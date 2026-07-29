@@ -105,11 +105,13 @@ Future<void> _openEditor(
   AriaClient? client,
 }) async {
   Map<String, dynamic> original = {}, overrides = {};
+  Map<String, dynamic>? source;
   try {
     final e = await ref.read(albumApiProvider).edits(kind, key);
     if (e != null) {
       original = e.original;
       overrides = e.overrides;
+      source = e.source;
     }
   } catch (_) {
     // older server: originals unknown, editor still works
@@ -122,6 +124,7 @@ Future<void> _openEditor(
       fields: fields,
       original: original,
       overrides: overrides,
+      source: source,
       patch: patch,
       onReidentify: onReidentify,
       artAlbumId: artAlbumId,
@@ -138,6 +141,7 @@ class _EditorDialog extends StatefulWidget {
     required this.original,
     required this.overrides,
     required this.patch,
+    this.source,
     this.onReidentify,
     this.artAlbumId,
     this.client,
@@ -147,6 +151,10 @@ class _EditorDialog extends StatefulWidget {
   final List<_Field> fields;
   final Map<String, dynamic> original;
   final Map<String, dynamic> overrides;
+
+  /// Provenance for the derived half of [original]; null when nothing derived
+  /// is showing (never matched, still under review, or marked local).
+  final Map<String, dynamic>? source;
   final Future<Object?> Function(Map<String, dynamic> body) patch;
   final void Function(BuildContext ctx)? onReidentify;
 
@@ -322,6 +330,7 @@ class _EditorDialogState extends State<_EditorDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (widget.source != null) _sourceRow(context),
               if (widget.artAlbumId != null) _artRow(context),
               for (final f in widget.fields) _fieldRow(context, f),
               if (_error != null)
@@ -367,6 +376,31 @@ class _EditorDialogState extends State<_EditorDialog> {
         ),
       ],
       backgroundColor: c.bgRaised,
+    );
+  }
+
+  /// One caption line naming the release the corrections came from. That is
+  /// the whole UI cost of provenance: one object per entity, not per field —
+  /// every corrected field on an album came from the same release, so a badge
+  /// beside each of thirteen fields would be thirteen copies of one sentence.
+  Widget _sourceRow(BuildContext context) {
+    final src = widget.source!;
+    final mbid = src['releaseMbid']?.toString() ?? '';
+    final title = src['releaseTitle']?.toString() ?? '';
+    final pinned = src['pinned'] == true;
+    final what = title.isEmpty ? mbid : '\u201c$title\u201d';
+    final verb = pinned ? 'Pinned to' : 'Matched to';
+    final when = (src['decidedAt']?.toString() ?? '').split('T').first;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AriaSpace.s3),
+      child: Tooltip(
+        message: mbid.isEmpty ? '' : 'MusicBrainz release $mbid',
+        child: Text(
+          '$verb MusicBrainz release $what'
+          '${when.isEmpty ? '' : ' \u00b7 $when'}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
     );
   }
 

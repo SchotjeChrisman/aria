@@ -1,9 +1,11 @@
-# Library accuracy: identity, analysis, presentation, and tag write-back
+# Library accuracy: identity, analysis, presentation, and corrections
 
 Research + plan, 2026-07-29. Target: the server identifies every album
 correctly, analyses the actual audio rather than trusting tags, presents names
-in a script the user can read, pulls in what the open internet offers, and can
-write correct tags back to the files.
+in a script the user can read, pulls in what the open internet offers, and
+holds every correction in the database. (The original target ended "and can
+write correct tags back to the files"; the user cut file write-back — see
+Phase 5.)
 
 Four real failures drove this plan and serve as its acceptance tests:
 
@@ -106,7 +108,7 @@ Four layers, each able to correct the one below it.
 MusicBrainz second, with a confidence score and stored evidence.
 
 **Measurement** — facts computed from the audio itself: loudness, true peak,
-content hash, and later BPM/key/mood.
+content hash. (The original plan added BPM/key/mood here; Phase 7 was cut.)
 
 **Enrichment** — facts fetched from open sources, anchored to a confirmed MBID
 rather than a guess.
@@ -126,9 +128,9 @@ artist, and in which script names are shown. Never destructive.
 | Unmatched albums | First-class `local` state | Some albums are legitimately not in MusicBrainz and the user's own metadata is authoritative |
 | Fingerprinting | Bundle static `fpcalc` beside `/ffmpeg`; exec it | `wader/static-ffmpeg:7.1` is **not** built with `--enable-chromaprint`, so ffmpeg's chromaprint muxer is unavailable. No cgo, same pattern as the existing ffmpeg exec |
 | Loudness / content hash | ffmpeg `ebur128=peak=true` and `-f md5`, in-process | Already bundled. One decode pass yields ReplayGain 2.0 inputs and a tag-invariant identity |
-| BPM / key / mood | Optional Essentia **sidecar**, never in-process | Essentia is AGPL-3.0, MTG models are CC BY-NC-ND 4.0; a separate optional image keeps the binary and default image clean |
-| Tag writing | `taglib.WriteTags` | Already a dependency, supports writes and `Clear`; needs an ape/wv/dsf spike |
-| Tag vocabulary | Picard's mapping table | De-facto standard; every other player reads it |
+| BPM / key / mood | ~~Optional Essentia **sidecar**~~ **CUT, not built** | Would have been a separate optional image: Essentia is AGPL-3.0 and the MTG models are CC BY-NC-ND 4.0 |
+| Tag writing | ~~`taglib.WriteTags`~~ **CUT, not built** | Corrections go to the database; `MUSIC_DIR` stays read-only. README carries the note on why write-back will eventually be wanted |
+| Tag vocabulary | ~~Picard's mapping table~~ **CUT, not built** | Only tag writing needed it |
 | MusicBrainz access | Public API at 1 req/s | Requests become per-release, not per-track: ~2,000 albums ≈ 35 min one-off. A local mirror is 50+ GB for no benefit at household scale |
 | Spotify | Not an option | `audio-features` / `audio-analysis` killed for new apps on 2024-11-27 — the reason local DSP is the answer |
 
@@ -187,8 +189,9 @@ Cost is an added `inc=aliases` on the existing `artist(ctx, mbid, inc)` call
 plus caching — no new requests.
 
 Store `name` and `nameLatin` side by side. Display always uses Latin per the
-requirement; disk keeps both. This matters because Phase 5 writes tags back: if
-Latin-only were baked into the data layer, write-back would permanently erase
+requirement; disk keeps both. This still matters with Phase 5 reduced to
+database-only corrections: if Latin-only were baked into the data layer, any
+future write-back (see the README) would permanently erase
 the original script from the files, which would be wrong for anyone with a
 Russian- or Japanese-language library. Same result for the user, nothing
 destroyed.
@@ -252,8 +255,11 @@ recording MBIDs with scores. Fingerprints are stable, so this is computed once
 per file version.
 
 Lookups batch multiple fingerprints per request within the 3 req/s ceiling,
-with `meta=recordingids+releasegroupids`. Ship an application key, allow
-`ACOUSTID_KEY` to override.
+with `meta=recordingids+releasegroupids`. **As built: no key ships.** The plan
+here was to bundle an application key and let `ACOUSTID_KEY` override it;
+instead the key is read from the environment with no default and the lookup
+half is completely dark without one. Fingerprinting itself always runs, so a
+key arriving later needs no re-scan.
 
 Submitting fingerprints back to AcoustID stays off by default — it needs a user
 key and is a data-sharing decision the user should make deliberately.
@@ -292,8 +298,8 @@ strong positive signal that the album is not in MusicBrainz — which is the
 correct conclusion for the Amsterdam show, not a failure to be retried forever.
 
 The `local` state means: pinned to no MusicBrainz entity, user metadata
-authoritative, enrichment skips it entirely, write-back writes the user's
-values, and a disambiguation field carries what only the user knows —
+authoritative, enrichment skips it entirely, the derived layer for that album is
+dropped, and a disambiguation field carries what only the user knows —
 `Down the Road Wherever Tour — 2019-05-XX, Amsterdam`.
 
 Score and evidence persist in `match_candidates` / `match_decisions` so the app
@@ -303,64 +309,91 @@ decision rather than an edit the next enrichment pass overwrites.
 The permanent negative cache goes away: failures get a retry timestamp with
 backoff, so a release MusicBrainz ingests later is eventually found.
 
-Once a release is confirmed, its media structure becomes the authority for
-merging the sibling-folder multi-disc case Phase 0 left open.
+~~Once a release is confirmed, its media structure becomes the authority for
+merging the sibling-folder multi-disc case Phase 0 left open.~~
+
+**Deferred, not built.** Merging sibling folders means re-keying an album, and
+re-keying orphans its plays, tags, playlists, favourites and cached art (see
+`007_album_identity.sql`). This update's hard rule is that no code path changes
+an existing `albumId`, so the merge cannot land inside the matcher as written.
+Top-level `… CD1`/`… CD2` folders still read as separate albums; the
+`CD1`/`Disc 2` *subfolder* case Phase 0 handles is unaffected. Picking this up
+needs the id-remap machinery `cmd/aria/remap.go` used for Phase 0, driven by
+the confirmed release's media structure — not a rename inside `matchOne`.
 
 **Verification:** the Amsterdam album lands in `local` rather than matching
 Madrid, and the review queue explains that thirteen candidates were
 indistinguishable.
 
-## Phase 5 — write correct tags back
+## Phase 5 — apply the corrections (database only)
 
-The destructive phase, so it carries the most safety machinery.
+**Overruled and rebuilt.** This section originally specified writing corrected
+tags back into the files: `/music` remounted `:rw`, a `WRITE_TAGS=1` second
+switch, a per-format tag vocabulary, a `tag_journal` for undo, and a dry-run
+diff endpoint. The user cut file write-back from this update. `MUSIC_DIR` stays
+read-only and nothing in Aria writes to it.
 
-`/music` changes from `:ro` to `:rw`, and writes are additionally gated behind
-`WRITE_TAGS=1`. Two independent switches, both off by default, documented as a
-deliberate choice.
+What survives is the *content* of the list — minus BPM and initial key, which
+are out of scope entirely, and minus the tag-vocabulary and journal machinery,
+which only existed because files are destructive. What replaces the destination
+is the read-time overlay that already exists.
 
-A canonical internal field set maps per container following Picard's mapping:
-ID3v2.4 for mp3/wav/aiff/dsf, Vorbis comments for flac/ogg/opus, MP4 atoms for
-m4a, APEv2 for ape/wv. TagLib handles the detail — the reason `go-taglib` is
-the right tool.
+**Where corrections go.** `enrich_cache` is the derived layer, `edits` stays
+human-only. A confirmed release (state `matched`, auto-applied or user-pinned —
+never `review`) extends two blobs that were already there: `albumCache` gains
+`album`/`albumArtist`/`year`, and `TrackCredits` gains
+`title`/`trackNo`/`discNo`/`mbRecordingId`. Derived values are NOT written as
+`edits` rows: `edits` is what the editor's ↺ resets away from and what "clear
+all" deletes, so a machine writing there would make its own prior output
+indistinguishable from the user's typing, and would show the user overrides
+they never entered. The same convention already governs `label`/`date`/
+`country`, which arrive derived and surface as `original`.
 
-**Spike first:** confirm `taglib.WriteTags` genuinely writes ape, wv and dsf
-through the WASM build. Anything that fails goes on a read-only format list and
-the UI says so, rather than silently no-op'ing.
+**Manual always wins, with no code.** `buildMergedTracks` already applies
+enrich_cache first and `edits` last, so the precedence — file tags → derived
+track blob → derived album blob → album edits → track edits — is the existing
+merge order, not a new ownership check. Pinned by `TestCorrectionPrecedence`.
 
-Every write is preceded by a snapshot of the complete existing tag map into
-`tag_journal`, giving one-command revert for a whole batch. That is the
-difference between a feature the user will try and one they will not.
+**The alignment, and the free bug fix.** Which local file is which release
+track is recomputed from the matcher's own pure pairing (`bestPairing`) rather
+than persisted. That removes `enrich.go`'s `if t.MBRecordingID == nil
+{ continue }`, which meant credits only ever reached libraries already run
+through Picard — §1.3's defect, fixed as a side effect.
 
-A dry-run endpoint returns the exact per-field diff for an album — old value,
-new value, and the source of the new value — shown for confirmation before
-anything touches disk. Bulk apply exists; the diff is always available.
+**Provenance** is one object per entity, served as a third `source` key on
+`GET /api/edits/{kind}/{key}` (additive; older clients read two keys and are
+unaffected), built from `match_decisions` and null whenever nothing derived is
+being applied. Per-field provenance was rejected: every corrected field on an
+album came from the same release.
 
-After writing, re-stat and update `mtime`/`size` in the same transaction so the
-next scan does not treat every rewritten file as changed.
+**Revert**, three levels, all reusing what exists: type the right value (it
+becomes a manual edit and wins permanently); `PATCH /api/albums/{id}
+{"state":"local"}`, which drops the album's derived rows immediately rather than
+masking them and is offered as "Not in MusicBrainz — use my own tags" at the
+bottom of the re-identify dialog; or pick a different release through the
+existing `POST /api/album/{albumId}/reidentify`, which pins the decision.
+Clearing `state` deletes the derived album row with no version marker, so the
+next pass re-derives from scratch — the round trip is lossless.
 
-Written fields: MusicBrainz IDs (release, release-group, recording, track,
-artist, album-artist), sort names, release date, country, type, label,
-catalogue number, barcode, ISRC, disc and track totals, ReplayGain 2.0 track
-and album gain and peak — with `R128_*_GAIN` in Q7.8 for Opus per RFC 7845
-rather than the incompatible `REPLAYGAIN_*` — AcoustID id and fingerprint, BPM
-and initial key when available, and work/movement/composer/conductor for
-classical. `ACOUSTID_ID`, `ACOUSTID_FINGERPRINT`, `BPM`, `INITIALKEY`, `ISRC`,
-`ALBUMARTISTSORT` and `MUSICBRAINZ_RELEASEGROUPID` are already defined
-constants in the installed taglib; ReplayGain keys go through as custom strings.
+**No `tag_journal` and no replacement table.** Nothing is overwritten, only
+shadowed: the file tags stay in the `tracks` row and the manual edits stay in
+`edits`, both underneath the derived layer, and the derived layer is refetchable
+by definition. Undo already exists per field, per album and per library. The one
+real gap is per-run undo ("that pass got 40 albums wrong"), whose upgrade is a
+`batchId` column on `match_decisions` — not built until someone asks.
 
-Names are written in their **original** script with the Latin form in the
-`*SORT` fields. Display-layer Latinisation never reaches disk.
+**No migration.** Both destination tables already exist and both changes are
+JSON blob additions. The one real cost is `albumV` 3 → 4, which re-fetches every
+album at MusicBrainz's 1 req/s.
 
-Cover art is embedded from the Cover Art Archive only when the file has none or
-a clearly worse one. Never downgrade.
+Explicitly still out of scope: renaming or moving files. Track ids are
+`sha1(path)` (`scanner.go:275`), so a rename churns every id and orphans plays,
+tags, playlists and favourites. If file organisation is ever wanted, track
+identity must move to Phase 2's decoded-audio MD5 first. Separate project.
 
-Two hard rules: locked and `local` albums are never overwritten by derived
-data, and no write happens on a first run before the user has seen a diff.
-
-Explicitly out of scope: renaming or moving files. Track ids are `sha1(path)`
-(`scanner.go:275`), so a rename churns every id and orphans plays, tags,
-playlists and favourites. If file organisation is ever wanted, track identity
-must move to Phase 2's decoded-audio MD5 first. Separate project.
+**Why file write-back is still a known gap**, and what it would take, is
+documented for users in `README.md` under "Metadata enrichment". It is a
+deliberate deferral, not an oversight — do not resurrect it here as a plan.
 
 ## Phase 6 — the source graph
 
@@ -384,6 +417,12 @@ MusicBrainz genre list plus Discogs styles as a multi-valued normalised field.
 `internal/genres` is the natural home.
 
 ## Phase 7 — musical descriptors
+
+**Cut by the user, not built.** No Essentia sidecar, no BPM, no key, no mood,
+no danceability, and therefore no harmonic mixing anywhere in the app. Nothing
+in the tree half-implements it: there is no descriptor column, no sidecar
+contract and no disabled UI. The rest of this section is the design as it
+stood, kept for whoever picks it up.
 
 BPM, key, danceability and mood need real MIR; writing that in Go has a bad
 expected value.
@@ -414,11 +453,16 @@ committing to hosting them. Local analysis always overrides.
 
 ## Phase 8 — what the accuracy buys
 
-Smart-playlist predicates on BPM, key, loudness, mood and instrument. Harmonic
-mixing by Camelot-wheel compatibility and BPM proximity — the feature that
-justifies key detection existing. True duplicate detection via decoded-audio
-MD5 (exact) and fingerprint (near-identical across encodes), where today's
-dedup can only compare strings.
+**Built, minus everything that depended on Phase 7.**
+
+Smart-playlist predicates on ~~BPM, key,~~ loudness ~~, mood and instrument~~ —
+`loudness` (LUFS), `dynamicRange` (LU), `sampleRate`, `bitsPerSample` and
+`suspect`, each with the null rule that an unanalysed track fails every
+comparison including `lt`. ~~Harmonic mixing by Camelot-wheel compatibility and
+BPM proximity~~ — cut with Phase 7; there is no key to mix on. True duplicate
+detection via decoded-audio MD5 (exact) and AcoustID (near-identical across
+encodes), where today's dedup can only compare strings; `GET
+/api/library/duplicates`, read-only, nothing is deleted.
 
 Loudness normalisation at playback from the ReplayGain tags, **opt-in and off
 by default**, with the setting stating plainly that applying gain in mpv costs
@@ -427,7 +471,15 @@ handles it can decide for themselves.
 
 A library health view: unmatched albums, low-separation matches, missing art,
 suspect transcodes, clipping tracks, missing MBIDs. Accuracy work is only
-credible when the remaining inaccuracy is visible.
+credible when the remaining inaccuracy is visible. `GET /api/library/health`
+plus `/settings/health`; low separation is banded at twice the matcher's own
+`matchMinSeparation` setting rather than a second copy of the constant.
+
+The near-duplicate half uses AcoustID's clustering rather than comparing
+Chromaprint fingerprints pairwise: the ids are already stored, grouping on them
+is one `GROUP BY`, and the alternative is an O(n²) popcount over 25,000
+fingerprints to answer the same question. It goes dark without `ACOUSTID_KEY`,
+which is indistinguishable from a library with no near-duplicates.
 
 ## 4. The four cases, traced
 
@@ -444,22 +496,45 @@ manual `local` flag makes it hand-fixable immediately.
 
 ## 5. Data model additions
 
-`track_audio` — loudness, LRA, true peak, audio MD5, real codec, suspect flag,
-BPM, key, scale, mood/genre predictions, analysedAt.
-`track_fp` — fingerprint, duration, acoustid, candidate recordings JSON.
-`match_candidates`, `match_decisions` — release MBID, distance, separation,
-evidence JSON, user-pinned flag, retryAfter.
-`tag_journal` — track id, batch id, previous tag map JSON, writtenAt.
-`albums` gains `state` (`matched` | `review` | `local`), `disambiguation`,
-`releaseGroupMbid`, `locked`, `legacyAlbumId`.
-`tracks` gains `genre_raw`.
-Artist/person entries gain `nameLatin` and `nameLatinSource`.
+**As built**, migrations 007-011. Four things this section originally planned
+turned out wrong and are recorded here rather than quietly dropped.
+
+`tracks` gains `legacyAlbumId` (007) — the pre-Phase-0 hash, so plays, tags,
+playlists and favourites survive the identity change.
+`track_audio` (008, 009) — integrated loudness, LRA, true peak, real codec,
+sample rate, bit depth, channels, lossless, suspect, decoded-audio MD5,
+analysedAt. **No BPM, key, scale or mood column**: Phase 7 was cut, so there is
+nothing to store and no column pretending otherwise.
+`track_fp` (010) — fingerprint, duration, acoustid, score, the raw AcoustID
+results JSON, lookedUpAt, lookupError.
+`match_decisions` (011) — state, reason, release MBID, release group MBID,
+disambiguation, distance, separation, pinned, trackSig, attempts, decidedAt,
+retryAfter, and the candidate evidence as a JSON array. **There is no
+`match_candidates` table**: candidates are never queried across albums, so a
+row-per-candidate table would only ever be selected by albumId and immediately
+re-serialised into the JSON the review UI wants.
+
+**Not on `albums`, deliberately.** `repo.Albums.Rebuild` runs `DELETE FROM
+albums` after every scan, so a column there is erased by the next rescan and a
+cascade there would drop every decision the first time the user hits Scan. The
+machine's conclusion lives in `match_decisions`; the user's authority over the
+same album (`state`, `locked`, `disambiguation`) lives in `edits` and always
+wins. Same word, different authority — separate tables are what makes that
+expressible.
+
+**No `tracks.genre_raw`.** The raw tag never moved: `tracks.genre` is still the
+file's own string, and the canonical multi-valued array is derived at read time
+in `buildMergedTracks`. A second column would have to be kept in sync with the
+first for no gain.
+
+Latinised names are an `enrich_cache` concern, not new columns.
 
 ## 6. Non-goals
 
 No local MusicBrainz mirror — 50+ GB to save 35 minutes of one-off wall clock.
 No file renaming or reorganisation. No Essentia in the main image. No
-reimplementation of Chromaprint or EBU R128 in Go. No writes by default, ever.
+reimplementation of Chromaprint or EBU R128 in Go. No writes to MUSIC_DIR at
+all — corrections live in the database (Phase 5).
 No Latinisation written to disk. No Spotify — that door is closed.
 
 ## 7. Sequencing
@@ -469,7 +544,7 @@ of it and fixes two more, using data already being fetched — so 0 and 1 can
 land in parallel and between them clear three of the four reported failures.
 Phases 2 and 3 are independent of each other and of the network for their
 expensive parts. Phase 4 needs 3. Phase 5 needs 4 to be worth trusting. Phases
-6 and 7 are add-ons once 4 exists. Phase 8 is fallout.
+6 is an add-on once 4 exists (7 was cut). Phase 8 is fallout.
 
 First four concrete steps, in order:
 

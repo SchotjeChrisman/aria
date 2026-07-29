@@ -20,9 +20,21 @@ class SmartFilterState {
   String? releaseType;
   String? played; // 'played' | 'never' | null (Any)
   int? addedDays;
+
+  // Measured off the decoded audio by /api/analyze. A track that has not been
+  // analysed matches none of these — not even `quieter than`, since the server
+  // fails every comparison against a null rather than reading it as 0.
+  int? minSampleRate; // Hz
+  int? minBits;
+  double? loudnessFrom; // LUFS: louder than this
+  double? loudnessTo; // LUFS: quieter than this
+  double? minDynamicRange; // LU
+  String? suspect; // 'false' (exclude) | 'true' (only) | null (Any)
 }
 
 int? _asInt(Object? v) => v is num ? v.toInt() : int.tryParse('$v');
+
+double? _asDouble(Object? v) => v is num ? v.toDouble() : double.tryParse('$v');
 
 /// Legacy smartForm(): saved rules -> editable filter state. Rules with no
 /// form row anymore (title/album from the old editor) are dropped on edit.
@@ -59,6 +71,24 @@ SmartFilterState rulesToState(SmartRules? rules) {
         st.played = (r.op == 'is' && _asInt(r.value) == 0) ? 'never' : 'played';
       case 'addedDays':
         st.addedDays = _asInt(r.value);
+      // The quality rows. Each reverses exactly what stateToRules emits, so
+      // editing a playlist round-trips instead of quietly dropping the rule.
+      case 'sampleRate':
+        final v = _asInt(r.value);
+        if (v != null) st.minSampleRate = r.op == 'gt' ? v + 1 : v;
+      case 'bitsPerSample':
+        final v = _asInt(r.value);
+        if (v != null) st.minBits = r.op == 'gt' ? v + 1 : v;
+      case 'loudness':
+        if (r.op == 'gt') {
+          st.loudnessFrom = _asDouble(r.value);
+        } else if (r.op == 'lt') {
+          st.loudnessTo = _asDouble(r.value);
+        }
+      case 'dynamicRange':
+        if (r.op == 'gt') st.minDynamicRange = _asDouble(r.value);
+      case 'suspect':
+        st.suspect = '${r.value}';
     }
   }
   return st;
@@ -104,6 +134,32 @@ SmartFilterState rulesToState(SmartRules? rules) {
   }
   if (st.addedDays != null && st.addedDays! > 0) {
     rules.add(SmartRule(field: 'addedDays', op: 'within', value: st.addedDays));
+  }
+  // `gt v - 1` rather than `>=`, because the server's numeric ops are only
+  // is/gt/lt — the same shape the year rows have always used. Safe on integers.
+  if (st.minSampleRate != null) {
+    rules.add(
+      SmartRule(field: 'sampleRate', op: 'gt', value: st.minSampleRate! - 1),
+    );
+  }
+  if (st.minBits != null) {
+    rules.add(SmartRule(field: 'bitsPerSample', op: 'gt', value: st.minBits! - 1));
+  }
+  // Loudness and range are continuous, so they take the entered bound as-is:
+  // "louder than -14 LUFS", "quieter than -20 LUFS", "more than 8 LU of range".
+  if (st.loudnessFrom != null) {
+    rules.add(SmartRule(field: 'loudness', op: 'gt', value: st.loudnessFrom));
+  }
+  if (st.loudnessTo != null) {
+    rules.add(SmartRule(field: 'loudness', op: 'lt', value: st.loudnessTo));
+  }
+  if (st.minDynamicRange != null) {
+    rules.add(
+      SmartRule(field: 'dynamicRange', op: 'gt', value: st.minDynamicRange),
+    );
+  }
+  if (st.suspect != null) {
+    rules.add(SmartRule(field: 'suspect', op: 'is', value: st.suspect == 'true'));
   }
   if (rules.isEmpty) return (rules: null, error: 'Set at least one filter.');
   return (rules: SmartRules(match: match, rules: rules), error: null);

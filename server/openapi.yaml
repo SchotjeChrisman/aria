@@ -56,6 +56,12 @@ paths:
           emitted on scan start, periodically during, and on completion.
         - `event: enrich` — data is an EnrichStatus JSON object, emitted whenever
           the enrichment phase or counters change.
+        - `event: analyze` — data is an AnalyzeStatus JSON object, emitted whenever
+          the loudness-analysis counters change; absent entirely when the server
+          has no ffmpeg.
+        - `event: fingerprint` — data is a FingerprintStatus JSON object, emitted
+          whenever the fingerprinting or AcoustID-lookup counters change; absent
+          entirely when the server has no working fpcalc.
       operationId: events
       responses:
         '200':
@@ -71,22 +77,25 @@ paths:
       operationId: getStatus
       responses:
         '200':
-          description: Track count, configured music directory (absolute path), server version.
+          description: Track count, configured music directory (absolute path), server version, and which ffmpeg-backed features this deployment has.
           content:
             application/json:
               schema:
                 type: object
-                required: [tracks, musicDir, version]
+                required: [tracks, musicDir, version, transcode, analyze, fingerprint]
                 properties:
                   tracks: { type: integer }
                   musicDir: { type: string }
                   version: { type: string }
+                  transcode: { type: boolean, description: 'Transcoded stream tiers available (ffmpeg present); false means GET /api/stream answers 501 for anything but the original tier.' }
+                  analyze: { type: boolean, description: 'Loudness analysis available (ffmpeg present); false means /api/analyze answers 501 and every gain stays null.' }
+                  fingerprint: { type: boolean, description: 'Chromaprint fingerprinting available (fpcalc present and runnable — probed by executing it, since a dynamically linked binary can exist and still not exec); false means /api/fingerprint answers 501. True says nothing about AcoustID lookups, which additionally need ACOUSTID_KEY in the server environment.' }
 
   /api/scan:
     post:
       tags: [library]
       summary: Rescan the music library
-      description: Synchronous in v1; v2 may stream progress via /api/events. Kicks a background enrichment pass on success.
+      description: Synchronous in v1; v2 may stream progress via /api/events. Kicks a background enrichment pass on success, then a fingerprinting pass when the server has fpcalc, then a loudness-analysis pass when it has ffmpeg — in that order, so three disk-heavy jobs never overlap.
       operationId: scan
       responses:
         '200':
@@ -296,6 +305,244 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EnrichStatus' }
 
+  /api/analyze:
+    post:
+      tags: [library]
+      summary: Kick a background loudness-analysis pass
+      description: |
+        Decodes every track whose bytes changed since it was last analysed
+        (one `ffmpeg -af ebur128` pass per file) to measure EBU R128 integrated
+        loudness, loudness range, true peak, the codec/rate/depth the decoder
+        actually sees, and the MD5 of the decoded audio — a tag-invariant content
+        identity, computed from the same single decode and stored for duplicate
+        detection (not exposed on /api/tracks). No-op if a pass is already running. Returns
+        current status immediately — a first full pass over a large library is
+        hours of work, so follow it on the `analyze` SSE event. Never writes to
+        the music library. 501 when the server has no ffmpeg.
+      operationId: startAnalyze
+      responses:
+        '200':
+          description: Current analysis status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyzeStatus' }
+        '501':
+          description: No ffmpeg on this deployment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/analyze/status:
+    get:
+      tags: [library]
+      summary: Loudness-analysis progress
+      operationId: analyzeStatus
+      responses:
+        '200':
+          description: Phase + counters.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyzeStatus' }
+        '501':
+          description: No ffmpeg on this deployment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/fingerprint:
+    post:
+      tags: [library]
+      summary: Kick a background Chromaprint fingerprinting pass
+      description: |
+        Two phases. First `fingerprint`: runs `fpcalc -json -length 120` over
+        every track whose bytes changed since it was last fingerprinted (~64 ms
+        per file, regardless of track length). Then `lookup`: resolves stored
+        fingerprints against the AcoustID API in batches of 10 at 2.5 req/s,
+        recording the AcoustID id, score and candidate MusicBrainz recording /
+        release-group ids.
+
+        The `lookup` phase is skipped entirely and silently when the server has
+        no `ACOUSTID_KEY` — no key ships with Aria, so this is the default. Get
+        one at https://acoustid.org/new-application; fingerprints computed while
+        the key was absent are looked up on the next pass once it is set, with
+        no backfill step.
+
+        No-op if a pass is already running. Returns current status immediately —
+        follow it on the `fingerprint` SSE event. Never writes to the music
+        library: every result lives in the database. 501 when the server has no
+        working fpcalc.
+      operationId: startFingerprint
+      responses:
+        '200':
+          description: Current fingerprinting status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FingerprintStatus' }
+        '501':
+          description: No fpcalc on this deployment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/fingerprint/status:
+    get:
+      tags: [library]
+      summary: Fingerprinting progress
+      operationId: fingerprintStatus
+      responses:
+        '200':
+          description: Phase + counters.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FingerprintStatus' }
+        '501':
+          description: No fpcalc on this deployment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ---- matching ----------------------------------------------------------------
+
+  /api/match:
+    post:
+      tags: [library]
+      summary: Kick a library-wide album matching pass
+      description: |
+        Matching is the FIRST phase of the enrichment pass, not a separate job —
+        MusicBrainz's 1 req/s schedule is process-global, so a second client
+        would double the agreed rate. This route therefore just kicks
+        `POST /api/enrich`, optionally clearing stored decisions first. Follow
+        progress on the `enrich` SSE event (`phase: "matching"`).
+
+        `force: true` drops every unpinned decision so the whole library is
+        re-decided. Pinned decisions (a user's own release choice, made via
+        `POST /api/album/{albumId}/reidentify`) always survive.
+
+        Cost: per undecided album, one search plus up to 12 verification
+        fetches, typically 1-3 after the track-count prefilter — roughly two
+        hours of wall clock for a 2,000-album library at the enforced rate. The
+        pass is resumable (each decision is written before the next album
+        starts) and a decided album costs zero requests forever after.
+
+        Never writes to the music library: decisions live in the database.
+      operationId: startMatching
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Current enrichment status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichStatus' }
+
+  /api/match/review:
+    get:
+      tags: [library]
+      summary: Albums the matcher did not settle
+      description: |
+        Every album in state `review` or `local`, worst-scoring first, with the
+        full candidate evidence. No network access.
+      operationId: matchReview
+      responses:
+        '200':
+          description: The review queue (empty array when everything is matched).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MatchDecision' }
+
+  /api/albums/{albumId}/match:
+    get:
+      tags: [library]
+      summary: Stored match decision for one album
+      operationId: getAlbumMatch
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: The decision and its candidates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchDecision' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [library]
+      summary: Re-decide one album now
+      description: |
+        Synchronous — the caller is waiting on a candidate list. Bounded by the
+        same 12-fetch cap as the batch pass (~15 s worst case, typically 3-4 s)
+        and runs the identical code path, so an interactive score is never
+        different from a background one.
+      operationId: matchAlbum
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
+      responses:
+        '200':
+          description: The fresh decision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchDecision' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/Upstream' }
+
+  /api/library/health:
+    get:
+      tags: [library]
+      summary: What is still wrong with this library
+      description: |
+        Everything the identification and analysis passes could not settle,
+        counted exactly and listed up to 100 items per issue. Pure read: no
+        network, no job, nothing written. The numbers only move when the
+        analyze, fingerprint and match passes run.
+
+        Issue kinds, in the order returned:
+        `unmatched` (albums in state review/local), `lowSeparation` (matched,
+        but the runner-up release scored within twice the veto threshold),
+        `missingArt`, `missingMbid`, `suspect` (the decoded stream contradicts
+        the container), `clipping` (true peak above 0 dBFS) and `unanalysed`.
+      operationId: libraryHealth
+      responses:
+        '200':
+          description: Counts plus one section per issue kind.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryHealth' }
+
+  /api/library/duplicates:
+    get:
+      tags: [library]
+      summary: Tracks the library holds more than one copy of
+      description: |
+        Exact groups share a decoded-audio MD5 — byte-identical audio
+        regardless of tags, container or filename. Non-exact groups share an
+        AcoustID: the same recording through a different encoder, which the MD5
+        cannot see. A group that is purely a repeat of an exact group is
+        suppressed rather than listed twice.
+
+        Read-only, and deliberately so: MUSIC_DIR is mounted read-only and
+        nothing here deletes a file. Not every group is unwanted — one recording
+        legitimately appears on an album and on a compilation — so this presents
+        and the user decides.
+
+        Empty when ACOUSTID_KEY is unset for the non-exact half, and empty
+        entirely until POST /api/analyze has run.
+      operationId: libraryDuplicates
+      responses:
+        '200':
+          description: One entry per duplicate group (empty array when there are none).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DuplicateGroup' }
+
   /api/enrich/people:
     post:
       tags: [enrichment]
@@ -483,6 +730,11 @@ paths:
         Clears cached per-track credits and album info, re-pulls from MusicBrainz.
         Existing cover-art file is kept. Returns the repopulated AlbumInfo, or `{}`
         when nothing was found.
+
+        This also PINS the match: a non-null `mbid` stores a `matched` decision
+        with `pinned: true`, which the background matcher then never reconsiders.
+        A null `mbid` unpins — the stored decision is deleted and the album is
+        re-decided on the next pass.
       operationId: reidentifyAlbum
       parameters:
         - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
@@ -518,9 +770,18 @@ paths:
       summary: Edit album metadata (DB override)
       description: |
         `album`, `albumArtist`, `genre`, `year` fan out onto the album's tracks in
-        /api/tracks; `releaseType`, `label`, `date`, `country`, `blurb` stay
-        album-level (served via /info and /edits). `null` clears one field.
+        /api/tracks; `releaseType`, `label`, `date`, `country`, `catno`, `blurb`
+        stay album-level (served via /info and /edits). `null` clears one field.
         Returns the surviving override map, not the album.
+
+        An override always beats any automatic correction, whenever it was made.
+        Setting `state` to `local` ("not in MusicBrainz — use my own tags") takes
+        effect immediately: the album's derived MusicBrainz data is dropped rather
+        than masked, and the matcher stops re-deciding it. Clearing `state`, or
+        setting it to anything else, drops the derived data too and re-arms
+        re-derivation on the next enrichment pass. Nothing on disk is touched in
+        either direction — MUSIC_DIR is read-only and corrections live only in the
+        database.
       operationId: patchAlbum
       parameters:
         - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
@@ -564,13 +825,18 @@ paths:
       tags: [edits]
       summary: Editor support — original values and current overrides
       description: |
-        `original` comes from file tags + enrichment only, never from edits; every
-        editable field is present, null when unset. `overrides` is the raw stored
-        override map (may be `{}`). Field sets per kind:
+        `original` comes from file tags + derived data (MusicBrainz and the other
+        open sources) only, never from edits; every editable field is present, null
+        when unset. Where an album has a confirmed MusicBrainz match, `original`
+        carries the corrected `album`/`albumArtist`/`year` (and `title`/`trackNo`/
+        `discNo` for a track), plus the matcher's own `state` and `disambiguation` —
+        so resetting a field in the editor reverts to the correction, not to the
+        tag the correction replaced. `overrides` is the raw stored override map
+        (may be `{}`) and always wins over both. Field sets per kind:
         track: title, artist, album, albumArtist, genre, year, trackNo, discNo,
         composer, work, movement, conductor, orchestra.
-        album: album, albumArtist, genre, year, releaseType, label, date, country, blurb,
-        state, disambiguation, locked.
+        album: album, albumArtist, genre, year, releaseType, label, date, country, catno,
+        blurb, state, disambiguation, locked.
         artist: type, area, born, died, image, bio (cache-only, never hits the network).
         For kind=artist the key may be the Latin display name; it is resolved back to
         the stored (original-script) name before anything is read or written.
@@ -596,6 +862,8 @@ paths:
                 properties:
                   original: { type: object }
                   overrides: { type: object }
+                  source:
+                    $ref: '#/components/schemas/MatchSource'
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ---- tags ------------------------------------------------------------------
@@ -806,7 +1074,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [listenbrainzToken, classicalDisplayArtist]
+                required: [listenbrainzToken, classicalDisplayArtist, matchMaxDistance, matchMinSeparation]
                 properties:
                   listenbrainzToken: { type: string }
                   classicalDisplayArtist:
@@ -816,6 +1084,21 @@ paths:
                       orchestra) as the album artist on classical releases,
                       with the composers split off into `composer`. Default
                       true. Album edits still win over it.
+                  matchMaxDistance:
+                    type: number
+                    description: >
+                      Gate A. The best candidate's 0-1 distance must be at most
+                      this to auto-apply. Default 0.10; beets auto-imports at a
+                      stricter 0.04, which is the direction to move if
+                      calibration shows false positives.
+                  matchMinSeparation:
+                    type: number
+                    description: >
+                      Gate B, the ambiguity veto. The best candidate in a
+                      DIFFERENT release group must be at least this much worse.
+                      Default 0.25 (beets' rec_gap_thresh). Deluxe/remaster
+                      twins share a release group and so never trip it; thirteen
+                      nights of one tour are thirteen groups and do.
     post:
       tags: [settings]
       summary: Update settings
@@ -830,6 +1113,8 @@ paths:
               properties:
                 listenbrainzToken: { type: string, maxLength: 200 }
                 classicalDisplayArtist: { type: boolean }
+                matchMaxDistance: { type: number, exclusiveMinimum: 0, maximum: 1 }
+                matchMinSeparation: { type: number, exclusiveMinimum: 0, maximum: 1 }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1420,6 +1705,12 @@ components:
         canonical genres, and user tag names. Fields absent in the file tags
         are null, not omitted (except performers/orchestra, which only appear
         after enrichment).
+
+        `title`, `artist`, `album`, `albumArtist`, `year`, `trackNo`, `discNo` and
+        `mbRecordingId` may come from the file tags, from a confirmed MusicBrainz
+        match, or from your edits — in that order, later always winning. The files
+        themselves are never modified; see GET /api/edits/{kind}/{key} for which
+        release a correction came from.
       required:
         - id
         - addedAt
@@ -1450,7 +1741,7 @@ components:
         album: { type: string, description: 'Defaults to "Unknown Album".' }
         albumId:
           $ref: '#/components/schemas/Sha1'
-          description: sha1 hex of lowercase(albumArtist + "\0" + album).
+          description: sha1 hex of lowercase(album directory + "\0" + album title) — see the ID scheme note at the top of this document. NOT derived from the album artist, which is why two identically-tagged concerts in two folders stay two albums.
         composer: { type: [string, 'null'] }
         conductor: { type: [string, 'null'] }
         orchestra:
@@ -1470,15 +1761,61 @@ components:
         genres:
           type: array
           items: { type: string }
-          description: Canonical genres derived from the raw tag via the /api/genres taxonomy.
+          description: >
+            Canonical genres via the /api/genres taxonomy, derived from the raw
+            `genre` tag PLUS the album's enrichment sources — MusicBrainz's
+            community-voted genre tags and, when DISCOGS_TOKEN is set, Discogs'
+            genres and styles. The file tag's own genres come first and `genre`
+            itself is never altered; enrichment is additive to this array only,
+            so a track can appear under more genres than its tag names.
         trackNo: { type: [integer, 'null'] }
         discNo: { type: [integer, 'null'] }
         duration: { type: [number, 'null'], description: 'Seconds, fractional.' }
-        format: { type: string, description: 'Container name, e.g. "FLAC", "MPEG", or uppercased extension.' }
+        format: { type: string, description: 'Container name as taglib reports it, e.g. "FLAC", "MPEG" (mp3), "MP4" (m4a/m4b), "ASF" (wma) — or the uppercased extension when taglib gives none.' }
         sampleRate: { type: [integer, 'null'], description: Hz. }
         bitsPerSample: { type: [integer, 'null'] }
         channels: { type: [integer, 'null'] }
-        lossless: { type: boolean }
+        lossless: { type: boolean, description: 'Decided by the codec, not the container: ALAC-in-mp4 and WMA Lossless are true, AAC-in-m4a, ADPCM wav and compressed AIFF-C are false.' }
+        trackGainDb:
+          type: [number, 'null']
+          description: |
+            ReplayGain 2.0 track gain in dB against the -18 LUFS reference,
+            derived from the measured integrated loudness. Null until POST
+            /api/analyze has seen the file, and null for anything the EBU R128
+            gate found unmeasurable (silence, or shorter than one 400 ms block).
+            Null means "no evidence" — a client must apply no adjustment, never 0.
+        trackPeak:
+          type: [number, 'null']
+          description: 'True peak as ReplayGain 2.0 linear amplitude (1.0 = full scale). Values above 1.0 are normal and are what a gain stage must respect to avoid clipping. Null when unmeasured.'
+        albumGainDb:
+          type: [number, 'null']
+          description: |
+            ReplayGain 2.0 album gain in dB, shared by every track of the album.
+            A duration-weighted energy mean of the per-track measurements, not a
+            true single-pass album measurement: measured 0.05 dB out on a normal
+            album and up to ~3 dB out on a 20-LU-spread one, always biased toward
+            over-boosting. Null until at least one track of the album is analysed.
+        albumPeak:
+          type: [number, 'null']
+          description: 'Loudest true peak on the album, as linear amplitude. Exact. Null when no track of the album has a measured peak.'
+        loudnessLufs:
+          type: [number, 'null']
+          description: |
+            Integrated loudness in LUFS, as measured — the unconverted input to
+            trackGainDb, exposed because the `loudness` smart-playlist predicate
+            compares against it. Null under exactly the same conditions as
+            trackGainDb, and a null fails every comparison rather than reading
+            as 0.
+        dynamicRangeLu:
+          type: [number, 'null']
+          description: 'EBU R128 loudness range (LRA) in LU: roughly how much the loudness varies across the track. Small values are compressed masters. Compared by the `dynamicRange` predicate. Null when unmeasured.'
+        suspect:
+          type: boolean
+          description: |
+            The decoded stream contradicts what the container and tags claim —
+            a .flac that decodes as AAC, or a sample rate the tags disagree
+            with. False on an unanalysed track means only that nothing has
+            contradicted it yet, not that it was verified.
         hasArt: { type: boolean, description: 'True when GET /api/art succeeds for this albumId.' }
         releaseType:
           type: string
@@ -1553,7 +1890,7 @@ components:
         match: { type: string, enum: [all, any] }
         rules:
           type: array
-          maxItems: 16
+          maxItems: 24
           items: { $ref: '#/components/schemas/SmartRule' }
 
     SmartRule:
@@ -1567,6 +1904,11 @@ components:
         releaseType: is, isNot.
         addedDays: within (numeric value, days).
         tag: is, isNot, anyOf, allOf (exact tag-name match).
+        loudness, dynamicRange, sampleRate, bitsPerSample: is, gt, lt (numeric value).
+        Measured off the decoded audio, so all four are null until POST /api/analyze
+        has run and a null fails EVERY operator including lt — an unmeasured track is
+        not a quiet one.
+        suspect: is (boolean) — the decoded stream contradicts the container.
         genre matches hierarchically against the canonical taxonomy, with raw-substring
         fallback for pre-canonicalization rules. credited matches artist, conductor,
         orchestra and performer names.
@@ -1575,7 +1917,8 @@ components:
         field:
           type: string
           enum: [title, artist, albumArtist, album, genre, composer, format, credited,
-                 year, lossless, releaseType, playCount, addedDays, tag]
+                 year, lossless, releaseType, playCount, addedDays, tag,
+                 loudness, dynamicRange, sampleRate, bitsPerSample, suspect]
         op:
           type: string
           enum: [is, isNot, contains, anyOf, allOf, gt, lt, within]
@@ -1585,6 +1928,70 @@ components:
             - { type: number }
             - { type: boolean }
             - { type: array, minItems: 1, maxItems: 30, items: { type: string, minLength: 1 } }
+
+    LibraryHealth:
+      type: object
+      required: [counts, issues]
+      properties:
+        counts:
+          type: object
+          required: [tracks, albums, analysed, fingerprinted, identified]
+          properties:
+            tracks: { type: integer }
+            albums: { type: integer }
+            analysed: { type: integer, description: Tracks with a track_audio row. }
+            fingerprinted: { type: integer }
+            identified: { type: integer, description: 'Fingerprinted tracks AcoustID answered for; 0 without ACOUSTID_KEY.' }
+        issues:
+          type: array
+          items: { $ref: '#/components/schemas/HealthIssue' }
+
+    HealthIssue:
+      type: object
+      required: [kind, count, items]
+      properties:
+        kind:
+          type: string
+          enum: [unmatched, lowSeparation, missingArt, missingMbid, suspect, clipping, unanalysed]
+        count: { type: integer, description: 'The true total, which may exceed items.' }
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/HealthItem' }
+
+    HealthItem:
+      type: object
+      required: [albumId, title]
+      properties:
+        albumId: { $ref: '#/components/schemas/Sha1' }
+        trackId: { description: 'Present on track-level issues (suspect, clipping, unanalysed) only.', $ref: '#/components/schemas/Sha1' }
+        title: { type: string, description: 'Album title, or track title for track-level issues.' }
+        subtitle: { type: string, description: Album artist, or track artist. }
+        detail: { type: string, description: 'One line saying what is wrong — the matcher''s own reason, or the measurement.' }
+
+    DuplicateGroup:
+      type: object
+      required: [key, exact, tracks]
+      properties:
+        key: { type: string, description: 'The shared content key (decoded-audio MD5, or AcoustID). Opaque; stable across refreshes.' }
+        exact: { type: boolean, description: 'True when the decoded audio is byte-identical; false when only AcoustID says it is the same recording.' }
+        tracks:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [id, albumId, title, artist, album, format, lossless]
+            properties:
+              id: { $ref: '#/components/schemas/Sha1' }
+              albumId: { $ref: '#/components/schemas/Sha1' }
+              title: { type: string }
+              artist: { type: string }
+              album: { type: string }
+              format: { type: string }
+              duration: { type: [number, 'null'] }
+              sampleRate: { type: [integer, 'null'] }
+              bitsPerSample: { type: [integer, 'null'] }
+              lossless: { type: boolean }
 
     Station:
       type: object
@@ -1603,7 +2010,33 @@ components:
       properties:
         phase:
           type: string
-          enum: [idle, albums, artists, discographies, composers, people, names, faces]
+          description: '`matching` runs first — every later phase anchors on the release MBID it decides.'
+          enum: [idle, matching, albums, sources, artists, discographies, popularity, composers, people, names, wikidata, faces]
+        done: { type: integer }
+        total: { type: integer }
+        running: { type: boolean }
+
+    AnalyzeStatus:
+      type: object
+      description: Same shape as EnrichStatus so a client can share the deserialiser.
+      required: [phase, done, total, running]
+      properties:
+        phase:
+          type: string
+          enum: [idle, loudness]
+        done: { type: integer }
+        total: { type: integer }
+        running: { type: boolean }
+
+    FingerprintStatus:
+      type: object
+      description: Same shape as EnrichStatus and AnalyzeStatus so a client can share the deserialiser.
+      required: [phase, done, total, running]
+      properties:
+        phase:
+          type: string
+          description: '`lookup` is never reported when the server has no ACOUSTID_KEY — the pass goes straight from `fingerprint` back to `idle`.'
+          enum: [idle, fingerprint, lookup]
         done: { type: integer }
         total: { type: integer }
         running: { type: boolean }
@@ -1643,6 +2076,15 @@ components:
           items: { $ref: '#/components/schemas/DiscographyItem' }
         discographyAt: { type: string, format: date-time }
         mbid: { type: string, description: MusicBrainz artist MBID, when one was resolved. }
+        instruments:
+          type: array
+          items: { type: string }
+          description: >
+            Instruments played, from Wikidata (P1303), English labels. The one
+            fact Wikidata carries that MusicBrainz and Wikipedia do not; absent
+            for artists Wikidata has no entity for or says nothing about.
+        qid: { type: string, description: 'Wikidata Q-id, taken from the MusicBrainz `wikidata` url-rel.' }
+        wdCheckedAt: { type: string, format: date-time, description: Set once the Wikidata pass has answered for this entry; it is never asked twice. }
         nameLatin:
           type: string
           description: >
@@ -1684,11 +2126,20 @@ components:
 
     AlbumInfo:
       type: object
-      description: On-demand album depth; only found fields are present. Edits overlay label/date/country/blurb.
+      description: >
+        On-demand album depth; only found fields are present. Edits overlay
+        label/date/country/catno/blurb. `label` prefers MusicBrainz and falls
+        back to Discogs, which often has one where MusicBrainz does not.
       properties:
         label: { type: [string, 'null'] }
         date: { type: [string, 'null'], description: MusicBrainz release date. }
         country: { type: [string, 'null'] }
+        catno:
+          type: string
+          description: >
+            Catalogue number of the pressing, from Discogs. Absent without
+            DISCOGS_TOKEN, and absent when MusicBrainz carries no Discogs link
+            for the matched release.
         mbType: { type: [string, 'null'], description: MB release-group primary type. }
         mbSecondary:
           type: array
@@ -1720,6 +2171,79 @@ components:
         tracks: { type: [integer, 'null'], description: MB track count. }
         score: { type: [integer, 'null'] }
 
+    MatchDecision:
+      type: object
+      description: |
+        The matcher's conclusion about one album, plus the evidence for it.
+
+        This is the MACHINE's answer. The user's own `state`/`disambiguation`/
+        `locked` live in the album edits overlay and always win: a user `local`
+        is permanent and excludes the album from matching forever, a machine
+        `local` carries `retryAfter` and is reconsidered.
+
+        A decision never changes an album's `albumId`.
+      required: [albumId, state, reason, candidates]
+      properties:
+        albumId: { $ref: '#/components/schemas/Sha1' }
+        album: { type: string, description: Album title, joined from tracks (review queue only). }
+        albumArtist: { type: string }
+        state:
+          type: string
+          description: |
+            `matched` — both gates passed; enrichment anchors on `releaseMbid`.
+            `review` — plausible but ambiguous or weak; no MBID applied, retried on backoff.
+            `local` — no MusicBrainz entity; enrichment skips the album entirely.
+          enum: [matched, review, local]
+        reason:
+          type: string
+          enum: [ok, pinned, no-candidates, no-plausible-candidate, indistinguishable-siblings, low-separation, weak-match]
+        releaseMbid:
+          oneOf: [{ $ref: '#/components/schemas/Mbid' }, { type: 'null' }]
+        releaseGroupMbid:
+          oneOf: [{ $ref: '#/components/schemas/Mbid' }, { type: 'null' }]
+        disambiguation: { type: string, description: MusicBrainz release disambiguation, for display. }
+        distance: { type: [number, 'null'], description: 'D1: the winning candidate''s 0-1 distance.' }
+        separation:
+          type: [number, 'null']
+          description: 'D2 - D1, where D2 is the best candidate in a DIFFERENT release group. Null when there was no rival group.'
+        pinned: { type: boolean, description: User chose this release; never re-decided. }
+        attempts: { type: integer }
+        decidedAt: { type: string }
+        retryAfter:
+          type: string
+          description: 'ISO instant after which the album is reconsidered; empty string means never (matched or pinned).'
+        candidates:
+          type: array
+          items: { $ref: '#/components/schemas/MatchCandidate' }
+
+    MatchCandidate:
+      type: object
+      description: One release that was fetched and scored, with its per-component breakdown.
+      required: [mbid, distance, source]
+      properties:
+        mbid: { $ref: '#/components/schemas/Mbid' }
+        rgMbid: { type: string, description: Release-group MBID; the unit the ambiguity veto compares. }
+        title: { type: string }
+        artist: { type: string, description: Joined artist-credit string. }
+        date: { type: string }
+        country: { type: string }
+        disambiguation: { type: string }
+        tracks: { type: integer }
+        media: { type: integer }
+        source:
+          type: string
+          description: Where this candidate came from. Search rank is never used as evidence, only as fetch order.
+          enum: [tag, acoustid, search]
+        distance: { type: number, minimum: 0, maximum: 1 }
+        why:
+          type: object
+          description: |
+            Per-component penalties, each 0-1, averaged over the paired tracks
+            where per-track. This is what lets a client say "thirteen candidates
+            were indistinguishable; all match on titles and fail on durations"
+            rather than showing a bare number.
+          additionalProperties: { type: number }
+
     TrackEdits:
       type: object
       description: Track override fields. In a PATCH request, null clears a field; other values must be non-empty trimmed strings (max 300) or ints 0-3000 for year/trackNo/discNo. In responses, cleared fields are absent.
@@ -1739,6 +2263,27 @@ components:
         conductor: { type: [string, 'null'] }
         orchestra: { type: [string, 'null'] }
 
+    MatchSource:
+      type: [object, 'null']
+      description: |
+        Where an entity's derived corrections came from. One object per entity, not
+        per field — every corrected field on an album came from the same release.
+        `null` when nothing derived is being applied: the album was never matched,
+        its match is still awaiting review, or the user marked it `local`.
+        For kind=track it is the album's source plus that track's `recordingMbid`.
+      required: [kind, releaseMbid]
+      properties:
+        kind: { type: string, enum: [musicbrainz] }
+        releaseMbid: { $ref: '#/components/schemas/Mbid' }
+        releaseTitle:
+          type: string
+          description: Empty for a user-pinned match, which stores no candidate set.
+        recordingMbid: { type: string, description: Track responses only. }
+        distance: { type: [number, 'null'] }
+        separation: { type: [number, 'null'] }
+        decidedAt: { type: string }
+        pinned: { type: boolean, description: The user chose this release by hand. }
+
     AlbumEdits:
       type: object
       description: Album override fields; same null-clears semantics as TrackEdits. blurb allows up to 4000 chars.
@@ -1755,15 +2300,24 @@ components:
         label: { type: [string, 'null'] }
         date: { type: [string, 'null'] }
         country: { type: [string, 'null'] }
+        catno: { type: [string, 'null'] }
         blurb: { type: [string, 'null'], maxLength: 4000 }
         artSource:
           oneOf:
             - { type: string, enum: [file, api, custom] }
             - { type: 'null' }
         state:
-          description: '`local` means the user''s metadata is authoritative and no MusicBrainz entity is pinned.'
+          description: >
+            The user's override of the matcher's own state, and it outranks it.
+            `local` means the user's metadata is authoritative and no
+            MusicBrainz entity is pinned — set here it is permanent and the
+            matcher never looks at the album again (unlike a machine-set
+            `local`, which retries on backoff). `review` pushes an album the
+            matcher settled back into the queue. In the `original` block of
+            GET /api/edits/album/{albumId} this field carries the matcher's
+            current state instead.
           oneOf:
-            - { type: string, enum: [matched, local] }
+            - { type: string, enum: [matched, review, local] }
             - { type: 'null' }
         disambiguation: { type: [string, 'null'] }
         locked: { type: [boolean, 'null'] }

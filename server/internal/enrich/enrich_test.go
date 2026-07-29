@@ -33,7 +33,7 @@ func TestEnrichAlbumArtSlot(t *testing.T) {
 	}
 	t.Cleanup(func() { sqldb.Close() })
 	ctx := context.Background()
-	e := New(ctx, repo.NewTracks(sqldb), repo.NewEnrich(sqldb), dir)
+	e := New(ctx, repo.NewTracks(sqldb), repo.NewEnrich(sqldb), repo.NewMatches(sqldb), repo.NewSettings(sqldb), dir, "")
 
 	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		switch {
@@ -73,7 +73,7 @@ func TestEnrichAlbumArtSlot(t *testing.T) {
 // stubMB points every outbound client at f (MusicBrainz, Deezer, Wikipedia and
 // the binary fetcher all share the same shape of politeClient).
 func stubMB(e *Enricher, f roundTripFunc) {
-	for _, pc := range []*politeClient{e.pc, e.mb.c, e.dz.c, e.wiki.c, e.oo.c, e.lrc.c} {
+	for _, pc := range []*politeClient{e.pc, e.mb.c, e.dz.c, e.wiki.c, e.oo.c, e.lrc.c, e.lb.c} {
 		pc.hc.Transport = f
 	}
 }
@@ -87,7 +87,7 @@ func newTestEnricher(t *testing.T) (*Enricher, context.Context) {
 	}
 	t.Cleanup(func() { sqldb.Close() })
 	ctx := context.Background()
-	return New(ctx, repo.NewTracks(sqldb), repo.NewEnrich(sqldb), dir), ctx
+	return New(ctx, repo.NewTracks(sqldb), repo.NewEnrich(sqldb), repo.NewMatches(sqldb), repo.NewSettings(sqldb), dir, ""), ctx
 }
 
 // The release-level display policy has to survive the round trip into the
@@ -187,5 +187,165 @@ func TestEnrichArtistStoresLatinName(t *testing.T) {
 	}
 	if again := e.artistGet(ctx, raw); again == nil || again.NameLatin != "Vasily Petrenko" {
 		t.Errorf("original-script entry after reidentify = %v, want it re-enriched in place", again)
+	}
+}
+
+// ---- corrections from a confirmed match -------------------------------------
+
+// twoMediumRelease is a 2-disc release whose track order and titles disagree
+// with the local tags — which is the whole point: the corrections have to move.
+// Disc 2 track 1 carries a conductor rel so the credit path is exercised on a
+// track the FILE has no recording MBID for.
+const twoMediumRelease = `{"id":"rel-1","title":"MB Album","date":"1996-04-02",
+	"artist-credit":[{"name":"MB Artist","joinphrase":"","artist":{"id":"a1","name":"MB Artist"}}],
+	"media":[
+	  {"position":1,"track-count":2,"tracks":[
+	    {"position":1,"title":"MB One","length":180000,"recording":{"id":"rec-1"}},
+	    {"position":2,"title":"MB Two","length":180000,"recording":{"id":"rec-2"}}]},
+	  {"position":2,"track-count":1,"tracks":[
+	    {"position":1,"title":"MB Three","length":180000,"recording":{"id":"rec-3",
+	      "relations":[{"type":"conductor","artist":{"id":"c1","name":"A Conductor"}}]}}]}]}`
+
+// The corrections a confirmed release produces, in the derived layer only.
+// Nothing here writes to a file: every assertion is a database row.
+func TestEnrichAlbumAppliesCorrections(t *testing.T) {
+	e, ctx := newTestEnricher(t)
+	stubMB(e, func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Host, "musicbrainz") && strings.Contains(r.URL.Path, "/release/") {
+			return resp(200, twoMediumRelease), nil
+		}
+		return resp(404, ""), nil
+	})
+	albumID, mbid := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "rel-1"
+	if err := e.put(ctx, KindAlbum, albumID, albumCache{Mbid: &mbid}); err != nil {
+		t.Fatal(err)
+	}
+	// Continuous 1..3 numbering across two media — the sequential pairing case —
+	// and, deliberately, NOT ONE of them carries an MBRecordingID. Before this
+	// change that meant no credits at all: the join was the file's own tag, so
+	// credits only ever reached libraries already run through Picard.
+	dur := 180.0
+	titles := []string{"mb one", "mb two", "mb three"} // right songs, wrong capitalisation
+	ts := make([]repo.Track, 3)
+	for i := range ts {
+		n := i + 1
+		ts[i] = repo.Track{ID: "t" + string(rune('1'+i)), AlbumID: albumID, Title: titles[i],
+			Album: "file album", AlbumArtist: "file artist", TrackNo: &n, Duration: &dur, HasArt: true}
+	}
+	if err := e.enrichAlbum(ctx, albumID, ts); err != nil {
+		t.Fatal(err)
+	}
+
+	var a albumCache
+	if !e.cacheGet(ctx, KindAlbum, albumID, &a) {
+		t.Fatal("no album blob")
+	}
+	if a.Album != "MB Album" || a.AlbumArtist != "MB Artist" || a.Year != 1996 {
+		t.Errorf("album blob = %+v, want the release's title/credit/year", a)
+	}
+
+	for _, tc := range []struct {
+		id, title        string
+		trackNo, discNo  int
+		recID, conductor string
+	}{
+		{id: "t1", title: "MB One", trackNo: 1, discNo: 1, recID: "rec-1"},
+		{id: "t2", title: "MB Two", trackNo: 2, discNo: 1, recID: "rec-2"},
+		{id: "t3", title: "MB Three", trackNo: 1, discNo: 2, recID: "rec-3", conductor: "A Conductor"},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			var c TrackCredits
+			if !e.cacheGet(ctx, KindTrack, tc.id, &c) {
+				t.Fatalf("no track blob for %s", tc.id)
+			}
+			if c.Title != tc.title || c.TrackNo != tc.trackNo || c.DiscNo != tc.discNo || c.MBRecID != tc.recID {
+				t.Errorf("track blob = %+v, want %v/%d-%d/%v", c, tc.title, tc.discNo, tc.trackNo, tc.recID)
+			}
+			if c.Conductor != tc.conductor {
+				t.Errorf("conductor = %q, want %q", c.Conductor, tc.conductor)
+			}
+		})
+	}
+}
+
+// A `review` decision must change nothing a user sees: the evidence is stored,
+// the corrections are not applied. This is the Madrid rule.
+func TestEnrichAlbumSkipsReview(t *testing.T) {
+	for _, state := range []string{"review", "local"} {
+		t.Run(state, func(t *testing.T) {
+			e, ctx := newTestEnricher(t)
+			stubMB(e, func(r *http.Request) (*http.Response, error) {
+				return resp(200, twoMediumRelease), nil
+			})
+			albumID, mbid := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "rel-1"
+			if err := e.matches.Put(ctx, repo.Decision{AlbumID: albumID, State: state,
+				ReleaseMbid: &mbid, DecidedAt: "now"}); err != nil {
+				t.Fatal(err)
+			}
+			ts := []repo.Track{{ID: "t1", AlbumID: albumID, Album: "file album", AlbumArtist: "file artist", HasArt: true}}
+			if err := e.enrichAlbum(ctx, albumID, ts); err != nil {
+				t.Fatal(err)
+			}
+			var a albumCache
+			e.cacheGet(ctx, KindAlbum, albumID, &a)
+			if a.Album != "" || a.AlbumArtist != "" {
+				t.Errorf("album blob = %+v, want no corrections for state=%s", a, state)
+			}
+			var c TrackCredits
+			if e.cacheGet(ctx, KindTrack, "t1", &c) && !c.empty() {
+				t.Errorf("track blob = %+v, want none for state=%s", c, state)
+			}
+		})
+	}
+}
+
+// The revert path. SetLocal drops the derived layer — deleting rather than
+// masking — and the marker it leaves decides whether the next pass re-derives.
+func TestSetLocalDropsDerivedRows(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		local      bool
+		wantMarker bool
+	}{
+		{name: "local: settled, next pass leaves it alone", local: true, wantMarker: true},
+		{name: "not local: no marker, next pass re-derives", local: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, ctx := newTestEnricher(t)
+			albumID, mbid := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "rel-1"
+			ts := []repo.Track{{ID: "t1", AlbumID: albumID}, {ID: "t2", AlbumID: albumID}}
+			if err := e.put(ctx, KindAlbum, albumID, albumCache{V: albumV, Done: true, Mbid: &mbid,
+				Album: "MB Album", AlbumArtist: "MB Artist"}); err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range []string{"t1", "t2"} {
+				if err := e.put(ctx, KindTrack, id, TrackCredits{Title: "MB Title"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := e.put(ctx, KindAlbumInfo, albumID, map[string]any{"label": "DG"}); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := e.SetLocal(ctx, albumID, ts, tc.local); err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range []string{"t1", "t2"} {
+				if _, ok, _ := e.cache.Get(ctx, KindTrack, id); ok {
+					t.Errorf("track blob %s survived", id)
+				}
+			}
+			if _, ok, _ := e.cache.Get(ctx, KindAlbumInfo, albumID); ok {
+				t.Error("albumInfo survived")
+			}
+			var a albumCache
+			found := e.cacheGet(ctx, KindAlbum, albumID, &a)
+			if found != tc.wantMarker {
+				t.Fatalf("album blob present = %v, want %v", found, tc.wantMarker)
+			}
+			if found && (a.V != albumV || a.Mbid != nil || a.Album != "") {
+				t.Errorf("marker = %+v, want a bare {v,done} with no MusicBrainz data", a)
+			}
+		})
 	}
 }

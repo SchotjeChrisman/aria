@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
@@ -16,8 +17,25 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Library')),
       body: ListView(
         padding: ariaPagePadding(context),
-        children: const [_LibraryTools()],
+        children: const [_LibraryTools(), _HealthTile()],
       ),
+    );
+  }
+}
+
+/// Entry to the diagnostics; the report itself is /settings/health.
+class _HealthTile extends StatelessWidget {
+  const _HealthTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Library health'),
+      subtitle: const Text(
+        'Unidentified albums, missing artwork, suspect files, duplicates',
+      ),
+      onTap: () => context.push('/settings/health'),
     );
   }
 }

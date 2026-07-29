@@ -10,6 +10,7 @@
 package genres
 
 import (
+	"slices"
 	"strings"
 	"sync"
 )
@@ -96,6 +97,45 @@ var aliases = map[string][]string{
 	"soundtracks":                             {"Soundtrack"},
 	"film score":                              {"Soundtrack"},
 	"folk blues pop rock":                     {"Folk", "Blues", "Pop", "Rock"}, // space-mashed multi-tag
+
+	// Names the enrichment sources hand us that head-word inference drops
+	// entirely: single words, or compounds whose rightmost word means nothing
+	// to the tree ("trip hop", "drum and bass"). Anything inference already
+	// gets right is deliberately absent — "post-punk", "garage rock",
+	// "indie pop", "nu metal", "math rock" all resolve on their head word, and
+	// an alias row for them would be a second place to keep in sync.
+	//
+	// ponytail: hand-picked from the MusicBrainz genre vocabulary rather than
+	// imported. The ceiling is that a long-tail MB genre still vanishes
+	// silently; the upgrade path is `ws/2/genre/all?fmt=txt` (2,180 names,
+	// live) — but importing it would either mint 2,000 nodes into a
+	// deliberately CLOSED tree or add 2,000 rows most of which say exactly what
+	// inference already concludes.
+	"britpop":       {"Alternative Rock"},
+	"shoegaze":      {"Alternative Rock"},
+	"emo":           {"Alternative Rock"},
+	"krautrock":     {"Progressive Rock"},
+	"new wave":      {"Rock"},
+	"trip hop":      {"Electronic"},
+	"downtempo":     {"Electronic"},
+	"ambient":       {"Electronic"},
+	"house":         {"Electronic"},
+	"techno":        {"Electronic"},
+	"trance":        {"Electronic"},
+	"drum and bass": {"Electronic"},
+	"dubstep":       {"Electronic"},
+	"idm":           {"Electronic"},
+	"ska":           {"Reggae"},
+	"dub":           {"Reggae"},
+	"dancehall":     {"Reggae"},
+	"afrobeat":      {"World"},
+	"rap":           {"Hip-Hop"},
+	"grime":         {"Hip-Hop"},
+	// Discogs writes the style as "Singer/Songwriter", and `/` is one of
+	// Split's separators — so it arrives as two orphan tokens, never as the
+	// canonical "singer songwriter" MusicBrainz sends.
+	"singer":     {"Singer-Songwriter"},
+	"songwriter": {"Singer-Songwriter"},
 }
 
 // norm is the lookup key: lowercase, hyphens as spaces, collapsed whitespace,
@@ -169,11 +209,33 @@ func Split(raw string) []string {
 	return out
 }
 
+// SplitAll is Split over several raw strings, deduped and order-preserving.
+// The enrichment sources hand us lists — MusicBrainz genre tags, Discogs
+// genres and styles — rather than one semicolon-mashed tag string.
+func SplitAll(raws []string) []string {
+	out := []string{}
+	for _, raw := range raws {
+		for _, g := range Split(raw) {
+			if !slices.Contains(out, g) {
+				out = append(out, g)
+			}
+		}
+	}
+	return out
+}
+
 // Matches reports whether the wanted canonical genre matches a raw tag:
 // any of the tag's canonical genres is `wanted` or a descendant of it
 // (Blues matches Blues Rock). `wanted` is alias-canonicalized too, so old
 // saved rules like "Klassiek" or "Soul" keep working.
-func Matches(raw, wanted string) bool {
+func Matches(raw, wanted string) bool { return MatchesList(Split(raw), wanted) }
+
+// MatchesList is Matches against an ALREADY-canonical list, for callers that
+// hold the derived `genres` array. It exists because that array is no longer
+// derivable from the raw tag alone — enrichment merges MusicBrainz genre tags
+// and Discogs styles into it — so re-Splitting the raw string would silently
+// evaluate against less than the truth. Matches(raw,w) == MatchesList(Split(raw),w).
+func MatchesList(canon []string, wanted string) bool {
 	wl := norm(wanted)
 	var wants []string
 	if names := resolve(wl); names != nil {
@@ -183,7 +245,7 @@ func Matches(raw, wanted string) bool {
 	} else {
 		wants = []string{wl}
 	}
-	for _, g := range Split(raw) {
+	for _, g := range canon {
 		for x := g; x != ""; {
 			xl := norm(x)
 			for _, w := range wants {

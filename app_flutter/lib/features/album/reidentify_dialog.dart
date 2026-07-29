@@ -49,6 +49,25 @@ class _ReidentifyDialogState extends State<_ReidentifyDialog> {
         });
   }
 
+  /// The "none of these" answer. It is a plain album edit — `state: local`
+  /// means "not in MusicBrainz, my tags are the truth" — and the server drops
+  /// the album's derived MusicBrainz data on the spot. It lives at the bottom
+  /// of the candidate list rather than behind a button in the editor because
+  /// this is exactly where the user is already deciding about identity.
+  Future<void> _useMyTags() async {
+    setState(() => _status = 'Dropping the MusicBrainz match…');
+    try {
+      await widget.ref
+          .read(albumApiProvider)
+          .patchAlbum(widget.album.id, {'state': 'local'});
+      widget.ref.invalidate(albumTracksProvider);
+      widget.ref.invalidate(albumInfoProvider(widget.album.id));
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) setState(() => _status = 'Failed — server unavailable.');
+    }
+  }
+
   Future<void> _pick(AlbumCandidate c) async {
     setState(() => _status = 'Re-identifying… (MusicBrainz is slow, ~10s)');
     try {
@@ -82,26 +101,25 @@ class _ReidentifyDialogState extends State<_ReidentifyDialog> {
       ),
       content: SizedBox(
         width: 420,
-        child: _status != null && (cands == null || cands.isEmpty)
-            ? Padding(
-                padding: const EdgeInsets.all(AriaSpace.s4),
-                child: Text(_status!, style: TextStyle(color: c.fgDim)),
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_status != null)
-                      Padding(
-                        padding: const EdgeInsets.all(AriaSpace.s2),
-                        child: Text(_status!, style: TextStyle(color: c.fgDim)),
-                      )
-                    else
-                      for (final cand in cands!) _candidateRow(context, cand),
-                  ],
-                ),
-              ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_status != null)
+                Padding(
+                  padding: const EdgeInsets.all(AriaSpace.s2),
+                  child: Text(_status!, style: TextStyle(color: c.fgDim)),
+                )
+              else
+                for (final cand in cands!) _candidateRow(context, cand),
+              // Always reachable, including when the search found nothing —
+              // which is exactly when "not in MusicBrainz" is the right answer.
+              const Divider(height: AriaSpace.s4),
+              _localRow(context),
+            ],
+          ),
+        ),
       ),
       actions: [
         TextButton(
@@ -109,6 +127,31 @@ class _ReidentifyDialogState extends State<_ReidentifyDialog> {
           child: const Text('Cancel'),
         ),
       ],
+    );
+  }
+
+  Widget _localRow(BuildContext context) {
+    final c = AriaColors.of(context);
+    return InkWell(
+      onTap: _useMyTags,
+      borderRadius: BorderRadius.circular(AriaRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AriaSpace.s3,
+          vertical: AriaSpace.s2,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Not in MusicBrainz — use my own tags'),
+            Text(
+              // Not a free action: rebuilding it costs MusicBrainz round-trips.
+              'Drops this album\u2019s MusicBrainz data. Your files are untouched.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: c.fgDim),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

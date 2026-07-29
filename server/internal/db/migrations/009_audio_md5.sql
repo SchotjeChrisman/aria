@@ -1,0 +1,29 @@
+-- The decoded-audio MD5, from the SAME ffmpeg pass that already measures
+-- loudness: a second `-map 0:a:0 -c:a pcm_s32le -f md5 -` output hanging off the
+-- one decode. Measured on a 300 s FLAC: 941 ms -> 969 ms, +2.7%. A separate
+-- second invocation was +29%, which is why it folds in here instead.
+--
+-- A column on track_audio, not a table: same producer, same single pass, same
+-- mtime+size staleness key, same lifetime. A table would duplicate the whole
+-- incremental discipline for one string.
+--
+-- Tag-invariant by construction, and proven: cd.flac (33,952 B) and a re-muxed
+-- copy with a different title and an added comment (34,006 B, different mtime)
+-- hash identically. That is what makes it a real content identity, and the only
+-- thing that could ever replace sha1(path) as track identity if files are one
+-- day allowed to move.
+--
+-- pcm_s32le is deliberate. The md5 muxer's default codec is pcm_s16le
+-- regardless of the input, so a 24-bit master would be hashed at 16 bit and
+-- collide with its own truncated 16-bit copy — verified: same file, s16 gives
+-- ec0d809da8686ea6d1e9dd852637d78c and s32 gives 2a75b09672dd942a457873379cf702b2.
+--
+-- Three-valued on purpose:
+--   NULL  never attempted             -> ListPending picks it up
+--   ''    attempted, ffmpeg gave none -> not retried forever
+--   hex   32 lowercase hex chars
+-- Rows analysed before this migration are NULL, so the normal pass re-decodes
+-- them once rather than a migration force-clearing the table. That is hours of
+-- work the user did not ask for at that moment, which is exactly why it goes
+-- through the pass's own pause-while-scanning, nice(10), resumable machinery.
+ALTER TABLE track_audio ADD COLUMN audioMd5 TEXT;

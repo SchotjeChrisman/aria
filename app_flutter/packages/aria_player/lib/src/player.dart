@@ -409,8 +409,19 @@ class AriaPlayer {
   /// Settings switch still read On. The two settings are independent now.
   void setAudioFilter(String af) {
     if (!isAvailable) return;
+    // Every set reconfigures the filter chain, so re-pushing an identical
+    // string is not free — and the chain is now pushed on every track load
+    // (loudness normalisation is per track). Skipping the no-op write is what
+    // keeps the default, normalisation-off path exactly as many `af` writes as
+    // it has always had: one, after initialize(). The guard sits after the
+    // isAvailable bail so the pre-init calls (which the engine drops) can't
+    // poison it and swallow playerInitProvider's re-apply.
+    if (af == _lastAf) return;
+    _lastAf = af;
     _raw!.setPropertyString(_handle, 'af', af);
   }
+
+  String? _lastAf;
 
   /// Runtime toggle for exclusive device access (desktop). mpv's
   /// `audio-exclusive` carries UPDATE_AUDIO, so this reinitialises the output

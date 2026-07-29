@@ -7,6 +7,7 @@ import 'account_screen.dart';
 import 'data_screen.dart';
 import 'downloads_screen.dart';
 import 'eq_screen.dart';
+import 'health_screen.dart';
 import 'library_screen.dart';
 import 'logs_screen.dart';
 import 'playback_screen.dart';
@@ -33,6 +34,7 @@ final settingsFeatureEntry = FeatureEntry(
         // Leaf detail pages (pushed from within the category pages).
         GoRoute(path: 'eq', builder: (_, _) => const EqScreen()),
         GoRoute(path: 'logs', builder: (_, _) => const LogsScreen()),
+        GoRoute(path: 'health', builder: (_, _) => const HealthScreen()),
         GoRoute(
           path: 'downloads',
           builder: (_, _) => const DownloadsScreen(),

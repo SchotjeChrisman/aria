@@ -35,12 +35,26 @@ const (
 	KindComposer  = "composer"  // name -> ComposerEntry           (legacy db.composers)
 	KindLyrics    = "lyrics"    // trackId -> Lyrics or null       (legacy db.lyricsV2)
 	KindAlbumInfo = "albumInfo" // albumId -> info map or null     (legacy db.albumInfo)
+	KindPopular   = "popular"   // artistMbid -> popularCache      (ListenBrainz)
 )
+
+// popularCache is deliberately lossy: ListenBrainz returns hundreds of fat
+// objects per artist (listen counts, tags, cover-art ids) and the only
+// consumer — the mixes tiering — needs nothing but "is this recording one the
+// world actually listens to", i.e. membership, not magnitude.
+type popularCache struct {
+	V   int      `json:"v"`
+	Top []string `json:"top"` // recording MBIDs, most-listened first
+}
 
 // v3 added the release-level display artist + composer split; bump to re-pull
 // albums (mbRelease.Relations is new, so every release must be re-fetched for
 // the relations to exist at all).
-const albumV = 3
+//
+// v4: the release MBID no longer comes from an unverified top hit but from
+// match_decisions, so every album must be re-evaluated against its decision —
+// including the ones a previous pass matched to the wrong sibling release.
+const albumV = 4
 
 type albumCache struct {
 	V    int     `json:"v"`
@@ -50,6 +64,18 @@ type albumCache struct {
 	// classical display policy, stored in the original script
 	DisplayArtist string   `json:"displayArtist,omitempty"`
 	Composers     []string `json:"composers,omitempty"`
+
+	// Corrections taken from the confirmed release. This is the DERIVED layer,
+	// deliberately not an `edits` row: `edits` is the human layer — it is what
+	// the editor's ↺ resets away from and what "clear all" deletes — and a
+	// machine writing there would make its own prior output indistinguishable
+	// from the user's typing on the next pass. The same convention already
+	// governs label/date/country, which arrive derived and surface as
+	// `original`. Precedence (file tags < derived < edits) therefore needs no
+	// new ordering code; it is buildMergedTracks' existing merge order.
+	Album       string `json:"album,omitempty"`
+	AlbumArtist string `json:"albumArtist,omitempty"`
+	Year        int    `json:"year,omitempty"`
 }
 
 type Performer struct {
@@ -57,12 +83,25 @@ type Performer struct {
 	Role string `json:"role"`
 }
 
-// TrackCredits is the per-track MB credit overlay; only set fields override tags.
+// TrackCredits is the per-track MB overlay; only set fields override tags.
+//
+// The JSON tags of the correction block below match the merged-track map keys
+// in library.go EXACTLY, because overlay() copies every key of this blob blind
+// onto the public Track object. That is the whole apply mechanism — and the
+// reason nothing that is not a Track field may ever be added here. Provenance
+// in particular lives on the album blob and is served through /api/edits, not
+// smuggled in as a `_source` key that would leak into /api/tracks and become a
+// name smart-playlist rules can match.
 type TrackCredits struct {
 	Composer   string      `json:"composer,omitempty"`
 	Conductor  string      `json:"conductor,omitempty"`
 	Orchestra  string      `json:"orchestra,omitempty"`
 	Performers []Performer `json:"performers,omitempty"`
+	// from the matched release's own track list
+	Title   string `json:"title,omitempty"`
+	TrackNo int    `json:"trackNo,omitempty"`
+	DiscNo  int    `json:"discNo,omitempty"`
+	MBRecID string `json:"mbRecordingId,omitempty"`
 }
 
 func mergeCredits(old, n TrackCredits) TrackCredits {
@@ -78,11 +117,24 @@ func mergeCredits(old, n TrackCredits) TrackCredits {
 	if n.Performers != nil {
 		old.Performers = n.Performers
 	}
+	if n.Title != "" {
+		old.Title = n.Title
+	}
+	if n.TrackNo != 0 {
+		old.TrackNo = n.TrackNo
+	}
+	if n.DiscNo != 0 {
+		old.DiscNo = n.DiscNo
+	}
+	if n.MBRecID != "" {
+		old.MBRecID = n.MBRecID
+	}
 	return old
 }
 
 func (c TrackCredits) empty() bool {
-	return c.Composer == "" && c.Conductor == "" && c.Orchestra == "" && c.Performers == nil
+	return c.Composer == "" && c.Conductor == "" && c.Orchestra == "" && c.Performers == nil &&
+		c.Title == "" && c.TrackNo == 0 && c.DiscNo == 0 && c.MBRecID == ""
 }
 
 // ArtistEntry mirrors legacy db.artists values. Pointer slices model the
@@ -110,6 +162,12 @@ type ArtistEntry struct {
 	// "the name is already Latin" — NameLatinSrc is the settled-ness sentinel.
 	NameLatin    string `json:"nameLatin,omitempty"`
 	NameLatinSrc string `json:"nameLatinSource,omitempty"` // alias-en|alias|sortname|translit|mbname|same|none
+	// Wikidata. Qid is captured for free out of the MB url-rels wikiTitle
+	// already walks (and used to throw away), which is what spares the
+	// wikidata phase a library-wide MusicBrainz re-pull.
+	Qid         string   `json:"qid,omitempty"`
+	Instruments []string `json:"instruments,omitempty"`
+	WdCheckedAt string   `json:"wdCheckedAt,omitempty"` // settled: never asked twice
 }
 
 type ComposerEntry struct {
@@ -149,11 +207,16 @@ type AlbumCandidate struct {
 // ---- Enricher ---------------------------------------------------------------
 
 type Enricher struct {
-	tracks  *repo.Tracks
-	cache   *repo.Enrich
-	dataDir string
-	root    context.Context // app lifetime; Warm's goroutines derive from it
-	log     func(string)
+	tracks *repo.Tracks
+	cache  *repo.Enrich
+	// matches/settings drive the matching phase. Both may be nil — the tests'
+	// older three-repo constructor path leaves them so, and matching then
+	// simply does not run.
+	matches  *repo.Matches
+	settings *repo.Settings
+	dataDir  string
+	root     context.Context // app lifetime; Warm's goroutines derive from it
+	log      func(string)
 
 	pc   *politeClient // binary fetches (Cover Art Archive, Deezer cover files)
 	mb   *MB
@@ -161,6 +224,8 @@ type Enricher struct {
 	wiki *Wikipedia
 	oo   *OpenOpus
 	lrc  *LRCLib
+	lb   *ListenBrainz
+	dg   *Discogs // nil without DISCOGS_TOKEN; every use is guarded
 
 	// Notify, when set (before the server starts), is called after every
 	// status change; main wires it to the SSE hub's `enrich` event so
@@ -183,16 +248,21 @@ type Enricher struct {
 }
 
 // New wires an Enricher; root is the app-lifetime context (Warm's background
-// goroutines derive from it so shutdown cancels outbound calls).
-func New(root context.Context, tracks *repo.Tracks, cache *repo.Enrich, dataDir string) *Enricher {
+// goroutines derive from it so shutdown cancels outbound calls). discogsToken
+// is env DISCOGS_TOKEN: empty leaves e.dg nil and the Discogs half of the
+// sources phase never runs, the FFMPEG_PATH degradation model.
+func New(root context.Context, tracks *repo.Tracks, cache *repo.Enrich, matches *repo.Matches,
+	settings *repo.Settings, dataDir, discogsToken string) *Enricher {
 	os.MkdirAll(filepath.Join(dataDir, "art"), 0o755)
 	if root == nil {
 		root = context.Background()
 	}
 	return &Enricher{
-		tracks: tracks, cache: cache, dataDir: dataDir, root: root,
+		tracks: tracks, cache: cache, matches: matches, settings: settings,
+		dataDir: dataDir, root: root,
 		pc: newPoliteClient(), mb: NewMB(),
-		dz: NewDeezer(), wiki: NewWikipedia(), oo: NewOpenOpus(), lrc: NewLRCLib(),
+		dz: NewDeezer(), wiki: NewWikipedia(), oo: NewOpenOpus(), lrc: NewLRCLib(), lb: NewListenBrainz(),
+		dg:      NewDiscogs(discogsToken),
 		log:     func(m string) { log.Printf("enrich: %s", m) },
 		phase:   "idle",
 		warming: map[string]bool{},
@@ -260,6 +330,13 @@ func (e *Enricher) Run(ctx context.Context) error {
 		e.notify() // the idle frame is what tells clients to refresh
 	}()
 
+	// phase 0: matching. Must come first — every later phase anchors on the
+	// release MBID this decides, and a wrong MBID poisons credits, art and the
+	// album blurb alike. A settled library costs one query here.
+	if err := e.runMatching(ctx); err != nil {
+		return err
+	}
+
 	tracks, err := e.tracks.ListAll(ctx)
 	if err != nil {
 		return err
@@ -293,6 +370,52 @@ func (e *Enricher) Run(ctx context.Context) error {
 		}
 		if err := e.enrichAlbum(ctx, id, byAlbum[id]); err != nil {
 			e.log("album " + byAlbum[id][0].Album + ": " + err.Error())
+		}
+		e.step()
+	}
+
+	// phase 2b: the source graph. One MusicBrainz request per album carries
+	// BOTH the community-voted genre tags and the Discogs release id, so the
+	// Discogs lookup needs no search and inherits no new identity problem.
+	// Placed straight after `albums` because it reads the release MBID that
+	// phase just settled — re-listed rather than reused from cachedAlbums,
+	// which is the pre-pass snapshot.
+	//
+	// Uncapped, like the phase it follows: ~1.1s (MB) + ~1.1s (Discogs, a
+	// different host, so the two schedules interleave) per album, once ever,
+	// cancellable between items. A cap would spread the same total over more
+	// passes while making `total` lie about the work remaining.
+	albumsNow, err := e.cache.ListKind(ctx, KindAlbum)
+	if err != nil {
+		return err
+	}
+	cachedSrc, err := e.cache.ListKind(ctx, KindSources)
+	if err != nil {
+		return err
+	}
+	type srcTodo struct{ id, mbid string }
+	var todoSrc []srcTodo
+	for _, id := range albumIDs {
+		var a albumCache
+		if json.Unmarshal(albumsNow[id], &a) != nil || a.Mbid == nil || *a.Mbid == "" {
+			continue // no confirmed release: nothing to ask about, no request spent
+		}
+		var s sourcesCache
+		// settled = the MB half is current AND the Discogs half can no longer
+		// change: it answered, or there is no token, or MB has no Discogs link.
+		if json.Unmarshal(cachedSrc[id], &s) == nil && s.V >= sourcesV &&
+			(s.DiscogsAt != "" || e.dg == nil || s.DiscogsID == 0) {
+			continue
+		}
+		todoSrc = append(todoSrc, srcTodo{id, *a.Mbid})
+	}
+	e.setPhase("sources", len(todoSrc))
+	for _, s := range todoSrc {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := e.enrichSources(ctx, s.id, s.mbid); err != nil {
+			e.log("sources " + s.id + ": " + err.Error())
 		}
 		e.step()
 	}
@@ -343,6 +466,37 @@ func (e *Enricher) Run(ctx context.Context) error {
 			e.refreshDiscography(ctx, n, a)
 		}
 		unlock()
+		e.step()
+	}
+
+	// ListenBrainz top recordings per album artist, for the mixes tiering.
+	// Only artists whose MBID is already cached qualify, so this phase costs
+	// zero MusicBrainz requests. Cap 25/run applied while collecting (so the
+	// phase total is what the loop will really do) because every response is a
+	// few hundred KB regardless of what we ask for.
+	var todoPop []string // artist MBIDs
+	for _, n := range artistNames {
+		a := e.artistGet(ctx, n)
+		if a == nil || a.Mbid == "" || slices.Contains(todoPop, a.Mbid) {
+			continue
+		}
+		if _, at, ok, _ := e.cache.GetFetched(ctx, KindPopular, a.Mbid); ok && !stale(at, 30*24*time.Hour) {
+			continue
+		}
+		if todoPop = append(todoPop, a.Mbid); len(todoPop) == 25 {
+			break
+		}
+	}
+	e.setPhase("popularity", len(todoPop))
+	for _, mbid := range todoPop {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if top, err := e.lb.TopRecordings(ctx, mbid); err == nil {
+			// A miss is stored as an empty list on purpose: artists
+			// ListenBrainz has never heard of must not be re-fetched every pass.
+			e.put(ctx, KindPopular, mbid, popularCache{V: 1, Top: top})
+		}
 		e.step()
 	}
 
@@ -465,6 +619,92 @@ func (e *Enricher) Run(ctx context.Context) error {
 		e.step()
 	}
 
+	// Wikidata. Its whole marginal value over MusicBrainz + Wikipedia is one
+	// field — which instruments a person plays — so the phase exists for the
+	// instruments line on the artist page and for nothing else. Life dates
+	// ride along free in the same query and are written only where MB left a
+	// blank. Everything else Wikidata offers (Commons image, occupation,
+	// genre, dated band membership) is either already on screen from another
+	// source or has no surface to render into.
+	//
+	// Q-ids captured during enrichArtist cost nothing here. Entries cached
+	// before Qid existed spend one MB lookup each, budgeted at 25/run — the
+	// `faces` and `names` politeness, applied while COLLECTING so the phase
+	// total is what the loop will really do.
+	var todoWd []string
+	qidBudget := 25
+	for _, n := range slices.Sorted(maps.Keys(arts)) {
+		var a ArtistEntry
+		if json.Unmarshal(arts[n], &a) != nil || a.WdCheckedAt != "" {
+			continue
+		}
+		if a.Qid == "" {
+			// no MBID means no url-rels means no route to Wikidata at all;
+			// such an entry is skipped every pass at the cost of a map read.
+			if a.Mbid == "" || qidBudget == 0 {
+				continue
+			}
+			qidBudget--
+		}
+		// ponytail: 500/run, because each artist costs a cache write and an
+		// SSE frame to every connected client even when the facts are free.
+		// The library settles over a few passes; raise it if that ever grates.
+		if todoWd = append(todoWd, n); len(todoWd) == 500 {
+			break
+		}
+	}
+	e.setPhase("wikidata", len(todoWd))
+	for chunk := range slices.Chunk(todoWd, 50) { // ~1.9 KB of URL for 50 Q-ids
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var qids []string
+		for _, n := range chunk {
+			unlock := e.lockName(n)
+			a := e.artistGet(ctx, n)
+			if a != nil && a.Qid == "" && a.Mbid != "" {
+				if ar := e.mb.artist(ctx, a.Mbid, "url-rels"); ar != nil {
+					a.Qid = qidOf(ar.Relations)
+					e.artistPut(ctx, n, a)
+				}
+			}
+			unlock()
+			if a != nil && a.Qid != "" && !slices.Contains(qids, a.Qid) {
+				qids = append(qids, a.Qid)
+			}
+		}
+		facts, err := e.wiki.Facts(ctx, qids)
+		if err != nil {
+			// WDQS unreachable: stamp nothing, so the whole chunk retries. The
+			// per-artist MB lookup above is NOT retried though — it already
+			// wrote whatever Q-id it found.
+			e.log("wikidata: " + err.Error())
+			for range chunk {
+				e.step()
+			}
+			continue
+		}
+		for _, n := range chunk {
+			unlock := e.lockName(n)
+			if a := e.artistGet(ctx, n); a != nil {
+				f := facts[a.Qid] // zero value = no Q-id, or Wikidata knows nothing we asked
+				if len(f.Instruments) > 0 {
+					a.Instruments = f.Instruments
+				}
+				if a.Born == "" { // fill-only: MusicBrainz stays authoritative
+					a.Born = f.Born
+				}
+				if a.Died == "" {
+					a.Died = f.Died
+				}
+				a.WdCheckedAt = nowISO() // hit or miss: never asked twice
+				e.artistPut(ctx, n, a)
+			}
+			unlock()
+			e.step()
+		}
+	}
+
 	var todoFaces []string
 	for _, n := range slices.Sorted(maps.Keys(arts)) {
 		var a ArtistEntry
@@ -509,19 +749,35 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 	}
 	mbid := ""
 	if found && a.Mbid != nil {
-		mbid = *a.Mbid
+		mbid = *a.Mbid // a pin written by ReidentifyAlbum
 	}
-	if mbid == "" {
-		for _, t := range ts {
-			if t.MBAlbumID != nil && *t.MBAlbumID != "" {
-				mbid = *t.MBAlbumID
-				break
-			}
-		}
-	}
-	if mbid == "" && !found { // don't re-search albums that already came up empty
-		if rels := e.mb.searchReleases(ctx, ts[0].Album, ts[0].AlbumArtist, 1); len(rels) > 0 {
-			mbid = rels[0].ID
+	// The identity comes from the matcher, never from an unverified top hit.
+	// This is where enrichAlbum used to take searchReleases(...)[0] on faith and
+	// where the permanent `if mbid == "" && !found` negative cache lived; both
+	// are gone. The retry ladder in match_decisions.retryAfter replaces the
+	// latter, and the ambiguity veto replaces the former.
+	if e.matches != nil {
+		d, ok, err := e.matches.Get(ctx, albumID)
+		switch {
+		case err != nil:
+			return err
+		case !ok && mbid != "":
+			// Undecided but explicitly pinned in the cache (ReidentifyAlbum's
+			// legacy path). The user's pin stands.
+		case !ok:
+			// Undecided. Deliberately no V marker written: the album must stay
+			// in the todo set so the next pass (after matching has run) picks
+			// it up, rather than being frozen as "enriched with no MBID".
+			return nil
+		case d.State == "local":
+			// No MusicBrainz entity, by conclusion or by the user's hand.
+			// Enrichment skips it entirely — that is what `local` means.
+			a.V, a.Done, a.Mbid = albumV, true, nil
+			return e.put(ctx, KindAlbum, albumID, a)
+		case d.State == "matched" && d.ReleaseMbid != nil:
+			mbid = *d.ReleaseMbid
+		default: // review: no MBID applied until the ambiguity is resolved
+			mbid = ""
 		}
 	}
 	a.V, a.Done = albumV, true
@@ -534,27 +790,31 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 	}
 
 	if rel := e.mb.release(ctx, mbid, "recordings+recording-level-rels+work-rels+work-level-rels+artist-rels"); rel != nil {
+		// Corrections from the confirmed release, into the derived layer only.
+		// Reaching here already IS the safety gate: mbid is non-empty only for a
+		// decision of state `matched` — auto-applied past both distance and
+		// separation, or pinned by the user. A `review` decision sets mbid to ""
+		// above and returns before this point, so nothing a user sees ever moves
+		// on evidence the matcher itself called insufficient (the Madrid rule).
+		a.Album = rel.Title
+		a.AlbumArtist = joinCredit(rel.ArtistCredit)
+		a.Year = yearOf(rel.Date)
 		// classical credit: "Barber, Bruch; Esther Yoo, …" is composers then
 		// performers. Only a real split is stored — on an ordinary release the
 		// tags are the better album artist than MB's first credit.
 		if da, comps := displayArtist(rel); len(comps) > 0 {
 			a.DisplayArtist, a.Composers = da, comps
-			if err := e.put(ctx, KindAlbum, albumID, a); err != nil {
-				return err
-			}
+		}
+		if err := e.put(ctx, KindAlbum, albumID, a); err != nil {
+			return err
 		}
 		byRec := creditsByRecording(rel)
-		for _, t := range ts {
-			if t.MBRecordingID == nil {
-				continue
-			}
-			c, ok := byRec[*t.MBRecordingID]
-			if !ok {
-				continue
-			}
+		for id, mt := range alignedTracks(ts, rel) {
+			c := byRec[mt.RecID] // zero value when that recording carries no rels
+			c.Title, c.TrackNo, c.DiscNo, c.MBRecID = mt.Title, mt.Pos, mt.Medium, mt.RecID
 			var old TrackCredits
-			e.cacheGet(ctx, KindTrack, t.ID, &old)
-			if err := e.put(ctx, KindTrack, t.ID, mergeCredits(old, c)); err != nil {
+			e.cacheGet(ctx, KindTrack, id, &old)
+			if err := e.put(ctx, KindTrack, id, mergeCredits(old, c)); err != nil {
 				return err
 			}
 		}
@@ -641,17 +901,34 @@ func (e *Enricher) getBinary(ctx context.Context, rawURL string) []byte {
 func needsSimilar(a *ArtistEntry) bool { return a == nil || a.Similar == nil }
 
 // discographyAt unset == old-shape or never fetched == stale
-func staleDisc(a *ArtistEntry) bool {
-	t, err := time.Parse(time.RFC3339, a.DiscographyAt)
-	return a.DiscographyAt == "" || err != nil || time.Since(t) > 7*24*time.Hour
+func staleDisc(a *ArtistEntry) bool { return stale(a.DiscographyAt, 7*24*time.Hour) }
+
+// stale reports whether an ISO timestamp is missing, unparseable or older than
+// ttl. Unparseable counts as stale: a garbled timestamp must re-fetch, never
+// pin a stale entry forever.
+func stale(at string, ttl time.Duration) bool {
+	t, err := time.Parse(time.RFC3339, at)
+	return at == "" || err != nil || time.Since(t) > ttl
 }
 
 // similarOrEmpty reproduces legacy deezerSimilar: any failure is [] and gets
-// cached forever.
-func (e *Enricher) similarOrEmpty(ctx context.Context, name string) []SimilarArtist {
+// cached forever. Deezer stays first — it is the only one of the two that
+// returns artist photos, and it works from a name so it covers artists
+// MusicBrainz never matched. ListenBrainz only answers when Deezer's editorial
+// graph came back empty, which is precisely the classical/jazz/regional tail
+// Deezer omits; it needs an MBID and returns no images.
+// ponytail: an LB outage during first enrichment caches [] forever, exactly as
+// a Deezer outage always has; re-identifying the artist clears it, and the real
+// fix is a similarCheckedAt sentinel like BioCheckedAt if it ever bites.
+func (e *Enricher) similarOrEmpty(ctx context.Context, name, mbid string) []SimilarArtist {
 	sim, err := e.dz.Similar(ctx, name)
 	if err != nil || sim == nil {
-		return []SimilarArtist{}
+		sim = []SimilarArtist{}
+	}
+	if len(sim) == 0 && mbid != "" {
+		if lb, err := e.lb.SimilarArtists(ctx, mbid); err == nil && len(lb) > 0 {
+			return lb
+		}
 	}
 	return sim
 }
@@ -662,7 +939,7 @@ func (e *Enricher) enrichArtist(ctx context.Context, name, mbid string) {
 		return
 	}
 	if existing != nil { // existing entry: only (re)fetch similar
-		sim := e.similarOrEmpty(ctx, name)
+		sim := e.similarOrEmpty(ctx, name, firstOf(existing.Mbid, mbid))
 		existing.Similar = &sim
 		e.artistPut(ctx, name, existing)
 		return
@@ -677,6 +954,7 @@ func (e *Enricher) enrichArtist(ctx context.Context, name, mbid string) {
 	if mbid != "" {
 		if ar := e.mb.artist(ctx, mbid, "url-rels+artist-rels+aliases"); ar != nil {
 			ent.Mbid = mbid
+			ent.Qid = qidOf(ar.Relations) // free: the rels are already in hand
 			setLatin(ent, name, ar)
 			ent.Type = ar.Type
 			if ar.Area != nil {
@@ -705,7 +983,7 @@ func (e *Enricher) enrichArtist(ctx context.Context, name, mbid string) {
 			ent.Image, ent.ImgSrc = a.PictureXL, "deezer"
 		}
 	}
-	sim := e.similarOrEmpty(ctx, name)
+	sim := e.similarOrEmpty(ctx, name, mbid)
 	ent.Similar = &sim
 	if disc, err := e.dz.Discography(ctx, name); err == nil { // err = fetch failed; leave stale so it retries
 		ent.Discography = &disc
@@ -766,6 +1044,7 @@ func (e *Enricher) backfillBio(ctx context.Context, name string, ent *ArtistEntr
 		return
 	}
 	ent.Mbid = mbid
+	ent.Qid = firstOf(ent.Qid, qidOf(ar.Relations))
 	if ent.NameLatinSrc == "" { // same request, so resolve the name too
 		setLatin(ent, name, ar)
 	}
@@ -848,11 +1127,22 @@ func (e *Enricher) wikiTitle(ctx context.Context, rels []mbRelation) string {
 			}
 		}
 	}
+	if qid := qidOf(rels); qid != "" {
+		title, _ := e.wiki.SitelinkTitle(ctx, qid)
+		return title
+	}
+	return ""
+}
+
+// qidOf pulls the Wikidata Q-id out of MB url-rels. wikiTitle has always
+// extracted it and thrown it away; keeping it on the entry is what lets the
+// wikidata phase batch 50 artists into one SPARQL request instead of
+// re-pulling the whole library from MusicBrainz first.
+func qidOf(rels []mbRelation) string {
 	for _, r := range rels {
 		if r.Type == "wikidata" && r.URL != nil {
 			if qid := qidRe.FindString(r.URL.Resource); qid != "" {
-				title, _ := e.wiki.SitelinkTitle(ctx, qid)
-				return title
+				return qid
 			}
 		}
 	}
@@ -1176,6 +1466,20 @@ func (e *Enricher) AlbumInfo(ctx context.Context, albumID string, ts []repo.Trac
 			out["mbSecondary"] = sec
 		}
 	}
+	// Pressing detail from Discogs, read from the cache the sources phase
+	// already filled — the album page must not grow a network call. The
+	// catalogue number is new; the label fills in only where MusicBrainz had
+	// none, which on a small label is most of the time. Absent key and
+	// explicit nil both read as nil, so one check covers both.
+	var src sourcesCache
+	if e.cacheGet(ctx, KindSources, albumID, &src) {
+		if src.Catno != "" {
+			out["catno"] = src.Catno
+		}
+		if src.Label != "" && out["label"] == nil {
+			out["label"] = src.Label
+		}
+	}
 	t := ts[0]
 	for _, title := range []string{t.Album + " (" + t.AlbumArtist + " album)", t.Album + " (album)", t.Album} {
 		s := e.summary(ctx, title)
@@ -1290,11 +1594,49 @@ func (e *Enricher) ReidentifyAlbum(ctx context.Context, albumID string, ts []rep
 	} else if err := e.cache.Delete(ctx, KindAlbum, albumID); err != nil { // fresh search (embedded mbAlbumId wins if tagged)
 		return nil, err
 	}
+	// A user choosing a release is a first-class decision, not an edit the next
+	// enrichment pass overwrites: it lands in match_decisions as pinned, which
+	// PendingAlbums excludes permanently. mbid == "" unpins and re-queues.
+	if err := e.PinAlbumMatch(ctx, albumID, mbid); err != nil {
+		return nil, err
+	}
 	if err := e.enrichAlbum(ctx, albumID, ts); err != nil {
 		return nil, err
 	}
 	// existing cover art file is kept; delete DATA_DIR/art/<albumId>.jpg to force re-fetch
 	return e.AlbumInfo(ctx, albumID, ts) // repopulates label/date/type
+}
+
+// SetLocal is the revert primitive behind PATCH /api/albums/{id} {"state":…}.
+// It DROPS the album's derived MusicBrainz layer rather than masking it: the
+// derived layer is recomputable by definition, whereas a mask would cost a state
+// lookup in the merge hot path for every one of tens of thousands of tracks.
+// Nothing the user typed is touched — edits rows are a different table — and
+// nothing on disk is touched either.
+//
+// local=true leaves the {v,done} marker with no mbid, which is what stops the
+// next pass re-deriving (PendingAlbums separately excludes state=local from
+// re-matching, via its join on the edits blob). local=false leaves no marker at
+// all, so the next pass re-derives from scratch: the round trip is lossless.
+//
+// ponytail: no journal for the derived layer. Unlike a tag write, nothing here
+// destroys anything — the file tags are still in the tracks row and the manual
+// edits are still in the edits table, both underneath. The ceiling is per-run
+// undo ("that pass got 40 albums wrong"); the upgrade is a batchId column on
+// match_decisions plus a delete by it, not a journal table.
+func (e *Enricher) SetLocal(ctx context.Context, albumID string, ts []repo.Track, local bool) error {
+	for _, t := range ts {
+		if err := e.cache.Delete(ctx, KindTrack, t.ID); err != nil {
+			return err
+		}
+	}
+	if err := e.cache.Delete(ctx, KindAlbumInfo, albumID); err != nil {
+		return err
+	}
+	if !local {
+		return e.cache.Delete(ctx, KindAlbum, albumID)
+	}
+	return e.put(ctx, KindAlbum, albumID, albumCache{V: albumV, Done: true})
 }
 
 // ---- cache plumbing ----------------------------------------------------------

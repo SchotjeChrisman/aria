@@ -68,6 +68,7 @@ class ArtistInfo {
     this.similar = const [],
     this.members = const [],
     this.bands = const [],
+    this.instruments = const [],
     this.discography = const [],
   });
 
@@ -82,6 +83,10 @@ class ArtistInfo {
   final List<SimilarArtist> similar;
   final List<String> members; // if a group
   final List<String> bands; // if a person
+
+  /// Instruments played, from Wikidata. Empty for entries enriched before the
+  /// Wikidata pass ran, and for anyone Wikidata says nothing about.
+  final List<String> instruments;
   final List<DiscographyItem> discography;
 
   factory ArtistInfo.fromJson(Map<String, dynamic> j) => ArtistInfo(
@@ -101,6 +106,7 @@ class ArtistInfo {
             : const [],
         members: asStringList(j['members']),
         bands: asStringList(j['bands']),
+        instruments: asStringList(j['instruments']),
         discography: j['discography'] is List
             ? (j['discography'] as List)
                 .whereType<Map<String, dynamic>>()
@@ -148,6 +154,7 @@ class AlbumInfo {
     this.label,
     this.date,
     this.country,
+    this.catno,
     this.mbType,
     this.mbSecondary = const [],
     this.blurb,
@@ -157,6 +164,10 @@ class AlbumInfo {
   final String? label;
   final String? date;
   final String? country;
+
+  /// Catalogue number of the pressing, from Discogs. Null without a server
+  /// DISCOGS_TOKEN, and for releases MusicBrainz carries no Discogs link for.
+  final String? catno;
   final String? mbType; // MB primary type
   final List<String> mbSecondary;
   final String? blurb;
@@ -166,6 +177,7 @@ class AlbumInfo {
         label: asString(j['label']),
         date: asString(j['date']),
         country: asString(j['country']),
+        catno: asString(j['catno']),
         mbType: asString(j['mbType']),
         mbSecondary: asStringList(j['mbSecondary']),
         blurb: asString(j['blurb']),

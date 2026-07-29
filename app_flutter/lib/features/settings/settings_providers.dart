@@ -11,7 +11,12 @@ import '../../core/log.dart';
 // The exclusive-access toggle lives in core so playerInitProvider can apply
 // the persisted flag right after engine init (bit-perfect survives restarts).
 export '../../core/player_providers.dart'
-    show AudioExclusiveNotifier, audioExclusiveProvider;
+    show
+        AudioExclusiveNotifier,
+        LoudnessMode,
+        LoudnessNotifier,
+        audioExclusiveProvider,
+        loudnessProvider;
 
 // Data-usage settings live in core so playback (and later downloads) can
 // gate on the network kind at play time.

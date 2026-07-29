@@ -117,16 +117,25 @@ is OS-managed; true bit-perfect there needs a USB DAC (Android 14+).
 Features: album/artist/genre/composer browsing with filters, full-text
 search, queue with persistence, playlists (manual + smart rules), hierarchical
 tags with bulk ops, per-profile play counts and listening stats, synced
-lyrics, metadata editing, radio and new-release shelves.
+lyrics, metadata editing, radio and new-release shelves. Also opt-in ReplayGain
+2.0 loudness normalisation, **off by default** — turning it on applies a digital
+gain inside the player, which is DSP: the output is no longer bit-perfect, and
+the Now Playing signal path says so.
 
 ## API
 
 Full spec: [`server/openapi.yaml`](server/openapi.yaml). Same `/api` paths and
-shapes as v1, plus `GET /healthz`, `GET /api/events` (SSE scan/enrich
-progress), and `limit`/`offset` on `GET /api/tracks`.
+shapes as v1, plus `GET /healthz`, `GET /api/events` (SSE scan/enrich/analyze
+progress), `POST /api/analyze` + `GET /api/analyze/status` (the background
+loudness measurement that feeds the ReplayGain figures on `GET /api/tracks`;
+501 when the server has no ffmpeg), and `limit`/`offset` on `GET /api/tracks`.
 
 `id` = sha1 of the file path relative to `MUSIC_DIR`.
-`albumId` = sha1 of `albumArtist + "\0" + album` (lowercased).
+`albumId` = sha1 of `album directory + "\0" + album title` (lowercased) — the
+directory being the file's folder with a `CD1`/`Disc 2` subfolder folded into
+its parent, and the album artist standing in for the directory at library root.
+Identity comes from where the files live, not from what the tags say, so two
+identically-tagged concerts in two folders stay two albums.
 
 ## Environment variables (server)
 
@@ -135,20 +144,198 @@ progress), and `limit`/`offset` on `GET /api/tracks`.
 | `PORT`              | `3000`   | HTTP port                                  |
 | `MUSIC_DIR`         | `/music` | library root (read-only is fine)           |
 | `DATA_DIR`          | `/data`  | SQLite db + cached art + transcode cache   |
-| `FFMPEG_PATH`       | `/ffmpeg`| ffmpeg for Opus tiers; skipped if missing  |
+| `FFMPEG_PATH`       | `/ffmpeg`| ffmpeg for Opus tiers and loudness analysis; both skipped if missing |
+| `FPCALC_PATH`       | `/fpcalc`| fpcalc for AcoustID fingerprinting; skipped if missing or unrunnable |
+| `ACOUSTID_KEY`      | *(none)* | AcoustID lookups; without it fingerprints are computed but never looked up |
+| `DISCOGS_TOKEN`     | *(none)* | Discogs genre/style/label/catalogue-number enrichment; skipped entirely if missing |
 | `TRANSCODE_CACHE_MB`| `5000`   | on-disk Opus cache budget under `DATA_DIR` |
 
-Scanned extensions: flac, mp3, m4a, ogg, opus, wav, aiff, ape, wv, dsf.
+Scanned extensions: flac, mp3, m4a, m4b, ogg, oga, opus, spx, wav, aiff, aif,
+aifc, afc, ape, wv, dsf, wma, tta, shn, mpc. Deliberately excluded: dff/dsdiff
+(no ffmpeg demuxer exists — taglib can read the tags but nothing can play it),
+tracker modules (need libopenmpt), mp4/m4v (video), m4p (DRM).
+`lossless` is decided by the codec, not the container, so an ADPCM wav, a
+compressed AIFF-C, AAC-in-m4a and lossy WMA all report false.
 
 ## Metadata enrichment
 
 After every scan a background pass over free/open APIs caches results in the
 database (incremental, nothing re-fetched): **MusicBrainz** (credits,
-identification, 1 req/s), **Cover Art Archive / Deezer** (missing art,
-similar artists), **Wikipedia/Wikidata** (artist bios, photos, dates),
-**Open Opus** (composer portraits, epochs), **LRCLIB** (synced lyrics, on
-demand). No API keys. Corrections overlay file tags at read time; your files
-are never modified.
+identification, community-voted genre tags, 1 req/s), **Cover Art Archive /
+Deezer** (missing art, similar artists), **Wikipedia** (artist bios and
+photos), **Wikidata** (which instruments a person plays, and birth/death dates
+where MusicBrainz has none), **ListenBrainz** (similar artists Deezer's
+editorial graph misses, and the globally-listened recordings that rank your
+daily mix), **Open Opus** (composer portraits, epochs), **LRCLIB** (synced
+lyrics, on demand), and — only with a token, see below — **Discogs**
+(styles, label, catalogue number). Corrections overlay file tags at read time;
+your files are never modified.
+
+### Genres
+
+Your file's `GENRE` tag is never touched. It is *decomposed* into a canonical,
+two-level taxonomy for browsing and for smart playlists, and the enrichment
+pass adds to that derived list: MusicBrainz's community-voted genre tags for
+the release group (only those with at least two votes, so one person's opinion
+does not become a genre), plus Discogs' genres and styles when a token is set.
+
+Two things follow. Albums with no `GENRE` tag at all — bandcamp downloads,
+classical rips — stop being invisible in genre browse. And an album tagged only
+"Rock" can now also appear under Alternative Rock and Art Rock. The taxonomy is
+a *closed* set, so no source can ever mint a new top-level genre; anything
+unrecognised is folded into its parent genre or dropped.
+
+### Discogs (optional, needs a free token)
+
+Discogs adds what MusicBrainz does not carry: its fine-grained *styles*
+(Euro-Disco, Symphonic Rock), and the label and catalogue number of the actual
+pressing — which show up on the album page's facts line, and where MusicBrainz
+has no label at all, fill that in too.
+
+**Aria ships no key.** Get one free: sign in at <https://www.discogs.com>, go
+to Settings → Developers → *Generate new token*, and put the personal access
+token in the server environment as `DISCOGS_TOKEN`. No app registration, no
+OAuth. With no token the Discogs half of the pass is completely dark and
+nothing is logged about it; set it later and the next pass fills in every album
+that was already matched, no re-scan needed.
+
+The release is looked up by the Discogs id MusicBrainz already links to, so
+nothing is fuzzy-matched against a second database. One caveat worth knowing:
+a *mistyped* token does not produce an error — Discogs quietly serves lookups
+at the slower anonymous rate instead — so if enrichment seems slow, check the
+token.
+
+### Corrections live in the database, not in your files
+
+Every correction — a fixed album title, the real track order, the performer who
+should be the album artist instead of the composer — is stored in the database
+and layered over the file's own tags when the library is read. `MUSIC_DIR` is
+mounted read-only and nothing in Aria writes to it.
+
+The layers, weakest first: **file tags** → **derived** (MusicBrainz and the
+other open sources) → **your edits** (the metadata editor). A value you typed
+yourself always wins, and survives every later re-identification: nothing you
+enter by hand is ever overwritten by an automatic pass. The editor shows where a
+value came from, and an album that MusicBrainz gets wrong can be marked "not in
+MusicBrainz — use my own tags", which drops the derived data for that album
+entirely.
+
+### Why writing tags back to the files will eventually be wanted
+
+The database is Aria's, not yours. Every other player — your car, a phone
+plugged into a hire car, foobar2000, Plex, whatever you use in ten years — reads
+the files, so a library that is only correct inside Aria is only correct inside
+Aria. And `DATA_DIR/aria.db` is not portable: copy the music to another machine
+and the corrections do not follow, and rebuilding the database from scratch
+loses them unless every one can be re-derived — which the ones you typed by
+hand, by definition, cannot.
+
+Writing them back needs four things, none of them small. A writable mount plus a
+second explicit opt-in, because the failure mode is corrupting the master copy
+of a library that may not be backed up. A per-format tag-vocabulary mapping:
+ID3v2.4, Vorbis comments, MP4 atoms and APEv2 all spell the same field
+differently, and Picard's mapping table is the standard to follow. A verified
+answer to whether the bundled taglib really writes ape, wv and dsf rather than
+silently doing nothing. And a journal of each file's previous tags — unlike a
+database overlay, a file write destroys the only copy of what was there before,
+so undo has to be built rather than inherited.
+
+That is a project of its own with a genuinely destructive failure mode, and its
+value depends entirely on the corrections being right first. So the
+identification work came first and the writing did not. It is a known gap, not
+an oversight.
+
+### Audio fingerprinting (AcoustID)
+
+A separate background pass runs `fpcalc` over each file (~64 ms each) and stores
+a Chromaprint fingerprint, then asks **AcoustID** which MusicBrainz recordings
+it matches. The fingerprints are useful on their own — they identify duplicates
+across different encodes of the same recording — so the local half always runs.
+
+The lookup half needs an application key, which **Aria does not ship**: get one
+free at <https://acoustid.org/new-application> (sign in with a MusicBrainz
+account) and put it in the server environment as `ACOUSTID_KEY`. With no key the
+lookup half is completely dark and nothing is logged about it; set the key later
+and the next pass looks up everything already fingerprinted, no re-scan needed.
+
+Fingerprints, decoded-audio MD5s and lookup results all live in the database.
+`MUSIC_DIR` is never written to — mount it read-only.
+
+### Album matching
+
+Before it enriches anything, the pass decides *which MusicBrainz release each
+album actually is*, rather than trusting the top search hit. Candidates come
+from MBIDs already in your tags, from the release groups AcoustID voted for, and
+from a text search; each survivor of a track-count prefilter is fetched in full
+and scored against your files on title, duration, track order, disc count and
+year. The result is a distance from 0 (identical) to 1.
+
+Two independent gates must both pass before a release is applied:
+
+- **quality** — the best candidate's distance is at most `matchMaxDistance`
+  (default `0.10`);
+- **separation** — the best candidate *in a different release group* is at least
+  `matchMinSeparation` worse (default `0.25`).
+
+The second gate is the point. Thirteen nights of one tour all score about the
+same, and a threshold on the winner alone happily picks Madrid for a recording
+of the Amsterdam show. Deluxe and remastered editions share a release group, so
+they never trip it — only the pressing is ambiguous there, not the album.
+
+Every album ends in one of three states, readable at `GET /api/match/review`:
+
+| state     | meaning                                                              |
+| --------- | -------------------------------------------------------------------- |
+| `matched` | both gates passed; enrichment anchors on this release                 |
+| `review`  | plausible but ambiguous or weak; no MBID applied, retried on backoff  |
+| `local`   | no MusicBrainz entity; enrichment skips the album entirely            |
+
+Choosing a release yourself (`POST /api/album/{albumId}/reidentify`) *pins* it:
+the matcher never argues with it again. Setting `state` or `locked` in the album
+edits is likewise permanent — a state you set outranks the one the server
+derived. A machine-set `local` is only a conclusion, so it is retried later
+(24 h, doubling to 30 days) in case MusicBrainz ingests the release.
+
+Both thresholds are settable via `POST /api/settings` and want calibrating
+against your own library before being trusted. Matching a fresh 2,000-album
+library costs roughly two hours of wall clock, because MusicBrainz allows one
+request per second; the pass is resumable (each decision is stored before the
+next album starts) and a decided album costs zero requests on every later pass.
+Nothing is written to `MUSIC_DIR` — every correction lives in the database.
+
+### Library health and duplicates
+
+**Settings → Library → Library health** is the honest report on what all of the
+above could not settle: unidentified albums, matches where a rival release
+scored nearly as well, missing artwork, albums with no MusicBrainz ID, suspect
+files, clipping tracks and anything not yet analysed. Every row opens the album
+it is about. Pure read — `GET /api/library/health` runs no job and writes
+nothing.
+
+The same page lists duplicates (`GET /api/library/duplicates`). **Exact** groups
+have byte-identical decoded audio: same master, different tags, different
+filename, different container — the MD5 ignores all of it. The other groups
+share an AcoustID, which is the same recording through a different encoder (a
+FLAC and its MP3), and are not automatically unwanted — one recording
+legitimately appears on both an album and a compilation. Nothing is deleted;
+Aria shows you the copies and you decide. The near-duplicate half needs
+`ACOUSTID_KEY`; without it only exact groups appear.
+
+Both need the analysis pass to have run, which happens automatically after a
+scan.
+
+### Smart playlists on measured quality
+
+Alongside the tag-based rules, smart playlists can filter on what the decoder
+actually measured: minimum sample rate, minimum bit depth, loudness in LUFS
+("louder than −14" finds the loudness-war masters), dynamic range in LU
+("over 8 LU" finds the ones that survived it), and suspect files (exclude
+transcodes, or list only those).
+
+A track the analysis pass has not reached yet matches **none** of these,
+including the "quieter than" and "less than" directions — an unmeasured track is
+not a quiet one, and a playlist of "everything below −20 LUFS" must not silently
+mean "everything not yet analysed".
 
 ## Development
 

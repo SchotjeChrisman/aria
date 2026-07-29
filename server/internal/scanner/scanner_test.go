@@ -412,3 +412,80 @@ func ptrVal(p *int) int {
 	}
 	return *p
 }
+
+// The exts map is the ONLY gate on coverage — taglib parses whatever the walk
+// hands it — and nothing else asserts it, so a typo'd extension would ship
+// silently. walk() only stats, so zero-byte files are enough here; the
+// rejections matter as much as the acceptances (see the exts comment for why
+// .dff and the tracker modules stay out).
+func TestWalkExtensionGate(t *testing.T) {
+	cases := map[string]bool{
+		"a.flac": true, "a.mp3": true, "a.m4a": true, "a.ogg": true, "a.opus": true,
+		"a.wav": true, "a.aiff": true, "a.ape": true, "a.wv": true, "a.dsf": true,
+		"a.aif": true, "a.aifc": true, "a.afc": true, "a.oga": true, "a.spx": true,
+		"a.m4b": true, "a.wma": true, "a.tta": true, "a.shn": true, "a.mpc": true,
+		"A.FLAC": true, "sub/b.WmA": true, // extension match is case-insensitive
+		"a.dff": false, "a.dsdiff": false, // taglib tags them, ffmpeg can't demux them
+		"a.mod": false, "a.it": false, "a.xm": false, // need libopenmpt
+		"a.mp4": false, "a.m4v": false, "a.m4p": false, "a.m4r": false, // video/DRM/ringtone
+		"a.aac": false, "a.mka": false, "a.caf": false, "a.w64": false,
+		"a.jpg": false, "a.pdf": false, "a.txt": false, "noext": false,
+	}
+	dir := t.TempDir()
+	for name := range cases {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := map[string]bool{}
+	files, _ := (&Scanner{musicDir: dir}).walk()
+	for _, fe := range files {
+		got[filepath.ToSlash(fe.rel)] = true
+	}
+	for name, want := range cases {
+		if got[name] != want {
+			t.Errorf("walk %s: indexed=%v, want %v", name, got[name], want)
+		}
+	}
+}
+
+// Lossless is not a property of the container for wav/aiff/mp4/asf — each can
+// hold either payload, and taglib hands us the codec that decides it.
+func TestIsLossless(t *testing.T) {
+	cases := []struct {
+		format, codec string
+		want          bool
+	}{
+		{"flac", "", true}, // also Ogg FLAC: taglib reports it as plain "flac"
+		{"ape", "", true},
+		{"wavpack", "", true},
+		{"dsf", "", true},
+		{"tta", "", true},     // was unreachable: named here but rejected by exts
+		{"shorten", "", true}, // ditto
+		{"wav", "pcm", true},
+		{"wav", "", false}, // ADPCM etc: taglib sets pcm only for wFormatTag 1/3
+		{"aiff", "pcm", true},
+		{"aiff", "", false}, // compressed AIFF-C
+		{"mp4", "alac", true},
+		{"mp4", "aac", false},
+		{"asf", "wma9lossless", true},
+		{"asf", "wma2", false},
+		{"asf", "wma9pro", false},
+		{"ogg", "vorbis", false},
+		{"ogg", "opus", false},
+		{"ogg", "speex", false},
+		{"mpeg", "", false},
+		{"musepack", "", false},
+		{"dsdiff", "", false}, // deleted from losslessFmt: unplayable, never indexed
+		{"", "", false},
+	}
+	for _, c := range cases {
+		if got := isLossless(c.format, c.codec); got != c.want {
+			t.Errorf("isLossless(%q, %q) = %v, want %v", c.format, c.codec, got, c.want)
+		}
+	}
+}

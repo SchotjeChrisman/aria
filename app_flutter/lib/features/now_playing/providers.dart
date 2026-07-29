@@ -56,7 +56,12 @@ final currentDurationProvider = Provider<double>((ref) {
   return ref.watch(currentTrackProvider)?.duration ?? 0;
 });
 
-/// 0–100, persisted; legacy volume slider defaulted to 80.
+/// 0–100, persisted. Defaults to 100 — unity — and not to the legacy slider's
+/// 80: mpv's `volume` is software gain in the output chain, so 80 is a silent
+/// −1.94 dB applied to every sample on a fresh install. Bit-perfect by default
+/// is the project's stated non-negotiable, and a default that quietly breaks it
+/// is worse than one the user has to turn down. A stored value is respected as
+/// given; only the never-set case changes.
 final volumeProvider = NotifierProvider<VolumeNotifier, double>(
   VolumeNotifier.new,
 );
@@ -64,7 +69,7 @@ final volumeProvider = NotifierProvider<VolumeNotifier, double>(
 class VolumeNotifier extends Notifier<double> {
   @override
   double build() =>
-      ref.read(sharedPrefsProvider).getDouble(_prefsKeyVolume) ?? 80;
+      ref.read(sharedPrefsProvider).getDouble(_prefsKeyVolume) ?? 100;
 
   void set(double v) {
     state = v.clamp(0, 100);

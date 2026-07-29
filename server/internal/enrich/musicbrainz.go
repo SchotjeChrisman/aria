@@ -67,6 +67,14 @@ type mbArtist struct {
 	Relations []mbRelation `json:"relations"`
 }
 
+// mbGenre is one community-voted genre tag (inc=genres). Count is the number
+// of MusicBrainz editors who voted it, and is the only thing separating an
+// album's real genre from one person's opinion.
+type mbGenre struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
 type mbRecording struct {
 	ID        string       `json:"id"`
 	Relations []mbRelation `json:"relations"`
@@ -82,41 +90,70 @@ type mbArtistCredit struct {
 	} `json:"artist"`
 }
 
+// mbMediumTrack is one track on a medium. Length is MILLISECONDS (verified
+// against a live release: 506706 for an 8:26 movement) — the matcher's duration
+// component is in ms for exactly this reason, so no unit conversion sits between
+// MB's number and the penalty curve.
+type mbMediumTrack struct {
+	Position  int          `json:"position"`
+	Number    string       `json:"number"` // may be "A1"/"1a" on vinyl; Position is the reliable one
+	Title     string       `json:"title"`
+	Length    *int         `json:"length"`
+	Recording *mbRecording `json:"recording"`
+}
+
+type mbMedium struct {
+	Position   int             `json:"position"`
+	Format     string          `json:"format"`
+	TrackCount int             `json:"track-count"`
+	Tracks     []mbMediumTrack `json:"tracks"`
+}
+
 type mbRelease struct {
-	ID           string           `json:"id"`
-	Title        string           `json:"title"`
-	Date         string           `json:"date"`
-	Country      string           `json:"country"`
-	TrackCount   *int             `json:"track-count"`
-	Score        *int             `json:"score"`
-	ArtistCredit []mbArtistCredit `json:"artist-credit"`
+	ID             string           `json:"id"`
+	Title          string           `json:"title"`
+	Date           string           `json:"date"`
+	Country        string           `json:"country"`
+	Disambiguation string           `json:"disambiguation"`
+	Barcode        string           `json:"barcode"`
+	TrackCount     *int             `json:"track-count"`
+	Score          *int             `json:"score"`
+	ArtistCredit   []mbArtistCredit `json:"artist-credit"`
 	// the release's own artist-rels (already requested, previously dropped by
 	// the decoder): where the conductor/soloist/orchestra roles come from
 	Relations []mbRelation `json:"relations"`
-	Media     []struct {
-		Tracks []struct {
-			Recording *mbRecording `json:"recording"`
-		} `json:"tracks"`
-	} `json:"media"`
+	Media     []mbMedium   `json:"media"`
 	LabelInfo []struct {
-		Label *struct {
+		CatalogNumber string `json:"catalog-number"`
+		Label         *struct {
 			Name string `json:"name"`
 		} `json:"label"`
 	} `json:"label-info"`
+	// inc=genres puts voted tags on BOTH the release and its nested release
+	// group, in one response. The group's are the rich ones — one vote pool
+	// across every pressing — and the release's own are usually a single tag.
+	Genres       []mbGenre `json:"genres"`
 	ReleaseGroup *struct {
-		ID             string   `json:"id"`
-		PrimaryType    string   `json:"primary-type"`
-		SecondaryTypes []string `json:"secondary-types"`
+		ID             string    `json:"id"`
+		PrimaryType    string    `json:"primary-type"`
+		SecondaryTypes []string  `json:"secondary-types"`
+		Genres         []mbGenre `json:"genres"`
 	} `json:"release-group"`
 }
 
 // searchReleases runs the legacy release:"album" AND artist:"artist" query.
+// An empty artist drops that clause entirely rather than searching for
+// artist:"" — the matcher's Various-Artists retry needs a title-only search,
+// and `AND artist:""` matches nothing at all.
 func (m *MB) searchReleases(ctx context.Context, album, artist string, limit int) []mbRelease {
-	q := url.QueryEscape(`release:"` + album + `" AND artist:"` + artist + `"`)
+	query := `release:"` + album + `"`
+	if artist != "" {
+		query += ` AND artist:"` + artist + `"`
+	}
 	var out struct {
 		Releases []mbRelease `json:"releases"`
 	}
-	m.get(ctx, fmt.Sprintf("release/?query=%s&limit=%d", q, limit), &out)
+	m.get(ctx, fmt.Sprintf("release/?query=%s&limit=%d", url.QueryEscape(query), limit), &out)
 	return out.Releases
 }
 
@@ -177,24 +214,23 @@ func (m *MB) ReleaseGroupByName(ctx context.Context, artist, title, year string)
 	return best
 }
 
-// ReleasesInGroup lists the release MBIDs belonging to a release group. A
-// library rip is tagged with one specific release, so membership in this set
-// is what proves "this album is now owned" regardless of which edition.
-func (m *MB) ReleasesInGroup(ctx context.Context, rgid string) []string {
+// ReleasesInGroup lists the releases belonging to a release group. A library
+// rip is tagged with one specific release, so membership in this set is what
+// proves "this album is now owned" regardless of which edition.
+//
+// inc=media is what makes this one request useful to the matcher too: the
+// browse endpoint returns media[].track-count and media[].format for up to 100
+// releases, so a whole release group can be track-count-prefiltered before a
+// single verification fetch is spent on it.
+func (m *MB) ReleasesInGroup(ctx context.Context, rgid string) []mbRelease {
 	if rgid == "" {
 		return nil
 	}
 	var out struct {
-		Releases []struct {
-			ID string `json:"id"`
-		} `json:"releases"`
+		Releases []mbRelease `json:"releases"`
 	}
-	m.get(ctx, "release?release-group="+url.QueryEscape(rgid)+"&limit=100", &out)
-	ids := make([]string, 0, len(out.Releases))
-	for _, r := range out.Releases {
-		ids = append(ids, r.ID)
-	}
-	return ids
+	m.get(ctx, "release?release-group="+url.QueryEscape(rgid)+"&inc=media&limit=100", &out)
+	return out.Releases
 }
 
 // release looks one release up with the given inc= set; nil on any failure.

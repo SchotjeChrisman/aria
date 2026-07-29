@@ -36,6 +36,8 @@ class Track {
     this.bitsPerSample,
     this.channels,
     this.lossless = false,
+    this.trackGainDb,
+    this.albumGainDb,
     this.hasArt = false,
     this.artVersion = 0,
     this.favourite = false,
@@ -72,6 +74,12 @@ class Track {
   final int? bitsPerSample;
   final int? channels;
   final bool lossless;
+
+  // ReplayGain 2.0 gains in dB, measured by the server's loudness analysis
+  // (null until it has seen the file, and null for anything EBU R128 could not
+  // measure). Null means "no evidence": apply no adjustment, never 0.
+  final double? trackGainDb;
+  final double? albumGainDb;
 
   final bool hasArt;
   final int artVersion; // art cache-bust token; bumped on any art edit/upload
@@ -113,6 +121,8 @@ class Track {
         bitsPerSample: asInt(j['bitsPerSample']),
         channels: asInt(j['channels']),
         lossless: asBool(j['lossless']),
+        trackGainDb: asDouble(j['trackGainDb']),
+        albumGainDb: asDouble(j['albumGainDb']),
         hasArt: asBool(j['hasArt']),
         artVersion: asInt(j['artVersion']) ?? 0,
         favourite: asBool(j['favourite']),

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -238,5 +239,205 @@ func TestClassicalDisplayArtistOff(t *testing.T) {
 	// Latinisation is independent of the classical rule
 	if got := str(out[0]["conductor"]); got != "Vasily Petrenko" {
 		t.Errorf("conductor = %v, want %v", got, "Vasily Petrenko")
+	}
+}
+
+// ---- correction precedence --------------------------------------------------
+
+const fixAlbumID = "cccccccccccccccccccccccccccccccccccccccc"
+
+// precedenceDeps builds one album, one track, and whichever of the four overlay
+// layers the case wants. "" means the layer is absent.
+func precedenceDeps(t *testing.T, derivedTrack, derivedAlbum, albumEdit, trackEdit string) *Deps {
+	t.Helper()
+	ctx := context.Background()
+	dir := t.TempDir()
+	sqlDB, err := db.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sqlDB.Close() })
+	d := NewDeps(sqlDB, config.Config{DataDir: dir}, "test")
+	no := 9
+	if err := d.Tracks.UpsertAll(ctx, []repo.Track{{
+		ID: "t1", AlbumID: fixAlbumID, Title: "file title", Album: "file album",
+		AlbumArtist: "file artist", TrackNo: &no, AddedAt: "now",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range []struct{ kind, key, doc string }{
+		{"track", "t1", derivedTrack}, {"album", fixAlbumID, derivedAlbum},
+	} {
+		if l.doc == "" {
+			continue
+		}
+		if err := d.EnrichCache.Put(ctx, l.kind, l.key, json.RawMessage(l.doc), "now"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, l := range []struct{ kind, key, doc string }{
+		{"track", "t1", trackEdit}, {"album", fixAlbumID, albumEdit},
+	} {
+		if l.doc == "" {
+			continue
+		}
+		if err := d.Edits.Put(ctx, l.kind, l.key, json.RawMessage(l.doc)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return d
+}
+
+// The precedence contract, which is the whole of "a manual edit always beats an
+// automatic correction". There is no ownership check and no provenance test in
+// the merge — the guarantee IS this order, so the order is what gets pinned:
+// file tags -> derived track blob -> derived album blob -> album edits -> track
+// edits, later always winning.
+func TestCorrectionPrecedence(t *testing.T) {
+	const (
+		mbTrack = `{"title":"MB Title","trackNo":3,"mbRecordingId":"rec-1"}`
+		mbAlbum = `{"v":4,"done":true,"mbid":"rel-1","album":"MB Album","albumArtist":"MB Artist","year":1996}`
+		aEdit   = `{"album":"My Album","albumArtist":"My Artist","year":2001}`
+		tEdit   = `{"title":"My Title","trackNo":7}`
+	)
+	cases := []struct {
+		name                             string
+		dTrack, dAlbum, aEdit, tEdit     string
+		wantTitle, wantAlbum, wantArtist string
+		wantTrackNo, wantYear            float64
+	}{
+		{name: "file tags only",
+			wantTitle: "file title", wantAlbum: "file album", wantArtist: "file artist", wantTrackNo: 9},
+		{name: "derived track beats file tags", dTrack: mbTrack,
+			wantTitle: "MB Title", wantAlbum: "file album", wantArtist: "file artist", wantTrackNo: 3},
+		{name: "derived album beats file tags", dTrack: mbTrack, dAlbum: mbAlbum,
+			wantTitle: "MB Title", wantAlbum: "MB Album", wantArtist: "MB Artist", wantTrackNo: 3, wantYear: 1996},
+		{name: "album edit beats both derived layers", dTrack: mbTrack, dAlbum: mbAlbum, aEdit: aEdit,
+			wantTitle: "MB Title", wantAlbum: "My Album", wantArtist: "My Artist", wantTrackNo: 3, wantYear: 2001},
+		{name: "track edit beats everything", dTrack: mbTrack, dAlbum: mbAlbum, aEdit: aEdit, tEdit: tEdit,
+			wantTitle: "My Title", wantAlbum: "My Album", wantArtist: "My Artist", wantTrackNo: 7, wantYear: 2001},
+		// order-independence: the user edited BEFORE the match ever ran, and the
+		// match must still not overwrite it
+		{name: "edit made before the match still wins", aEdit: aEdit, tEdit: tEdit,
+			wantTitle: "My Title", wantAlbum: "My Album", wantArtist: "My Artist", wantTrackNo: 7, wantYear: 2001},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := precedenceDeps(t, tc.dTrack, tc.dAlbum, tc.aEdit, tc.tEdit)
+			out, err := buildMergedTracks(context.Background(), d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := out[0]
+			if got := str(m["title"]); got != tc.wantTitle {
+				t.Errorf("title = %q, want %q", got, tc.wantTitle)
+			}
+			if got := str(m["album"]); got != tc.wantAlbum {
+				t.Errorf("album = %q, want %q", got, tc.wantAlbum)
+			}
+			if got := str(m["albumArtist"]); got != tc.wantArtist {
+				t.Errorf("albumArtist = %q, want %q", got, tc.wantArtist)
+			}
+			if got := num(m["trackNo"]); got != tc.wantTrackNo {
+				t.Errorf("trackNo = %v, want %v", got, tc.wantTrackNo)
+			}
+			if got := num(m["year"]); got != tc.wantYear {
+				t.Errorf("year = %v, want %v", got, tc.wantYear)
+			}
+		})
+	}
+}
+
+// num coerces a merged-map number, which is an int from a struct field and a
+// float64 once it has been through a JSON blob.
+func num(v any) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int:
+		return float64(x)
+	}
+	return 0
+}
+
+// The enrichment-derived genres reach the merged track's `genres` array,
+// without the raw `genre` string moving — which is what keeps display, the
+// edits overlay and every stored smart rule intact.
+func TestMergedGenresUnionSources(t *testing.T) {
+	ctx := context.Background()
+	const other = "cccccccccccccccccccccccccccccccccccccccc"
+	for _, tc := range []struct {
+		name, tag, doc string
+		want           []string
+	}{
+		{
+			name: "file tag first, then MusicBrainz genres, then Discogs styles",
+			tag:  "Rock",
+			doc:  `{"v":1,"mbGenres":["alternative rock","art rock"],"dgGenres":["Electronic"],"dgStyles":["Euro-Disco"]}`,
+			want: []string{"Rock", "Alternative Rock", "Electronic", "Disco"},
+		},
+		{
+			// the case that motivated the phase: a bandcamp FLAC or classical
+			// rip with no GENRE tag at all was invisible in genre browse
+			name: "untagged album becomes browsable",
+			tag:  "",
+			doc:  `{"v":1,"mbGenres":["jazz"]}`,
+			want: []string{"Jazz"},
+		},
+		{
+			name: "already-known genre is not duplicated",
+			tag:  "Rock",
+			doc:  `{"v":1,"mbGenres":["rock"]}`,
+			want: []string{"Rock"},
+		},
+		{
+			name: "unmappable enrichment genres are dropped, not minted as nodes",
+			tag:  "Rock",
+			doc:  `{"v":1,"mbGenres":["zydeco","hauntology"]}`,
+			want: []string{"Rock"},
+		},
+		{
+			name: "no sources row leaves the old behaviour exactly",
+			tag:  "Rock;Jazz",
+			doc:  "",
+			want: []string{"Rock", "Jazz"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := classicalDeps(t)
+			genre := tc.tag
+			if err := d.Tracks.UpsertAll(ctx, []repo.Track{{
+				ID: "t2", Path: "/music/b/a.flac", AlbumID: other, Album: "A", Artist: "B", AlbumArtist: "B",
+				AddedAt: "now", Genre: &genre,
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.doc != "" {
+				if err := d.EnrichCache.Put(ctx, "sources", other, json.RawMessage(tc.doc), "now"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := buildMergedTracks(ctx, d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range out {
+				if m["id"] != "t2" {
+					// the other album has no sources row: its array must be
+					// untouched by this album's, i.e. no cross-album bleed
+					if g, _ := m["genres"].([]string); len(g) != 0 {
+						t.Errorf("album %v gained genres %v", m["albumId"], g)
+					}
+					continue
+				}
+				got, _ := m["genres"].([]string)
+				if !reflect.DeepEqual(got, tc.want) {
+					t.Errorf("genres = %v, want %v", got, tc.want)
+				}
+				if got, _ := m["genre"].(string); got != tc.tag {
+					t.Errorf("raw genre = %q, want the untouched file tag %q", got, tc.tag)
+				}
+			}
+		})
 	}
 }

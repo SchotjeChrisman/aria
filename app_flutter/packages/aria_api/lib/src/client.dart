@@ -9,6 +9,7 @@ import 'exceptions.dart';
 import 'json.dart';
 import 'models/enrichment.dart';
 import 'models/eq.dart';
+import 'models/health.dart';
 import 'models/misc.dart';
 import 'models/mixes.dart';
 import 'models/playlist.dart';
@@ -265,6 +266,17 @@ class AriaClient {
         nullOn404: true);
     return j == null ? null : Lyrics.fromJson(asMap(j));
   }
+
+  // ---- library health
+
+  /// Diagnostics only: what the analysis and matching passes could not settle.
+  Future<LibraryHealth> libraryHealth() async =>
+      LibraryHealth.fromJson(asMap(await _get('/api/library/health')));
+
+  /// Duplicate groups by decoded-audio MD5 (exact) and AcoustID (same
+  /// recording, different encode). Read-only — nothing here deletes a file.
+  Future<List<DuplicateGroup>> duplicates() async =>
+      _list(await _get('/api/library/duplicates'), DuplicateGroup.fromJson);
 
   // ---- identify / re-identify
 

@@ -14,6 +14,15 @@ services:
       com.centurylinklabs.watchtower.enable: "true"
     ports:
       - "3001:3000"
+    environment:
+      # AcoustID lookups are dark without a key — no key ships in the image, and
+      # fingerprints are still computed locally without one. Get one at
+      # https://acoustid.org/new-application (MusicBrainz login).
+      ACOUSTID_KEY: ${ACOUSTID_KEY:-}
+      # Discogs styles/label/catalogue-number enrichment, same deal: no token
+      # ships, and the pass simply skips that half without one. Get a personal
+      # access token at discogs.com → Settings → Developers.
+      DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
     volumes:
       # NFS can't be SELinux-relabeled (no :z) — virt_use_nfs boolean grants access instead
       - /mnt/nfs/share/media/music:/music:ro

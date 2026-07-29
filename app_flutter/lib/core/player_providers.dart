@@ -18,6 +18,7 @@ const _prefsKeyExclusive = 'aria.audioExclusive';
 const _prefsKeyEq = 'aria.eq';
 const _prefsKeyEqCustom = 'aria.eq.custom';
 const _prefsKeyEqFavourites = 'aria.eq.favourites';
+const _prefsKeyLoudness = 'aria.loudness';
 
 /// Single engine instance for the app's lifetime. The persisted exclusive
 /// flag is passed to the constructor so --audio-exclusive is set before
@@ -49,6 +50,50 @@ class AudioExclusiveNotifier extends Notifier<bool> {
     await ref.read(sharedPrefsProvider).setBool(_prefsKeyExclusive, on);
   }
 }
+
+/// Loudness normalisation policy. OFF by default and deliberately app-local
+/// (like exclusive/EQ/volume/quality) rather than a server setting: it is a
+/// property of the output device, not of the library — one server feeds a
+/// phone whose mixer resamples everything anyway and a desktop DAC that must
+/// stay untouched — and _playCurrent has to read it synchronously at load
+/// time, which a FutureProvider over HTTP cannot promise on a cold start.
+///
+/// The measured dB values are the server's (one analysis for every client);
+/// only the policy lives here.
+enum LoudnessMode { off, track, album }
+
+final loudnessProvider = NotifierProvider<LoudnessNotifier, LoudnessMode>(
+  LoudnessNotifier.new,
+);
+
+class LoudnessNotifier extends Notifier<LoudnessMode> {
+  @override
+  LoudnessMode build() =>
+      LoudnessMode.values.asNameMap()[
+          ref.read(sharedPrefsProvider).getString(_prefsKeyLoudness)] ??
+      LoudnessMode.off;
+
+  Future<void> set(LoudnessMode mode) async {
+    Log.i('settings', 'loudness normalisation ${mode.name}');
+    state = mode;
+    await ref
+        .read(sharedPrefsProvider)
+        .setString(_prefsKeyLoudness, mode.name);
+    ref.read(eqProvider.notifier).apply(); // re-push the chain, reload in place
+  }
+}
+
+/// The gain to apply to [t] under [mode], or null for "leave it alone".
+///
+/// Missing analysis fails to null, never to a guess. Album mode must NOT fall
+/// back to the track gain: silently substituting it re-introduces exactly the
+/// inter-track jumps album mode exists to prevent, and does it invisibly. And
+/// 0 would claim a measurement that does not exist.
+double? gainFor(Track? t, LoudnessMode mode) => switch (mode) {
+  LoudnessMode.off => null,
+  LoudnessMode.track => t?.trackGainDb,
+  LoudnessMode.album => t?.albumGainDb,
+};
 
 /// Headphone EQ selection: two independent layers (a headphone correction from
 /// OPRA/a favourite, plus one custom preset) stacked into one mpv `af` chain,
@@ -144,10 +189,20 @@ class EqNotifier extends Notifier<EqState> {
     _persist();
   }
 
-  /// Push the current chain to the engine (also called post-init).
-  void apply() {
+  /// Push the current chain to the engine (also called post-init). Still the
+  /// only writer of mpv's `af`: the loudness gain composes into the same
+  /// string here rather than getting a second, invisible writer.
+  ///
+  /// [reload] must be false when called from _playCurrent — apply()'s own
+  /// reload path calls back into _playCurrent, and the pair would loop forever.
+  void apply({bool reload = true}) {
     final p = state.enabled ? combineEq(state.headphone, state.custom) : null;
-    ref.read(ariaPlayerProvider).setAudioFilter(p == null ? '' : eqToAf(p));
+    final gain = gainFor(
+      ref.read(queueProvider).current,
+      ref.read(loudnessProvider),
+    );
+    ref.read(ariaPlayerProvider).setAudioFilter(buildAf(p, gain));
+    if (!reload) return;
     // Setting `af` live reconfigures the open audio output and fails on some
     // devices (silent, skipping playback). Reload the current track in place so
     // the filter lands on a clean init; no-op at startup / when stopped.
@@ -505,6 +560,16 @@ class QueueNotifier extends Notifier<QueueState> {
   void clearForRadio() {
     state = state.copyWith(tracks: const [], index: -1);
     _pendingAppIndex = null;
+    // Drop the outgoing track's loudness gain before the station loads.
+    // RadioPlaybackNotifier.play() calls the engine directly, bypassing
+    // _playCurrent and therefore the only `af` writer, so without this the
+    // station decodes through a volume filter measured from an unrelated file
+    // — and the signal path's radio branch has no Gain stage to confess it.
+    // Here rather than in the caller: every entry point routes through this.
+    // gainFor(null, mode) is null in every mode, so this lands as EQ-only;
+    // reload: false because the queue is now empty and the reload path is a
+    // no-op anyway.
+    ref.read(eqProvider.notifier).apply(reload: false);
     _persist();
   }
 
@@ -585,6 +650,11 @@ class QueueNotifier extends Notifier<QueueState> {
     ref.read(radioPlaybackProvider.notifier).trackPlaybackStarted();
     _engineBase = state.index;
     _pendingAppIndex = null;
+    // This track's gain must be on the chain BEFORE the load: `af` is a global
+    // mpv property and swapping it on an open output is the failure
+    // reapplyForFilterChange exists to avoid, so it rides the same clean init
+    // as the EQ. reload: false or apply() calls straight back into here.
+    ref.read(eqProvider.notifier).apply(reload: false);
     // Server tag meta seeds the format badge until mpv reports the real
     // decoded audio-params (legacy player.js meta handshake).
     final tier = ref
@@ -622,6 +692,24 @@ class QueueNotifier extends Notifier<QueueState> {
       // -> _playCurrent, which blocks and shows the notice.
       final kind = ref.read(networkKindProvider).value ?? NetKind.other;
       if (local == null && !ref.read(dataUsageProvider).allowsStream(kind)) {
+        _player.clearQueueNext();
+        _pendingAppIndex = null;
+        return;
+      }
+      // A gapless advance inherits whatever `af` is set when it starts
+      // decoding, and _onTrackStarted only observes it after mpv has already
+      // begun the file — too late to change the chain. So when the next track
+      // needs a different gain, don't pre-queue it: the advance falls through
+      // _onEnded -> next() -> _playCurrent, which sets the chain and does a
+      // clean loadfile.
+      // ponytail: per-track gain costs the gapless join whenever the gain
+      // changes. Album mode is the mitigation and keeps it for the case that
+      // needs it — consecutive tracks of one album share one albumGainDb, so
+      // the comparison is equal. With normalisation off both sides are null
+      // and this is a no-op. A per-file `af` via loadfile options needs mpv
+      // >= 0.38; macOS/iOS bundle 0.36.
+      final mode = ref.read(loudnessProvider);
+      if (gainFor(t, mode) != gainFor(state.current, mode)) {
         _player.clearQueueNext();
         _pendingAppIndex = null;
         return;

@@ -85,6 +85,43 @@ func TestStreamOriginalPassthrough(t *testing.T) {
 	}
 }
 
+// Every extension the scanner indexes must answer with a Content-Type on the
+// original tier — the app's download path falls back to it when track.format
+// is absent, and browsers need it to play at all. Whole-handler, not a map
+// lookup, so a missing streamMIME entry shows up as the empty header it is.
+func TestStreamMIMEByExtension(t *testing.T) {
+	// keyed by filename, not extension, because tracks.path is UNIQUE
+	want := map[string]string{
+		"a.flac": "audio/flac", "a.mp3": "audio/mpeg", "a.m4a": "audio/mp4",
+		"a.ogg": "audio/ogg", "a.opus": "audio/ogg", "a.wav": "audio/wav",
+		"a.aiff": "audio/aiff", "a.ape": "audio/x-ape", "a.wv": "audio/x-wavpack",
+		"a.dsf": "audio/x-dsf", "a.aif": "audio/aiff", "a.aifc": "audio/aiff",
+		"a.afc": "audio/aiff", "a.oga": "audio/ogg", "a.spx": "audio/ogg",
+		"a.m4b": "audio/mp4", "a.wma": "audio/x-ms-wma", "a.tta": "audio/x-tta",
+		"a.shn": "audio/x-shorten", "a.mpc": "audio/x-musepack",
+		"upper.WMA": "audio/x-ms-wma", // lookup is case-insensitive
+	}
+	deps := streamDeps(t, "x")
+	for rel, ct := range want {
+		if err := os.WriteFile(filepath.Join(deps.Cfg.MusicDir, rel), []byte("B"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := deps.Tracks.UpsertAll(context.Background(), []repo.Track{{
+			ID: rel, Path: rel, Title: rel, AlbumID: "al1",
+			AddedAt: "2026-01-01T00:00:00.000Z",
+		}}); err != nil {
+			t.Fatal(err)
+		}
+		rec := get(t, deps, "/api/stream/"+rel, nil)
+		if rec.Code != 200 {
+			t.Fatalf("%s = %d", rel, rec.Code)
+		}
+		if got := rec.Header().Get("Content-Type"); got != ct {
+			t.Errorf("%s content-type = %q, want %q", rel, got, ct)
+		}
+	}
+}
+
 // high tier: transcodes once, caches under the expected name, reuses on the
 // second request without re-invoking ffmpeg.
 func TestStreamTranscodeCacheAndReuse(t *testing.T) {

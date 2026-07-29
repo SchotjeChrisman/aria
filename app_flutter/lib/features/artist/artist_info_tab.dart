@@ -35,10 +35,17 @@ class ArtistInfoTab extends ConsumerWidget {
               );
             }
             final dates = d.born != null ? '${d.born}–${d.died ?? ''}' : null;
+            // Wikidata often lists a dozen instruments including near-
+            // duplicates ("keyboard instrument", "musical keyboard"); the meta
+            // line is one row, so it takes the first few and stops.
+            final instruments = d.instruments.isEmpty
+                ? null
+                : d.instruments.take(4).join(', ');
             final meta = [
               dates,
               d.area,
               d.type,
+              instruments,
             ].whereType<String>().join(' · ');
 
             return Column(

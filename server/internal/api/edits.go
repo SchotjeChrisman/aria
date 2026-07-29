@@ -28,6 +28,73 @@ type identifier interface {
 	ReidentifyAlbum(ctx context.Context, albumID string, ts []repo.Track, mbid string) (json.RawMessage, error)
 }
 
+// unmatcher is the enricher surface the state revert needs (matched
+// structurally by *enrich.Enricher, like identifier above). local=true drops the
+// album's derived MusicBrainz layer and marks it settled; false drops it with no
+// marker so the next pass re-derives.
+type unmatcher interface {
+	SetLocal(ctx context.Context, albumID string, ts []repo.Track, local bool) error
+}
+
+// derivedAlbum reads one album's enrich_cache `album` blob — the derived layer.
+// Returns nil when the album was never enriched or the blob is the literal null.
+func derivedAlbum(ctx context.Context, d *Deps, albumID string) map[string]any {
+	raw, found, err := d.EnrichCache.Get(ctx, "album", albumID)
+	if err != nil || !found {
+		return nil
+	}
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return nil
+	}
+	return m
+}
+
+// matchSource describes where an album's derived corrections came from, for the
+// editor's provenance line. ONE object per entity, not per field: every
+// corrected field on an album came from the same release, so per-field
+// provenance would be a dozen copies of one sentence.
+//
+// nil unless the derived layer is actually being applied — the album blob must
+// carry the very release MBID the decision names. A `review` decision, an album
+// the user pushed to `local`, and an unenriched album therefore all report no
+// source, which is right: in each case nothing derived is showing.
+//
+// recordingMbid is the track-level addition; "" omits it.
+func matchSource(ctx context.Context, d *Deps, albumID, recordingMbid string) map[string]any {
+	mbid, _ := derivedAlbum(ctx, d, albumID)["mbid"].(string)
+	if mbid == "" {
+		return nil
+	}
+	dec, ok, err := d.Matches.Get(ctx, albumID)
+	if err != nil || !ok || dec.ReleaseMbid == nil || *dec.ReleaseMbid != mbid {
+		return nil
+	}
+	// The release title is only in the stored candidate set — a pinned decision
+	// has none, and then the client falls back to showing the MBID.
+	title := ""
+	var cands []struct {
+		Mbid  string `json:"mbid"`
+		Title string `json:"title"`
+	}
+	json.Unmarshal(dec.Candidates, &cands)
+	for _, c := range cands {
+		if c.Mbid == mbid {
+			title = c.Title
+			break
+		}
+	}
+	src := map[string]any{
+		"kind": "musicbrainz", "releaseMbid": mbid, "releaseTitle": title,
+		"distance": dec.Distance, "separation": dec.Separation,
+		"decidedAt": dec.DecidedAt, "pinned": dec.Pinned,
+	}
+	if recordingMbid != "" {
+		src["recordingMbid"] = recordingMbid
+	}
+	return src
+}
+
 // nullish reports a nil-or-"null" cache/reidentify blob.
 func nullish(raw json.RawMessage) bool {
 	return raw == nil || bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
@@ -37,7 +104,7 @@ func nullish(raw json.RawMessage) bool {
 var editFields = map[string][]string{
 	"track": {"title", "artist", "album", "albumArtist", "genre", "year", "trackNo", "discNo",
 		"composer", "work", "movement", "conductor", "orchestra"},
-	"album": {"album", "albumArtist", "genre", "year", "releaseType", "label", "date", "country", "blurb", "artSource",
+	"album": {"album", "albumArtist", "genre", "year", "releaseType", "label", "date", "country", "catno", "blurb", "artSource",
 		"state", "disambiguation", "locked"},
 	"artist": {"type", "area", "born", "died", "image", "bio"},
 }
@@ -48,9 +115,12 @@ var (
 	longEdits    = []string{"bio", "blurb"}
 	releaseTypes = []string{"Album", "EP", "Single", "Live", "Compilation"}
 	// "local" means: user metadata is authoritative, no MusicBrainz entity.
-	// Set by hand today; Phase 4 routes albums here automatically. locked is
-	// stored and echoed but read by nothing until then.
-	albumStates = []string{"matched", "local"}
+	// Phase 4 routes albums here automatically too, but a state set HERE is the
+	// user's and outranks the matcher's — repo.Matches.PendingAlbums excludes
+	// any album whose edits carry state=local or locked, so a user `local` is
+	// permanent while a machine one retries on backoff. "review" is settable so
+	// a user can push a wrong-looking match back into the queue.
+	albumStates = []string{"matched", "review", "local"}
 
 	mbidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
@@ -240,6 +310,21 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 					return
 				}
 			}
+			// A state change is a verdict about identity, so it takes effect now
+			// rather than at the next enrichment pass — the user who just said
+			// "this isn't in MusicBrainz" expects the wrong title to be gone when
+			// the dialog closes, not tomorrow. "local" drops the derived layer and
+			// marks the album settled; clearing it (or any other value) drops the
+			// derived layer with no marker, re-arming re-derivation. Both reuse
+			// ReidentifyAlbum's existing clear-and-re-derive primitive.
+			if st, ok := patch["state"]; ok {
+				if um, ok := d.Enricher.(unmatcher); ok {
+					if err := um.SetLocal(r.Context(), r.PathValue("albumId"), ts, st == "local"); err != nil {
+						fail(w, err)
+						return
+					}
+				}
+			}
 			applyPatch(w, r, "album", r.PathValue("albumId"), patch)
 		}
 	})
@@ -291,20 +376,38 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 				"composer": t.Composer, "work": t.Work, "movement": t.Movement,
 				"conductor": t.Conductor, "orchestra": nil,
 			}
-			// enrichment credit overlay beats file tags in "original"
+			// The derived overlay beats file tags in "original" — that is what
+			// makes the editor's ↺ reset to the corrected value rather than to
+			// the wrong tag the correction replaced.
+			recMbid := ""
+			if t.MBRecordingID != nil {
+				recMbid = *t.MBRecordingID
+			}
 			if raw, found, err := d.EnrichCache.Get(ctx, "track", key); err != nil {
 				fail(w, err)
 				return
 			} else if found {
 				var m map[string]any
 				json.Unmarshal(raw, &m)
-				for _, k := range []string{"composer", "conductor", "orchestra"} {
+				for _, k := range []string{"composer", "conductor", "orchestra", "title", "trackNo", "discNo"} {
 					if v, ok := m[k]; ok {
 						orig[k] = v
 					}
 				}
+				if s, ok := m["mbRecordingId"].(string); ok && s != "" {
+					recMbid = s
+				}
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"original": orig, "overrides": overrides})
+			// derived album fields fan onto the track exactly as they do in the
+			// merged view, so the editor's per-field original matches /api/tracks
+			da := derivedAlbum(ctx, d, t.AlbumID)
+			for _, k := range []string{"album", "albumArtist", "year"} {
+				if v, ok := da[k]; ok {
+					orig[k] = v
+				}
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"original": orig, "overrides": overrides,
+				"source": matchSource(ctx, d, t.AlbumID, recMbid)})
 
 		case "album":
 			ts, err := d.Tracks.ByAlbum(ctx, key)
@@ -345,11 +448,32 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 				"genre": ts[0].Genre, "year": ts[0].Year,
 				"releaseType": releaseType(albumTracks, infoRaw),
 				"label":       get("label"), "date": get("date"), "country": get("country"), "blurb": get("blurb"),
-				// nothing derives these yet (Phase 4 does), but "every editable
-				// field is present, null when unset" is what the editor binds to
+				// The matcher's own conclusion is the `original` these fields
+				// override. locked has no derived side — it is a user field
+				// only — so it stays null here.
 				"state": nil, "disambiguation": nil, "locked": nil,
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"original": orig, "overrides": overrides})
+			// Corrections from a confirmed release are `original`, not
+			// `overrides` — same convention label/date/country already follow.
+			// Storing them as overrides would make ↺ revert to the wrong file tag
+			// and show the user overrides they never typed.
+			da := derivedAlbum(ctx, d, key)
+			for _, k := range []string{"album", "albumArtist", "year"} {
+				if v, ok := da[k]; ok {
+					orig[k] = v
+				}
+			}
+			if dec, ok, err := d.Matches.Get(r.Context(), key); err != nil {
+				fail(w, err)
+				return
+			} else if ok {
+				orig["state"] = dec.State
+				if dec.Disambiguation != "" {
+					orig["disambiguation"] = dec.Disambiguation
+				}
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"original": orig, "overrides": overrides,
+				"source": matchSource(ctx, d, key, "")})
 
 		case "artist": // sync cache only — never blocks on network
 			orig := map[string]any{"type": nil, "area": nil, "born": nil, "died": nil, "image": nil, "bio": nil}

@@ -20,15 +20,36 @@ func init() { register(registerPlaylists) }
 
 var stringOps = []string{"is", "isNot", "contains", "anyOf", "allOf"} // anyOf/allOf take an array of values
 
+var numOps = []string{"is", "gt", "lt"}
+
 var ruleFields = map[string][]string{
 	"title": stringOps, "artist": stringOps, "albumArtist": stringOps, "album": stringOps,
 	"genre": stringOps, "composer": stringOps, "format": stringOps, "credited": stringOps,
-	"year":        {"is", "gt", "lt"},
+	"year":        numOps,
 	"lossless":    {"is"},
 	"releaseType": {"is", "isNot"},
-	"playCount":   {"is", "gt", "lt"},
+	"playCount":   numOps,
 	"addedDays":   {"within"},
 	"tag":         {"is", "isNot", "anyOf", "allOf"},
+	// Measured off the decoded audio (migration 008), so every one of these is
+	// null until /api/analyze has seen the file — see numericFields.
+	"loudness":      numOps, // integrated LUFS, negative
+	"dynamicRange":  numOps, // EBU R128 loudness range, LU
+	"sampleRate":    numOps,
+	"bitsPerSample": numOps,
+	"suspect":       {"is"}, // decoded stream contradicts the container
+}
+
+// numericFields maps a rule field to the merged-track key it compares. These
+// share one rule: a null value fails EVERY operator including `lt`, because
+// "not measured" is not "quiet" — toNum would otherwise read null as 0 and
+// make every unanalysed track the loudest thing in the library.
+var numericFields = map[string]string{
+	"year":          "year",
+	"loudness":      "loudnessLufs",
+	"dynamicRange":  "dynamicRangeLu",
+	"sampleRate":    "sampleRate",
+	"bitsPerSample": "bitsPerSample",
 }
 
 func validRules(v any) bool {
@@ -40,7 +61,7 @@ func validRules(v any) bool {
 		return false
 	}
 	rules, ok := m["rules"].([]any)
-	if !ok || len(rules) > 16 { // form emits up to 13
+	if !ok || len(rules) > 24 { // form emits up to 18 since the quality rows
 		return false
 	}
 	for _, rv := range rules {
@@ -224,6 +245,28 @@ func allVal(v any, f func(any) bool) bool {
 	return true
 }
 
+// evalNumeric is the shared body of every numericFields comparison, and is
+// exactly what the `year` rule always did — an unknown value fails, a
+// non-numeric rule value fails, and anything that is not `is` or `gt` is `lt`.
+func evalNumeric(have any, op string, want any) bool {
+	if have == nil {
+		return false
+	}
+	h, hok := toNum(have)
+	v, vok := toNum(want)
+	if !hok || !vok {
+		return false
+	}
+	switch op {
+	case "is":
+		return h == v
+	case "gt":
+		return h > v
+	default:
+		return h < v
+	}
+}
+
 // evalRule ports server.js evalRule. t is an /api/tracks-shaped view (edits
 // merged, releaseType/tags/genres annotated); counts is per-profile play counts.
 // raw maps a lowercased Latin display name back to the lowercased original
@@ -233,28 +276,13 @@ func evalRule(t, r map[string]any, counts map[string]int, raw map[string]string)
 	field, _ := r["field"].(string)
 	op, _ := r["op"].(string)
 	value := r["value"]
+	if key, ok := numericFields[field]; ok {
+		return evalNumeric(deref(t[key]), op, value)
+	}
 	switch field {
-	case "year":
-		yv := deref(t["year"])
-		if yv == nil { // null year fails everything
-			return false
-		}
-		y, yok := toNum(yv)
-		v, vok := toNum(value)
-		if !yok || !vok {
-			return false
-		}
-		switch op {
-		case "is":
-			return y == v
-		case "gt":
-			return y > v
-		default:
-			return y < v
-		}
-	case "lossless":
+	case "lossless", "suspect":
 		want := value == true || value == "true"
-		b, ok := deref(t["lossless"]).(bool)
+		b, ok := deref(t[field]).(bool)
 		return ok && b == want
 	case "releaseType":
 		eq := strings.EqualFold(jsStr(t["releaseType"]), jsStr(value))
@@ -345,8 +373,23 @@ func evalRule(t, r map[string]any, counts map[string]int, raw map[string]string)
 	case "genre": // canonical + hierarchical, with raw-substring back-compat
 		g, _ := deref(t["genre"]).(string)
 		raw := strings.ToLower(g)
+		// The merged row's derived array, which since the sources phase carries
+		// the MusicBrainz genre tags and Discogs styles as well as the file
+		// tag's own — re-Splitting the raw string here would silently evaluate
+		// against less than the truth. The fallback keeps rows built without it
+		// (tests, callers holding a bare track map) matching exactly as before.
+		//
+		// Every saved rule keeps working and can only match MORE than before:
+		// the file tag's canonical genres are still the first elements of the
+		// array, the raw-substring branch is untouched, and the alias
+		// canonicalisation of `wanted` that makes old rules like "Klassiek"
+		// work moved into MatchesList unchanged.
+		cg := strList(deref(t["genres"]))
+		if len(cg) == 0 {
+			cg = genres.Split(g)
+		}
 		one := func(q any) bool {
-			return genres.Matches(g, jsStr(q)) || strings.Contains(raw, strings.ToLower(jsStr(q)))
+			return genres.MatchesList(cg, jsStr(q)) || strings.Contains(raw, strings.ToLower(jsStr(q)))
 		}
 		switch op {
 		case "anyOf":
@@ -354,7 +397,7 @@ func evalRule(t, r map[string]any, counts map[string]int, raw map[string]string)
 		case "allOf":
 			return allVal(value, one)
 		}
-		canon := lowerAll(genres.Split(g))
+		canon := lowerAll(cg)
 		q := strings.ToLower(jsStr(value))
 		switch op {
 		case "is":

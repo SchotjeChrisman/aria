@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"math/rand"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -18,7 +20,10 @@ func registerMixes(mux *http.ServeMux, d *Deps) {
 // mixes builds four ranked trackId lists per profile. Daily/weekly are
 // artist-affinity mixes (recent artists -> their whole discography in-library)
 // with a date-seeded deterministic shuffle so a mix is stable within its period
-// and rotates after. Monthly/yearly are straight play-count rankings.
+// and rotates after, then ListenBrainz popularity promotes recognisable
+// recordings within that order. Monthly/yearly are straight play-count
+// rankings and stay that way — they mean "what you played", and mixing global
+// popularity into them would quietly change what the number says.
 // ponytail: monthly/yearly recomputed per request; cache if hot.
 func mixes(w http.ResponseWriter, r *http.Request, d *Deps) {
 	ctx := r.Context()
@@ -46,12 +51,18 @@ func mixes(w http.ResponseWriter, r *http.Request, d *Deps) {
 
 	isoWeekY, isoWeek := now.ISOWeek()
 
-	daily, err := artistMix(ctx, d, pid, dayCut, seed(now.Format("2006-01-02")+pid))
+	pop, err := popularTracks(ctx, d)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	weekly, err := artistMix(ctx, d, pid, weekCut, seed(fmt.Sprintf("%dW%02d", isoWeekY, isoWeek)+pid))
+
+	daily, err := artistMix(ctx, d, pid, dayCut, seed(now.Format("2006-01-02")+pid), pop)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	weekly, err := artistMix(ctx, d, pid, weekCut, seed(fmt.Sprintf("%dW%02d", isoWeekY, isoWeek)+pid), pop)
 	if err != nil {
 		fail(w, err)
 		return
@@ -77,10 +88,52 @@ func mixes(w http.ResponseWriter, r *http.Request, d *Deps) {
 
 const mixScope = `(?1 = '' OR p.profileId = ?1)`
 
+// popularTracks returns the ids of library tracks whose recording MBID appears
+// in some cached ListenBrainz "popular" doc — i.e. tracks the wider world
+// actually listens to, as opposed to the live sets and alternate takes that
+// share an artist with them. Empty (and cheap) when nothing is cached yet or
+// no file carries a recording MBID, which is exactly today's behaviour.
+// ponytail: rebuilt per request from the whole cache kind; memoize next to
+// newReleases if /api/mixes ever gets hot.
+func popularTracks(ctx context.Context, d *Deps) (map[string]bool, error) {
+	docs, err := d.EnrichCache.ListKind(ctx, "popular")
+	if err != nil || len(docs) == 0 {
+		return nil, err
+	}
+	rec := map[string]bool{}
+	for _, raw := range docs {
+		var doc struct {
+			Top []string `json:"top"`
+		}
+		if json.Unmarshal(raw, &doc) != nil {
+			continue
+		}
+		for _, m := range doc.Top {
+			rec[m] = true
+		}
+	}
+	rows, err := d.DB.QueryContext(ctx, `SELECT id, mbRecordingId FROM tracks WHERE mbRecordingId <> ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id, mbid string
+		if err := rows.Scan(&id, &mbid); err != nil {
+			return nil, err
+		}
+		if rec[mbid] {
+			out[id] = true
+		}
+	}
+	return out, rows.Err()
+}
+
 // artistMix: distinct artists played since cut -> every in-library track by
-// those artists -> seeded shuffle -> cap 50. Empty window falls back to
-// favourites, then random tracks.
-func artistMix(ctx context.Context, d *Deps, pid, cut string, s int64) ([]string, error) {
+// those artists -> seeded shuffle -> globally-popular recordings floated to the
+// front -> cap 50. Empty window falls back to favourites, then random tracks.
+func artistMix(ctx context.Context, d *Deps, pid, cut string, s int64, pop map[string]bool) ([]string, error) {
 	ids, err := queryIDs(ctx, d, `
 		SELECT t2.id FROM tracks t2 WHERE t2.artist <> '' AND t2.artist IN (
 			SELECT DISTINCT t.artist FROM plays p JOIN tracks t ON t.id = p.trackId
@@ -104,6 +157,16 @@ func artistMix(ctx context.Context, d *Deps, pid, cut string, s int64) ([]string
 	}
 	rng := rand.New(rand.NewSource(s))
 	rng.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
+	// Stable partition, not a sort by popularity: the shuffle is the feature
+	// (the mix has to rotate day to day), so ranking may only decide which
+	// bucket a track lands in, never its order inside the bucket. Partitioning
+	// before the cap is deliberate — a recognisable track sitting at shuffled
+	// position 800 is exactly the one worth promoting into the 50.
+	if len(pop) > 0 {
+		slices.SortStableFunc(ids, func(a, b string) int {
+			return btoi(pop[b]) - btoi(pop[a])
+		})
+	}
 	if len(ids) > 50 {
 		ids = ids[:50]
 	}
@@ -134,6 +197,13 @@ func queryIDs(ctx context.Context, d *Deps, q string, args ...any) ([]string, er
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func seed(s string) int64 {

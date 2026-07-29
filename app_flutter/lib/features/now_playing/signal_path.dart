@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/phosphor_icons.dart';
 
+import '../../core/eq.dart';
 import '../../core/formats.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
+import 'providers.dart';
 
 /// Signal-path quality tiers — Roon's exact colour grades. Ordered worst-last
 /// so `.index` ranks them and the overall dot is the worst stage in the chain.
@@ -173,6 +175,29 @@ _Path? _resolvePath(WidgetRef ref) {
           short: 'EQ',
           tier: _Tier.enhanced,
         ));
+        bump(_Tier.enhanced);
+      }
+
+      // Keyed off the gain ACTUALLY on the chain, not off the setting: an
+      // unanalysed track under normalisation gets no gain and still reads
+      // bit-perfect, truthfully — and a normalised one can never read
+      // bit-perfect while a volume element is multiplying its samples.
+      final gain = appliedGain(gainFor(t, ref.watch(loudnessProvider)));
+      if (gain != null) {
+        stages.add((
+          name: 'Gain',
+          detail: '${gain.toStringAsFixed(2)} dB · loudness normalisation',
+          short: 'GAIN',
+          tier: _Tier.enhanced,
+        ));
+        bump(_Tier.enhanced);
+      }
+
+      // mpv's `volume` is software gain in the same output chain, so anything
+      // below unity is DSP by exactly the same argument as the line above. It
+      // is not shown as a stage — the user set it deliberately and knows where
+      // the slider is — but it must not be allowed to read as bit-perfect.
+      if (ref.watch(volumeProvider) < 100) {
         bump(_Tier.enhanced);
       }
 

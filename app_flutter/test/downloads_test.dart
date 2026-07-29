@@ -54,6 +54,18 @@ void main() {
       expect(extensionFor('mp3', 'audio/flac'), '.mp3');
     });
 
+    test('taglib container names are aliased to real extensions', () {
+      expect(extensionFor('MPEG', null), '.mp3');
+      expect(extensionFor('MP4', null), '.m4a');
+      expect(extensionFor('ASF', null), '.wma');
+      expect(extensionFor('WavPack', null), '.wv');
+      expect(extensionFor('MUSEPACK', null), '.mpc');
+      expect(extensionFor('SHORTEN', null), '.shn');
+      // containers that already name their own extension pass through
+      expect(extensionFor('TTA', null), '.tta');
+      expect(extensionFor('AIFF', null), '.aiff');
+    });
+
     test('falls back to Content-Type, then .bin', () {
       expect(extensionFor(null, 'audio/mpeg'), '.mp3');
       // Transcoder serves Opus-in-Ogg; a null format (transcoded tier) maps

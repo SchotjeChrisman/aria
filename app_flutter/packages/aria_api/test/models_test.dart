@@ -319,6 +319,7 @@ void main() {
         ],
         'members': ['Alice', 'Bob'],
         'bands': [],
+        'instruments': ['guitar', 'voice'],
         'discography': [
           {'title': 'LP', 'cover': null, 'date': '2026-05-01', 'type': 'album'}
         ],
@@ -327,6 +328,9 @@ void main() {
       expect(a.members, ['Alice', 'Bob']);
       expect(a.similar.single.name, 'Other Band');
       expect(a.discography.single.date, '2026-05-01');
+      expect(a.instruments, ['guitar', 'voice']);
+      // absent for every entry cached before the Wikidata pass existed
+      expect(ArtistInfo.fromJson({'type': 'Person'}).instruments, isEmpty);
     });
 
     test('ComposerInfo / AlbumInfo / Lyrics', () {
@@ -344,12 +348,16 @@ void main() {
         'label': 'Blue Note',
         'date': '1957-03-01',
         'country': 'US',
+        'catno': 'BLP 1595',
         'mbType': 'Album',
         'mbSecondary': ['Live'],
         'blurb': 'Classic.',
         'url': 'https://w',
       });
       expect(i.mbSecondary, ['Live']);
+      expect(i.catno, 'BLP 1595');
+      // null without a server DISCOGS_TOKEN, which must not break decoding
+      expect(AlbumInfo.fromJson({'label': 'X'}).catno, isNull);
 
       final l = Lyrics.fromJson({'synced': '[00:01.00] hi', 'plain': 'hi'});
       expect(l.synced, startsWith('[00:01.00]'));
@@ -461,12 +469,35 @@ void main() {
       });
       expect(r.builtin, isTrue);
 
+      // No `source` key at all: an older server, and the editor must simply
+      // not draw the provenance line rather than blow up.
       final e = EditState.fromJson({
         'original': {'title': 'Old', 'year': 1999},
         'overrides': {'title': 'New'},
       });
       expect(e.original['year'], 1999);
       expect(e.overrides['title'], 'New');
+      expect(e.source, isNull);
+
+      // Explicit null (never matched / under review / marked local).
+      expect(
+        EditState.fromJson({'original': {}, 'overrides': {}, 'source': null})
+            .source,
+        isNull,
+      );
+
+      final matched = EditState.fromJson({
+        'original': {'album': 'MB Album'},
+        'overrides': {},
+        'source': {
+          'kind': 'musicbrainz',
+          'releaseMbid': 'ec17a59b-6ca3-4817-9ca9-67b137550819',
+          'releaseTitle': 'Barber, Bruch: Violin Concertos',
+          'pinned': false,
+        },
+      });
+      expect(matched.source?['releaseTitle'], 'Barber, Bruch: Violin Concertos');
+      expect(matched.source?['pinned'], isFalse);
 
       final g = GenreTree.fromJson({
         'tree': {'Blues': null, 'Blues Rock': 'Blues', 'Rock': null}

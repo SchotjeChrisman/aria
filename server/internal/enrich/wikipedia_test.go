@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,7 +15,64 @@ func testWikipedia(t *testing.T, h http.HandlerFunc) *Wikipedia {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return &Wikipedia{c: newPoliteClient(), restBase: srv.URL, wdBase: srv.URL + "/w/api.php"}
+	return &Wikipedia{c: newPoliteClient(), restBase: srv.URL,
+		wdBase: srv.URL + "/w/api.php", sparql: srv.URL + "/sparql"}
+}
+
+// A captured WDQS response body. Bowie has both dates and eight instruments;
+// the Beatles have neither a birth date nor an instrument, which is the
+// binding-absent case (the key is simply missing from the row, not null).
+const wdFactsBody = `{"head":{"vars":["a","birth","death","instruments"]},"results":{"bindings":[
+ {"a":{"type":"uri","value":"http://www.wikidata.org/entity/Q5383"},
+  "birth":{"datatype":"http://www.w3.org/2001/XMLSchema#dateTime","type":"literal","value":"1947-01-08T00:00:00Z"},
+  "death":{"datatype":"http://www.w3.org/2001/XMLSchema#dateTime","type":"literal","value":"2016-01-10T00:00:00Z"},
+  "instruments":{"type":"literal","value":"voice|ARP 2500|saxophone|guitar|piano"}},
+ {"a":{"type":"uri","value":"http://www.wikidata.org/entity/Q1299"},
+  "instruments":{"type":"literal","value":""}}]}}`
+
+func TestFacts(t *testing.T) {
+	var gotQuery string
+	w := testWikipedia(t, func(rw http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("query")
+		if f := r.URL.Query().Get("format"); f != "json" {
+			t.Errorf("format = %q, want json (WDQS needs no Accept header)", f)
+		}
+		rw.Write([]byte(wdFactsBody))
+	})
+	got, err := w.Facts(context.Background(), []string{"Q5383", "Q1299"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// every requested id has to reach the VALUES clause, or the batch silently
+	// drops artists that then settle with no facts
+	for _, q := range []string{"wd:Q5383", "wd:Q1299"} {
+		if !strings.Contains(gotQuery, q) {
+			t.Errorf("query missing %s: %s", q, gotQuery)
+		}
+	}
+	bowie := WDFacts{Born: "1947-01-08", Died: "2016-01-10",
+		Instruments: []string{"voice", "ARP 2500", "saxophone", "guitar", "piano"}}
+	if !reflect.DeepEqual(got["Q5383"], bowie) {
+		t.Errorf("Q5383 = %+v, want %+v", got["Q5383"], bowie)
+	}
+	// present in the map (so the caller settles it) but carrying nothing
+	if f, ok := got["Q1299"]; !ok || f.Born != "" || len(f.Instruments) != 0 {
+		t.Errorf("Q1299 = %+v, ok=%v", f, ok)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d rows, want 2", len(got))
+	}
+}
+
+func TestFactsNoQids(t *testing.T) {
+	// no ids must mean no request at all — an empty VALUES {} is a syntax error
+	w := testWikipedia(t, func(rw http.ResponseWriter, r *http.Request) {
+		t.Error("Facts(nil) made a request")
+	})
+	got, err := w.Facts(context.Background(), nil)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("got %v, %v", got, err)
+	}
 }
 
 func TestSummary(t *testing.T) {

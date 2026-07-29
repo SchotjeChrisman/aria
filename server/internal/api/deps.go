@@ -24,7 +24,26 @@ type Enricher interface {
 	Status() any
 }
 
-// Deps is everything route files need. Scanner/Enricher are wired in main.
+// Analyzer decodes audio for EBU R128 loudness and the real stream format.
+// Same Run/Status contract as Enricher; nil when no ffmpeg was found at
+// startup, which is the feature gate (501 from /api/analyze).
+type Analyzer interface {
+	Run(ctx context.Context) error
+	Status() any
+}
+
+// Fingerprinter computes Chromaprint fingerprints and resolves them against
+// AcoustID. Same Run/Status contract again; nil when fpcalc did not run at
+// startup, which is the feature gate (501 from /api/fingerprint). Note this is
+// gated on fpcalc, NOT on ffmpeg or on an AcoustID key: a deployment can have
+// one binary and not the other, and a missing key only darkens the lookup half.
+type Fingerprinter interface {
+	Run(ctx context.Context) error
+	Status() any
+}
+
+// Deps is everything route files need. Scanner/Enricher/Analyzer/Fingerprinter
+// are wired in main.
 type Deps struct {
 	DB      *sql.DB
 	Cfg     config.Config
@@ -46,10 +65,15 @@ type Deps struct {
 	Settings    *repo.Settings
 	Radio       *repo.Radio
 	Logs        *repo.Logs
+	Audio       *repo.Audio
+	FP          *repo.FP
+	Matches     *repo.Matches
 
-	Scanner  Scanner
-	Enricher Enricher
-	Events   *Hub
+	Scanner       Scanner
+	Enricher      Enricher
+	Analyzer      Analyzer
+	Fingerprinter Fingerprinter
+	Events        *Hub
 
 	// Bg is the app-lifetime context (set in main); background scan/enrich
 	// work derives from it so SIGTERM cancels it, and GoBg tracks it so main
@@ -100,8 +124,8 @@ func (d *Deps) InvalidateTracks() {
 	d.tracksMu.Unlock()
 }
 
-// NewDeps wires all repos and the SSE hub; Scanner/Enricher stay nil until
-// the caller sets them.
+// NewDeps wires all repos and the SSE hub; Scanner/Enricher/Analyzer/
+// Fingerprinter stay nil until the caller sets them.
 func NewDeps(db *sql.DB, cfg config.Config, version string) *Deps {
 	return &Deps{
 		DB:      db,
@@ -120,6 +144,9 @@ func NewDeps(db *sql.DB, cfg config.Config, version string) *Deps {
 		Settings:    repo.NewSettings(db),
 		Radio:       repo.NewRadio(db),
 		Logs:        repo.NewLogs(db),
+		Audio:       repo.NewAudio(db),
+		FP:          repo.NewFP(db),
+		Matches:     repo.NewMatches(db),
 
 		Events: NewHub(),
 	}

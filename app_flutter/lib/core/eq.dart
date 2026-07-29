@@ -21,7 +21,53 @@ EqProfile? combineEq(EqProfile? h, EqProfile? c) {
 /// 'lavfi=[volume=-6.8dB,equalizer=f=105:t=q:w=0.7:g=3.1]'. The preamp
 /// volume element is omitted at 0 dB; unknown band types are skipped;
 /// no usable bands -> '' (filter chain cleared).
-String eqToAf(EqProfile p) {
+String eqToAf(EqProfile p) => buildAf(p, null);
+
+/// The loudness gain [buildAf] will actually emit for [gainDb], or null when
+/// it emits nothing at all. The Now Playing signal path keys its Gain stage
+/// off THIS, not off the setting, so an unanalysed track under normalisation
+/// still reads bit-perfect — truthfully.
+///
+/// ponytail: attenuate only, so normalisation can never clip. ReplayGain 2.0
+/// ships a true-peak figure precisely so a player can boost safely, and the
+/// server measures and serves it (Track.trackPeak), but nothing reads it yet;
+/// until it does, a quiet track stays quiet rather than risking a clipped loud
+/// one. Upgrade: allow up to -20*log10(peak) dB of positive gain.
+double? appliedGain(double? gainDb) {
+  // mpv stores any af string at set time and only rejects it at load, where it
+  // surfaces as a dead-audio stop rather than an ignored filter — so a NaN or
+  // infinite gain must die here, not in the chain.
+  if (gainDb == null || gainDb.isNaN || gainDb.isInfinite) return null;
+  final g = gainDb.clamp(-24.0, 0.0).toDouble();
+  // Anything that renders as '-0' at _n's two decimals is an identity
+  // multiply; emitting it costs a real filter stage (mpv converts to float and
+  // back) and makes the signal path read 'Gain -0.00 dB' for nothing. A track
+  // measured at -17.999 LUFS lands exactly here.
+  return g > -0.005 ? null : g;
+}
+
+/// af chain = loudness gain, then the EQ chain. Returns exactly what
+/// [eqToAf] returns when [gainDb] is null or produces no element, so the
+/// bit-perfect default path is the same bytes it has always been.
+///
+/// The gain is its own leading `volume=` element rather than being summed into
+/// the EQ preamp: ffmpeg multiplies the two stages anyway, and keeping them
+/// separate leaves the EQ portion a verbatim substring, which is what makes
+/// "normalisation off is byte-identical" a one-line assertion.
+String buildAf(EqProfile? eq, double? gainDb) {
+  final parts = eq == null ? <String>[] : _eqParts(eq);
+  if (parts.isNotEmpty) {
+    final pre = eq!.gainDb.clamp(-24, 24);
+    if (pre != 0) parts.insert(0, 'volume=${_n(pre)}dB');
+  }
+  final g = appliedGain(gainDb);
+  if (g != null) parts.insert(0, 'volume=${_n(g)}dB');
+  if (parts.isEmpty) return '';
+  return 'lavfi=[${parts.join(',')}]';
+}
+
+/// The band elements of [p], in order. No preamp, no lavfi wrapper.
+List<String> _eqParts(EqProfile p) {
   final parts = <String>[];
   for (final b in p.bands) {
     // ponytail: clamp to mpv-safe biquad ranges — out-of-range values make
@@ -52,8 +98,5 @@ String eqToAf(EqProfile p) {
     };
     if (part != null) parts.addAll(part);
   }
-  if (parts.isEmpty) return '';
-  final pre = p.gainDb.clamp(-24, 24);
-  if (pre != 0) parts.insert(0, 'volume=${_n(pre)}dB');
-  return 'lavfi=[${parts.join(',')}]';
+  return parts;
 }

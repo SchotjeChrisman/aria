@@ -9,9 +9,11 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
+	"aria/internal/analyze"
 	"aria/internal/genres"
 	"aria/internal/repo"
 	"aria/internal/scanner"
@@ -290,6 +292,10 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	sources, err := d.EnrichCache.ListKind(ctx, "sources")
+	if err != nil {
+		return nil, err
+	}
 	editTrack, err := d.Edits.ListKind(ctx, "track")
 	if err != nil {
 		return nil, err
@@ -301,6 +307,34 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	tags, err := d.Tags.List(ctx)
 	if err != nil {
 		return nil, err
+	}
+	// Measured loudness. Gains are derived here rather than stored so the
+	// ReplayGain reference level stays a decision instead of being frozen into
+	// every row; the album aggregate is arithmetic over the tracks already in
+	// hand (durations and album ids included), so it needs no second query and
+	// no album_audio table.
+	audio, err := d.Audio.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byAlbumLoud := map[string][]analyze.AlbumTrack{}
+	for _, t := range ts {
+		a, ok := audio[t.ID]
+		if !ok {
+			continue
+		}
+		var dur float64
+		if t.Duration != nil {
+			dur = *t.Duration
+		}
+		byAlbumLoud[t.AlbumID] = append(byAlbumLoud[t.AlbumID], analyze.AlbumTrack{
+			LUFS: a.IntegratedLUFS, PeakDBFS: a.TruePeakDBFS, Duration: dur,
+		})
+	}
+	albumGain := make(map[string]*float64, len(byAlbumLoud))
+	albumPeak := make(map[string]*float64, len(byAlbumLoud))
+	for id, ats := range byAlbumLoud {
+		albumGain[id], albumPeak[id] = analyze.AlbumGain(ats), analyze.AlbumPeak(ats)
 	}
 
 	editAlbum := make(map[string]map[string]any, len(editAlbumRaw))
@@ -316,11 +350,19 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	artByAlbum := map[string]bool{}
 	displayByAlbum := map[string]string{}
 	composersByAlbum := map[string][]string{}
+	// corrections from a confirmed MusicBrainz match, fanned onto the album's
+	// tracks. Built as a map rather than fanned field-by-field so an absent
+	// correction is simply an absent key — an empty string here must not blank
+	// a file tag.
+	fixByAlbum := map[string]map[string]any{}
 	for k, raw := range enrichAlbum {
 		var e struct {
 			Art           bool     `json:"art"`
 			DisplayArtist string   `json:"displayArtist"`
 			Composers     []string `json:"composers"`
+			Album         string   `json:"album"`
+			AlbumArtist   string   `json:"albumArtist"`
+			Year          int      `json:"year"`
 		}
 		if json.Unmarshal(raw, &e) != nil {
 			continue
@@ -330,6 +372,19 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		}
 		displayByAlbum[k] = e.DisplayArtist
 		composersByAlbum[k] = e.Composers
+		fix := map[string]any{}
+		if e.Album != "" {
+			fix["album"] = e.Album
+		}
+		if e.AlbumArtist != "" {
+			fix["albumArtist"] = e.AlbumArtist
+		}
+		if e.Year > 0 {
+			fix["year"] = e.Year
+		}
+		if len(fix) > 0 {
+			fixByAlbum[k] = fix
+		}
 	}
 	// "the rule is a setting, not a hardcode"; unset means on
 	classical := true
@@ -344,11 +399,32 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		}
 	}
 
+	// Enrichment-derived genres per album: MusicBrainz's community-voted genre
+	// tags plus Discogs' genres and styles, canonicalised through the same
+	// closed taxonomy the file tags go through.
+	srcGenres := make(map[string][]string, len(sources))
+	for id, raw := range sources {
+		// keys mirror enrich.sourcesCache; decoded structurally rather than
+		// imported so api keeps no compile dependency on the cache shape
+		var s struct {
+			MBGenres []string `json:"mbGenres"`
+			Genres   []string `json:"dgGenres"`
+			Styles   []string `json:"dgStyles"`
+		}
+		if json.Unmarshal(raw, &s) != nil {
+			continue
+		}
+		if g := genres.SplitAll(slices.Concat(s.MBGenres, s.Genres, s.Styles)); len(g) > 0 {
+			srcGenres[id] = g
+		}
+	}
+
 	// album edits that flow onto the album's tracks (label/blurb etc stay album-level)
 	albumFan := []string{"album", "albumArtist", "genre", "year", "artVersion"}
 
 	merged := make([]map[string]any, 0, len(ts))
 	for _, t := range ts {
+		au := audio[t.ID] // zero value when unanalysed: every gain stays null
 		// built straight from struct fields ("path" intentionally omitted);
 		// keys mirror the repo.Track json tags
 		m := map[string]any{
@@ -363,12 +439,46 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 			"sampleRate": ptrVal(t.SampleRate), "bitsPerSample": ptrVal(t.BitsPerSample),
 			"channels": ptrVal(t.Channels), "lossless": t.Lossless, "hasArt": t.HasArt,
 			"favourite": t.Favourite,
+			// null until the analysis pass has seen the file — and null is the
+			// only safe unknown here: a client that guessed 0 dB would be
+			// applying DSP on no evidence.
+			"trackGainDb": ptrVal(analyze.TrackGain(au.IntegratedLUFS)),
+			"albumGainDb": ptrVal(albumGain[t.AlbumID]),
+			// ponytail: no client reads the peaks yet — aria_api's Track parses
+			// only the two gains. They are served anyway so the peak-aware
+			// boost eq.dart's appliedGain() ponytail describes needs no server
+			// change, only a client one; the measurement itself is the hours.
+			"trackPeak": ptrVal(analyze.TrackPeak(au.TruePeakDBFS)),
+			"albumPeak": ptrVal(albumPeak[t.AlbumID]),
+			// The rest of what the decoder saw, unconverted: the loudness and
+			// range in their own units and the transcode flag. These are what
+			// the quality smart-playlist predicates and the health view read —
+			// the columns migration 008 measured and nothing consumed.
+			//
+			// Null means unanalysed, and stays null: a missing measurement must
+			// fail a `> -14 LUFS` rule rather than pass it as 0.
+			"loudnessLufs":   ptrVal(au.IntegratedLUFS),
+			"dynamicRangeLu": ptrVal(au.LRA),
+			// The one non-null default, because it cannot be otherwise: `false`
+			// on an unanalysed track means "nothing has contradicted the
+			// container yet", not "verified genuine".
+			"suspect": au.Suspect,
 		}
 		if raw, ok := enrichTrack[t.ID]; ok {
 			overlay(m, raw) // composer/conductor/orchestra/performers corrections
 		}
 		if t.HasArt || artByAlbum[t.AlbumID] {
 			m["hasArt"] = true
+		}
+		// Album/artist/year corrections from the confirmed release. Before the
+		// classical display policy (a more specific derived rule about the same
+		// field) and before the edit fan-out, which is the entire implementation
+		// of "a manual edit always beats an automatic correction": the layers
+		// are file tags -> derived track blob -> derived album blob -> album
+		// edits -> track edits, and later simply wins. No provenance check, no
+		// per-field ownership, nothing for a future pass to get wrong.
+		for k, v := range fixByAlbum[t.AlbumID] {
+			m[k] = v
 		}
 		// classical display policy, before the edit fan-out so a user edit wins
 		if classical {
@@ -439,7 +549,29 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 
 	for _, m := range merged {
 		m["releaseType"] = types[str(m["albumId"])]
-		m["genres"] = genres.Split(str(m["genre"]))
+		// The file's own tag stays first and stays authoritative — `genre`, the
+		// raw string, is untouched, so display and the edits overlay are
+		// unaffected and a user edit to `genre` still wins outright. The
+		// enrichment genres are additive to the DERIVED array only.
+		//
+		// Union rather than fill-when-empty, deliberately: an album tagged
+		// "Rock" whose release group is voted alternative rock / art rock
+		// should be findable under all three, and the closed tree plus
+		// head-word inference is what keeps that from polluting the browse.
+		// The one-line downgrade if it proves noisy is `if len(g) == 0 {`
+		// around the merge.
+		g := genres.Split(str(m["genre"]))
+		if add := srcGenres[str(m["albumId"])]; len(add) > 0 {
+			// clone first: Split memoises its result in a sync.Map, so
+			// appending in place would scribble into another track's array
+			g = slices.Clone(g)
+			for _, x := range add {
+				if !slices.Contains(g, x) {
+					g = append(g, x)
+				}
+			}
+		}
+		m["genres"] = g
 		names := []string{}
 		seen := map[string]bool{}
 		// artist tags match on both spellings: rows written before Latinisation
@@ -539,7 +671,8 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"tracks": n, "musicDir": d.Cfg.MusicDir, "version": d.Version,
-			"transcode": d.CanTranscode,
+			"transcode": d.CanTranscode, "analyze": d.Analyzer != nil,
+			"fingerprint": d.Fingerprinter != nil,
 		})
 	})
 
@@ -562,12 +695,39 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 			return
 		}
 		d.InvalidateTracks()
-		if d.Enricher != nil {
+		if d.Enricher != nil || d.Analyzer != nil || d.Fingerprinter != nil {
+			// One GoBg, chained: enrichment is network-bound and quick,
+			// fingerprinting is minutes, the analysis pass is hours of decoding.
+			// Running them in sequence is also what guarantees neither job is
+			// ever concurrent with itself on the scan path, and keeps three
+			// disk-heavy passes off each other.
 			d.GoBg(func(ctx context.Context) {
-				if err := d.Enricher.Run(ctx); err != nil {
-					log.Printf("enrich: %v", err)
+				// FIRST, not merely before the analyzer. Matching is a phase of
+				// the enricher, and its strongest candidate source is the release
+				// groups AcoustID voted for — which do not exist until this pass
+				// has run. Behind the enricher, the first scan of a library would
+				// decide every album on text search alone, and a `matched`
+				// decision is never revisited (retryAfter is empty for matched),
+				// so that first weak answer would be permanent. 64 ms/file buys
+				// the evidence the decision is supposed to rest on.
+				// Nothing it writes reaches /api/tracks, hence no invalidate.
+				if d.Fingerprinter != nil {
+					if err := d.Fingerprinter.Run(ctx); err != nil {
+						log.Printf("fingerprint: %v", err)
+					}
 				}
-				d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
+				if d.Enricher != nil {
+					if err := d.Enricher.Run(ctx); err != nil {
+						log.Printf("enrich: %v", err)
+					}
+					d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
+				}
+				if d.Analyzer != nil {
+					if err := d.Analyzer.Run(ctx); err != nil {
+						log.Printf("analyze: %v", err)
+					}
+					d.InvalidateTracks() // loudness feeds trackGainDb/albumGainDb
+				}
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]int{"tracks": n})
@@ -651,7 +811,7 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 	})
 
 	// album edits served via /info (the rest fan onto tracks instead)
-	albumInfoEdits := []string{"label", "date", "country", "blurb"}
+	albumInfoEdits := []string{"label", "date", "country", "catno", "blurb"}
 	mux.HandleFunc("GET /api/album/{albumId}/info", func(w http.ResponseWriter, r *http.Request) {
 		albumID := r.PathValue("albumId")
 		ts, err := d.Tracks.ByAlbum(r.Context(), albumID)

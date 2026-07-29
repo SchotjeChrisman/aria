@@ -28,6 +28,16 @@ var streamMIME = map[string]string{
 	".ape":  "audio/x-ape",
 	".wv":   "audio/x-wavpack",
 	".dsf":  "audio/x-dsf",
+	".aif":  "audio/aiff",
+	".aifc": "audio/aiff",
+	".afc":  "audio/aiff",
+	".oga":  "audio/ogg", // vorbis/opus/FLAC in ogg — audio/ogg covers all three
+	".spx":  "audio/ogg",
+	".m4b":  "audio/mp4",
+	".wma":  "audio/x-ms-wma",
+	".tta":  "audio/x-tta",
+	".shn":  "audio/x-shorten",
+	".mpc":  "audio/x-musepack",
 }
 
 func registerStream(mux *http.ServeMux, d *Deps) {

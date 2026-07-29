@@ -8,7 +8,7 @@ import (
 // Notify must fire with the fresh status on every change — the SSE `enrich`
 // frames (and the client's refresh-on-idle) hang off it.
 func TestNotifyFiresOnStatusChanges(t *testing.T) {
-	e := New(context.Background(), nil, nil, t.TempDir())
+	e := New(context.Background(), nil, nil, nil, nil, t.TempDir(), "")
 	var got []map[string]any
 	e.Notify = func(s any) { got = append(got, s.(map[string]any)) }
 

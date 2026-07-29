@@ -66,14 +66,25 @@ class RadioStation {
 /// `/api/edits/:kind/:key` — pre-override originals + current overrides,
 /// for populating an edit form. Field sets differ per kind.
 class EditState {
-  const EditState({required this.original, required this.overrides});
+  const EditState({
+    required this.original,
+    required this.overrides,
+    this.source,
+  });
 
   final Map<String, dynamic> original;
   final Map<String, dynamic> overrides;
 
+  /// Where the derived values in [original] came from — `{kind, releaseMbid,
+  /// releaseTitle, recordingMbid?, distance, separation, decidedAt, pinned}`.
+  /// Null when nothing derived is being applied, and also null on an older
+  /// server that does not send the key at all.
+  final Map<String, dynamic>? source;
+
   factory EditState.fromJson(Map<String, dynamic> j) => EditState(
         original: asMap(j['original']),
         overrides: asMap(j['overrides']),
+        source: j['source'] is Map ? asMap(j['source']) : null,
       );
 }
 

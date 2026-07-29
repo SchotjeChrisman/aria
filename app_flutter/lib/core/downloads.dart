@@ -35,7 +35,22 @@ final localArtResolverProvider = Provider<String? Function(String albumId)>(
 /// sniffs the container).
 String extensionFor(String? format, String? contentType) {
   final f = format?.toLowerCase();
-  if (f != null && RegExp(r'^[a-z0-9]+$').hasMatch(f)) return '.$f';
+  if (f != null && RegExp(r'^[a-z0-9]+$').hasMatch(f)) {
+    // track.format is TagLib's CONTAINER name, not an extension: mp3 files
+    // report "MPEG", m4a/m4b "MP4", wma "ASF". Alias the ones that differ so a
+    // download lands as <id>.mp3 instead of <id>.mpeg. Harmless either way (mpv
+    // sniffs), but the file is also what the user sees on disk. Everything
+    // else — flac, wav, aiff, ape, dsf, tta, ogg — already names itself.
+    const alias = {
+      'mpeg': '.mp3',
+      'mp4': '.m4a',
+      'asf': '.wma',
+      'wavpack': '.wv',
+      'musepack': '.mpc',
+      'shorten': '.shn',
+    };
+    return alias[f] ?? '.$f';
+  }
   const byType = {
     'audio/flac': '.flac',
     'audio/mpeg': '.mp3',
