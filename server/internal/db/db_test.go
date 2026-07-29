@@ -29,6 +29,12 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 			WHERE name IN ('tracks_fts', 'tracks_ai', 'tracks_ad', 'tracks_au')`).Scan(&fts); err != nil || fts != 0 {
 			t.Errorf("fts leftovers = %d, %v; want 0", fts, err)
 		}
+		// 007 carries the pre-directory albumId for the one-shot boot remap
+		var legacy int
+		if err := d.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('tracks')
+			WHERE name = 'legacyAlbumId'`).Scan(&legacy); err != nil || legacy != 1 {
+			t.Errorf("tracks.legacyAlbumId = %d, %v; want 1", legacy, err)
+		}
 		var mode string
 		if err := d.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil || mode != "wal" {
 			t.Errorf("journal_mode = %q, %v; want wal", mode, err)

@@ -37,14 +37,20 @@ func nullish(raw json.RawMessage) bool {
 var editFields = map[string][]string{
 	"track": {"title", "artist", "album", "albumArtist", "genre", "year", "trackNo", "discNo",
 		"composer", "work", "movement", "conductor", "orchestra"},
-	"album":  {"album", "albumArtist", "genre", "year", "releaseType", "label", "date", "country", "blurb", "artSource"},
+	"album": {"album", "albumArtist", "genre", "year", "releaseType", "label", "date", "country", "blurb", "artSource",
+		"state", "disambiguation", "locked"},
 	"artist": {"type", "area", "born", "died", "image", "bio"},
 }
 
 var (
 	intEdits     = []string{"year", "trackNo", "discNo"}
+	boolEdits    = []string{"locked"}
 	longEdits    = []string{"bio", "blurb"}
 	releaseTypes = []string{"Album", "EP", "Single", "Live", "Compilation"}
+	// "local" means: user metadata is authoritative, no MusicBrainz entity.
+	// Set by hand today; Phase 4 routes albums here automatically. locked is
+	// stored and echoed but read by nothing until then.
+	albumStates = []string{"matched", "local"}
 
 	mbidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
@@ -71,9 +77,21 @@ func cleanEdits(body map[string]json.RawMessage, kind string) map[string]any {
 				return nil
 			}
 			out[k] = int(f)
+		case slices.Contains(boolEdits, k):
+			var b bool
+			if json.Unmarshal(v, &b) != nil {
+				return nil
+			}
+			out[k] = b
 		case k == "releaseType":
 			var s string
 			if json.Unmarshal(v, &s) != nil || !slices.Contains(releaseTypes, s) {
+				return nil
+			}
+			out[k] = s
+		case k == "state":
+			var s string
+			if json.Unmarshal(v, &s) != nil || !slices.Contains(albumStates, s) {
 				return nil
 			}
 			out[k] = s
@@ -234,7 +252,9 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 			return
 		}
 		if patch := editsBody(w, r, "artist"); patch != nil {
-			applyPatch(w, r, "artist", name, patch)
+			// stored under the raw name: the reader (GET /api/artist) resolves
+			// there too, and a second row under the Latin spelling would diverge
+			applyPatch(w, r, "artist", rawName(r.Context(), d, name), patch)
 		}
 	})
 
@@ -243,6 +263,9 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 	mux.HandleFunc("GET /api/edits/{kind}/{key}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		kind, key := r.PathValue("kind"), r.PathValue("key")
+		if kind == "artist" {
+			key = rawName(ctx, d, key) // both the edit row and the cache row are raw-keyed
+		}
 		overrides := map[string]any{}
 		if raw, err := d.Edits.Get(ctx, kind, key); err != nil {
 			fail(w, err)
@@ -322,6 +345,9 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 				"genre": ts[0].Genre, "year": ts[0].Year,
 				"releaseType": releaseType(albumTracks, infoRaw),
 				"label":       get("label"), "date": get("date"), "country": get("country"), "blurb": get("blurb"),
+				// nothing derives these yet (Phase 4 does), but "every editable
+				// field is present, null when unset" is what the editor binds to
+				"state": nil, "disambiguation": nil, "locked": nil,
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"original": orig, "overrides": overrides})
 

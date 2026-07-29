@@ -37,14 +37,19 @@ const (
 	KindAlbumInfo = "albumInfo" // albumId -> info map or null     (legacy db.albumInfo)
 )
 
-// v2 added per-performer credits; bump to re-pull albums.
-const albumV = 2
+// v3 added the release-level display artist + composer split; bump to re-pull
+// albums (mbRelease.Relations is new, so every release must be re-fetched for
+// the relations to exist at all).
+const albumV = 3
 
 type albumCache struct {
 	V    int     `json:"v"`
 	Done bool    `json:"done"`
 	Mbid *string `json:"mbid"`
 	Art  bool    `json:"art,omitempty"`
+	// classical display policy, stored in the original script
+	DisplayArtist string   `json:"displayArtist,omitempty"`
+	Composers     []string `json:"composers,omitempty"`
 }
 
 type Performer struct {
@@ -99,6 +104,12 @@ type ArtistEntry struct {
 	DiscographyAt string             `json:"discographyAt,omitempty"`
 	ImgCheckedAt  string             `json:"imgCheckedAt,omitempty"` // face upgrade tried once ever
 	BioCheckedAt  string             `json:"bioCheckedAt,omitempty"` // "no wiki page" is settled; empty bio without this retries
+	Mbid          string             `json:"mbid,omitempty"`         // saves a search on every later backfill
+	// Latin display name. Additive only: the cache key stays the original
+	// script, so nothing keyed by the raw name is orphaned. "" also means
+	// "the name is already Latin" — NameLatinSrc is the settled-ness sentinel.
+	NameLatin    string `json:"nameLatin,omitempty"`
+	NameLatinSrc string `json:"nameLatinSource,omitempty"` // alias-en|alias|sortname|translit|mbname|same|none
 }
 
 type ComposerEntry struct {
@@ -415,6 +426,45 @@ func (e *Enricher) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Latin display names for entries cached before nameLatin existed. An
+	// already-Latin name settles with no request at all, so only genuinely
+	// foreign names spend the MB budget (25/run, same politeness as faces).
+	// Both caps are applied while collecting, like todoFaces below, so the
+	// phase total is what the loop will actually do rather than a number it
+	// breaks out of. ponytail: the free names are capped too because each one
+	// still costs a cache write and an SSE frame to every client, and the first
+	// pass after upgrade sees every artist in the library; raise it if settling
+	// a huge library over a few passes ever bothers anyone.
+	var todoLatin []string
+	mbBudget := 25
+	for _, n := range slices.Sorted(maps.Keys(arts)) {
+		var a ArtistEntry
+		if json.Unmarshal(arts[n], &a) != nil || a.NameLatinSrc != "" {
+			continue
+		}
+		if !isLatin(n) {
+			if mbBudget == 0 {
+				continue
+			}
+			mbBudget--
+		}
+		if todoLatin = append(todoLatin, n); len(todoLatin) == 2000 {
+			break
+		}
+	}
+	e.setPhase("names", len(todoLatin))
+	for _, n := range todoLatin {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		unlock := e.lockName(n)
+		if a := e.artistGet(ctx, n); a != nil {
+			e.backfillNameLatin(ctx, n, a)
+		}
+		unlock()
+		e.step()
+	}
+
 	var todoFaces []string
 	for _, n := range slices.Sorted(maps.Keys(arts)) {
 		var a ArtistEntry
@@ -484,6 +534,15 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 	}
 
 	if rel := e.mb.release(ctx, mbid, "recordings+recording-level-rels+work-rels+work-level-rels+artist-rels"); rel != nil {
+		// classical credit: "Barber, Bruch; Esther Yoo, …" is composers then
+		// performers. Only a real split is stored — on an ordinary release the
+		// tags are the better album artist than MB's first credit.
+		if da, comps := displayArtist(rel); len(comps) > 0 {
+			a.DisplayArtist, a.Composers = da, comps
+			if err := e.put(ctx, KindAlbum, albumID, a); err != nil {
+				return err
+			}
+		}
 		byRec := creditsByRecording(rel)
 		for _, t := range ts {
 			if t.MBRecordingID == nil {
@@ -609,11 +668,16 @@ func (e *Enricher) enrichArtist(ctx context.Context, name, mbid string) {
 		return
 	}
 	ent := &ArtistEntry{Members: &[]string{}, Bands: &[]string{}}
+	if isLatin(name) {
+		ent.NameLatinSrc = "same" // settle the sentinel even when MB knows nothing
+	}
 	if mbid == "" {
 		mbid = e.mb.searchArtistMBID(ctx, name)
 	}
 	if mbid != "" {
-		if ar := e.mb.artist(ctx, mbid, "url-rels+artist-rels"); ar != nil {
+		if ar := e.mb.artist(ctx, mbid, "url-rels+artist-rels+aliases"); ar != nil {
+			ent.Mbid = mbid
+			setLatin(ent, name, ar)
 			ent.Type = ar.Type
 			if ar.Area != nil {
 				ent.Area = ar.Area.Name
@@ -697,9 +761,13 @@ func (e *Enricher) backfillBio(ctx context.Context, name string, ent *ArtistEntr
 	if mbid == "" {
 		return // MB unreachable or unknown: retry on a later read
 	}
-	ar := e.mb.artist(ctx, mbid, "url-rels")
+	ar := e.mb.artist(ctx, mbid, "url-rels+aliases")
 	if ar == nil {
 		return
+	}
+	ent.Mbid = mbid
+	if ent.NameLatinSrc == "" { // same request, so resolve the name too
+		setLatin(ent, name, ar)
 	}
 	title := e.wikiTitle(ctx, ar.Relations)
 	if title == "" {
@@ -723,6 +791,32 @@ func (e *Enricher) backfillBio(ctx context.Context, name string, ent *ArtistEntr
 		ent.Image, ent.ImgSrc = img, "wikipedia"
 	}
 	ent.BioCheckedAt = nowISO()
+	e.artistPut(ctx, name, ent)
+}
+
+// lazy backfill for entries cached before nameLatin existed. Follows the
+// BioCheckedAt pattern: NameLatinSrc == "" is the only trigger, so a resolved
+// entry (including "same" and "none") is never looked up twice. A Latin name
+// settles without any request at all.
+func (e *Enricher) backfillNameLatin(ctx context.Context, name string, ent *ArtistEntry) {
+	if isLatin(name) {
+		ent.NameLatinSrc = "same"
+		e.artistPut(ctx, name, ent)
+		return
+	}
+	mbid := ent.Mbid
+	if mbid == "" {
+		mbid = e.mb.searchArtistMBID(ctx, name)
+	}
+	if mbid == "" {
+		return // MB unreachable or unknown: retry on a later read
+	}
+	ar := e.mb.artist(ctx, mbid, "aliases")
+	if ar == nil {
+		return
+	}
+	ent.Mbid = mbid
+	setLatin(ent, name, ar)
 	e.artistPut(ctx, name, ent)
 }
 
@@ -812,6 +906,7 @@ func (e *Enricher) enrichComposer(ctx context.Context, name string) {
 // serves from cache with lazy discography/band-rel refreshes. nil = MB never
 // heard of it AND we have nothing cached.
 func (e *Enricher) Person(ctx context.Context, name string) (json.RawMessage, error) {
+	name = e.resolveName(ctx, name)
 	defer e.lockName(name)()
 	if needsSimilar(e.artistGet(ctx, name)) {
 		e.enrichArtist(ctx, name, "")
@@ -829,7 +924,41 @@ func (e *Enricher) Person(ctx context.Context, name string) (json.RawMessage, er
 	if ent.Bio == "" && ent.BioCheckedAt == "" { // wiki step failed when cached
 		e.backfillBio(ctx, name, ent)
 	}
+	if ent.NameLatinSrc == "" { // cached before nameLatin existed
+		e.backfillNameLatin(ctx, name, ent)
+	}
 	return json.Marshal(ent)
+}
+
+// ResolveName maps a Latin display name back to the raw cache key it is stored
+// under. Every read keyed by an artist name — edits, the composer cache, the
+// editor's "original" column — has to go through it, because the client only
+// ever sees the Latin spelling and so can only ever send that.
+func (e *Enricher) ResolveName(ctx context.Context, name string) string {
+	return e.resolveName(ctx, name)
+}
+
+// resolveName maps a Latin display name back to the raw cache key, so a
+// request for "Vasily Petrenko" hits the entry stored under "Василий
+// Петренко" instead of minting a duplicate (and a duplicate MB search).
+// Unknown names pass through unchanged.
+// ponytail: linear scan of the artist cache, and only on a name that isn't
+// itself a key; index it if the people list ever gets big.
+func (e *Enricher) resolveName(ctx context.Context, name string) string {
+	if _, ok, err := e.cache.Get(ctx, KindArtist, name); ok || err != nil {
+		return name
+	}
+	arts, err := e.cache.ListKind(ctx, KindArtist)
+	if err != nil {
+		return name
+	}
+	for _, n := range slices.Sorted(maps.Keys(arts)) { // sorted: stable on duplicates
+		var a ArtistEntry
+		if json.Unmarshal(arts[n], &a) == nil && a.NameLatin == name {
+			return n
+		}
+	}
+	return name
 }
 
 // Artist is the sync cache read (never blocks on network); nil when uncached.
@@ -937,6 +1066,27 @@ func (e *Enricher) People(ctx context.Context) (map[string]string, error) {
 		var a ArtistEntry
 		if json.Unmarshal(raw, &a) == nil && a.Image != "" {
 			out[n] = a.Image
+			if a.NameLatin != "" { // portraits resolve under either spelling
+				out[a.NameLatin] = a.Image
+			}
+		}
+	}
+	return out, nil
+}
+
+// LatinNames is the bulk raw-name -> Latin-name map for display substitution.
+// Only names with an artist cache entry are covered; Run's people phase visits
+// every credited name, so coverage converges without a cache rewrite.
+func (e *Enricher) LatinNames(ctx context.Context) (map[string]string, error) {
+	arts, err := e.cache.ListKind(ctx, KindArtist)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for n, raw := range arts {
+		var a ArtistEntry
+		if json.Unmarshal(raw, &a) == nil && a.NameLatin != "" {
+			out[n] = a.NameLatin
 		}
 	}
 	return out, nil
@@ -1089,6 +1239,9 @@ func (e *Enricher) IdentifyArtist(ctx context.Context, name string) ([]ArtistCan
 // ReidentifyArtist fully re-enriches, optionally pinned to the chosen MB
 // artist. nil = re-enrichment yielded nothing (API sends {}).
 func (e *Enricher) ReidentifyArtist(ctx context.Context, name, mbid string) (json.RawMessage, error) {
+	// the app only ever knows the Latin display name; without this the re-identify
+	// mints a second entry under it, which resolveName then prefers forever
+	name = e.resolveName(ctx, name)
 	defer e.lockName(name)()
 	if err := e.cache.Delete(ctx, KindArtist, name); err != nil {
 		return nil, err

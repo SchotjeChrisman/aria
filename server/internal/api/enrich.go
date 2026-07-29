@@ -101,6 +101,7 @@ type warmEnricher interface {
 var (
 	_ onDemandEnricher = (*enrich.Enricher)(nil)
 	_ warmEnricher     = (*enrich.Enricher)(nil)
+	_ latinNamer       = (*enrich.Enricher)(nil)
 	_ identifier       = (*enrich.Enricher)(nil)
 	_ artPreviewer     = (*enrich.Enricher)(nil)
 )

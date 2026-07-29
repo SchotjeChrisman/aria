@@ -1,6 +1,7 @@
 -- Field set mirrors the legacy scanner.js index.json entries, plus mtime/size
 -- for incremental rescans. id = sha1(path relative to MUSIC_DIR),
--- albumId = sha1(lower(albumArtist) || char(0) || lower(album)).
+-- albumId = sha1(lower(albumArtist) || char(0) || lower(album)) — superseded by
+-- 007, which re-keys it on the album's directory.
 CREATE TABLE tracks (
   id              TEXT PRIMARY KEY,
   path            TEXT NOT NULL UNIQUE,

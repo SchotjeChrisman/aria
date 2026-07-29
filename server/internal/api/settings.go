@@ -16,12 +16,20 @@ func registerSettings(mux *http.ServeMux, d *Deps) {
 			fail(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"listenbrainzToken": tok})
+		cda, err := d.Settings.Get(r.Context(), "classicalDisplayArtist")
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"listenbrainzToken": tok, "classicalDisplayArtist": cda != "0", // unset = on
+		})
 	})
 
 	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {
-			ListenbrainzToken json.RawMessage `json:"listenbrainzToken"`
+			ListenbrainzToken      json.RawMessage `json:"listenbrainzToken"`
+			ClassicalDisplayArtist *bool           `json:"classicalDisplayArtist"`
 		}
 		if err := readJSON(w, r, &b); err != nil {
 			httpError(w, http.StatusBadRequest, "invalid json")
@@ -44,6 +52,17 @@ func registerSettings(mux *http.ServeMux, d *Deps) {
 				fail(w, err)
 				return
 			}
+		}
+		if b.ClassicalDisplayArtist != nil {
+			v := "1"
+			if !*b.ClassicalDisplayArtist {
+				v = "0"
+			}
+			if err := d.Settings.Set(r.Context(), "classicalDisplayArtist", v); err != nil {
+				fail(w, err)
+				return
+			}
+			d.InvalidateTracks() // the merged view bakes the policy in
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})

@@ -148,6 +148,21 @@ func numOr0(v any) float64 {
 	return f
 }
 
+// bothSpellings returns the display spelling of a name and, when it was
+// Latinised for display, the original-script one it replaced. A rule written
+// against what the user sees now (Latin) and one written before Latinisation
+// (raw) must both match. Both sides are already lowercased.
+func bothSpellings(s string, raw map[string]string) []string {
+	if r := raw[s]; r != "" && r != s {
+		return []string{s, r}
+	}
+	return []string{s}
+}
+
+func containsAny(ss []string, q string) bool {
+	return slices.ContainsFunc(ss, func(s string) bool { return strings.Contains(s, q) })
+}
+
 func lowerAll(ss []string) []string {
 	out := make([]string, len(ss))
 	for i, s := range ss {
@@ -211,7 +226,10 @@ func allVal(v any, f func(any) bool) bool {
 
 // evalRule ports server.js evalRule. t is an /api/tracks-shaped view (edits
 // merged, releaseType/tags/genres annotated); counts is per-profile play counts.
-func evalRule(t, r map[string]any, counts map[string]int) bool {
+// raw maps a lowercased Latin display name back to the lowercased original
+// script it replaced, so a name rule matches whichever spelling it was written
+// in; nil disables that (nothing Latinised, or the enricher isn't wired).
+func evalRule(t, r map[string]any, counts map[string]int, raw map[string]string) bool {
 	field, _ := r["field"].(string)
 	op, _ := r["op"].(string)
 	value := r["value"]
@@ -298,6 +316,11 @@ func evalRule(t, r map[string]any, counts map[string]int) bool {
 				names = append(names, strings.ToLower(n))
 			}
 		}
+		for _, n := range slices.Clone(names) { // the rule may name either spelling
+			if r := raw[n]; r != "" && r != n {
+				names = append(names, r)
+			}
+		}
 		one := func(q any) bool {
 			ql := strings.ToLower(jsStr(q))
 			for _, n := range names {
@@ -347,8 +370,8 @@ func evalRule(t, r map[string]any, counts map[string]int) bool {
 			if val == nil {
 				return false
 			}
-			s := strings.ToLower(jsStr(val))
-			one := func(q any) bool { return strings.Contains(s, strings.ToLower(jsStr(q))) }
+			ss := bothSpellings(strings.ToLower(jsStr(val)), raw)
+			one := func(q any) bool { return containsAny(ss, strings.ToLower(jsStr(q))) }
 			if op == "anyOf" {
 				return anyVal(value, one)
 			}
@@ -357,15 +380,15 @@ func evalRule(t, r map[string]any, counts map[string]int) bool {
 		if val == nil {
 			return op == "isNot" // null: is/contains false, isNot true
 		}
-		s := strings.ToLower(jsStr(val))
+		ss := bothSpellings(strings.ToLower(jsStr(val)), raw)
 		q := strings.ToLower(jsStr(value))
 		switch op {
 		case "is":
-			return s == q
+			return slices.Contains(ss, q)
 		case "isNot":
-			return s != q
+			return !slices.Contains(ss, q)
 		default:
-			return strings.Contains(s, q)
+			return containsAny(ss, q)
 		}
 	}
 }
@@ -656,10 +679,11 @@ func registerPlaylists(mux *http.ServeMux, d *Deps) {
 			return
 		}
 		matchAll := rm["match"] == "all"
+		raw := rawSpellings(r.Context(), d)
 		hit := func(t map[string]any) bool {
 			for _, rv := range rules {
 				rmap, _ := rv.(map[string]any)
-				ok := evalRule(t, rmap, counts)
+				ok := evalRule(t, rmap, counts, raw)
 				if matchAll && !ok {
 					return false
 				}

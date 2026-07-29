@@ -1,0 +1,23 @@
+-- Album identity moves from sha1(albumArtist||album) to sha1(<album directory>||album):
+-- one folder is one album, and the ALBUM tag only separates several albums that
+-- share a folder. Tags split "Essential Brahms, volume 1" four ways (no
+-- ALBUMARTIST, so identity fell back to each track's own ARTIST) and merged two
+-- different Knopfler concerts that happened to be tagged identically; disk
+-- layout does neither.
+--
+-- SQLite has no sha1(), so this file cannot compute the new ids, and a SQL
+-- reimplementation of the Go grouping function would diverge from the scanner on
+-- edge cases and silently re-orphan everything on the first post-migration scan.
+-- Instead: keep the old id here, and let the one-shot Go upgrade in
+-- cmd/aria/remap.go recompute albumId from path+album+albumArtist — the exact
+-- columns the scanner derives it from — by calling the scanner's own function.
+-- The old->new map is then just a SELECT over two columns of the same row, and
+-- the same remap (which, unlike SQL, can also move DATA_DIR/art/*) reads it.
+-- legacyAlbumId's only reader is that remap.
+--
+-- Deliberately NOT `UPDATE tracks SET mtime = -1`: forcing a full re-parse would
+-- block boot on the whole library over an NFS mount, discard its progress on any
+-- restart, and let one unreadable file cost a track row (with its addedAt,
+-- favourite and plays). Nothing in the new id needs re-reading the file.
+ALTER TABLE tracks ADD COLUMN legacyAlbumId TEXT NOT NULL DEFAULT '';
+UPDATE tracks SET legacyAlbumId = albumId;

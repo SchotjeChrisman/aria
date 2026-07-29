@@ -156,15 +156,17 @@ func main() {
 				continue
 			}
 			// mtime/size unknown to the legacy index; 0 forces a re-parse on first rescan.
+			// legacyAlbumId = the imported (tag-derived) id, so the boot remap can
+			// carry these edits/tags/enrichment onto the new directory-derived ids.
 			counts["tracks"] += m.exec(`INSERT OR IGNORE INTO tracks
-				(id, path, mtime, size, addedAt, title, artist, albumArtist, album, albumId,
+				(id, path, mtime, size, addedAt, title, artist, albumArtist, album, albumId, legacyAlbumId,
 				 trackNo, discNo, year, genre, composer, conductor, work, movement,
 				 mbAlbumId, mbRecordingId, mbAlbumArtistId, duration, format,
 				 sampleRate, bitsPerSample, channels, lossless, hasArt)
-				VALUES (?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				VALUES (?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				t.ID, t.Path, orDefault(t.AddedAt, now), orDefault(t.Title, t.Path),
 				orDefault(t.Artist, "Unknown Artist"), orDefault(t.AlbumArtist, "Unknown Artist"),
-				orDefault(t.Album, "Unknown Album"), t.AlbumID,
+				orDefault(t.Album, "Unknown Album"), t.AlbumID, t.AlbumID,
 				t.TrackNo, t.DiscNo, t.Year, t.Genre, t.Composer, t.Conductor, t.Work, t.Movement,
 				t.MBAlbumID, t.MBRecordingID, t.MBAlbumArtistID, t.Duration, t.Format,
 				t.SampleRate, t.BitsPerSample, t.Channels, t.Lossless, t.HasArt)
@@ -334,6 +336,11 @@ func main() {
 
 	if err := repo.NewAlbums(sqlDB).Rebuild(ctx); err != nil {
 		log.Fatalf("albums rebuild: %v", err)
+	}
+	// imported ids are tag-derived: clear the flag so the next boot re-keys and
+	// remaps them, otherwise the imported edits/tags/enrichment strand from birth
+	if err := repo.NewSettings(sqlDB).Delete(ctx, "albumIdRemap"); err != nil {
+		log.Fatalf("albumIdRemap: %v", err)
 	}
 	var albums int64
 	if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM albums`).Scan(&albums); err != nil {

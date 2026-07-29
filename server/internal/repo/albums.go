@@ -39,37 +39,3 @@ func (r *Albums) Rebuild(ctx context.Context) error {
 	}
 	return tx.Commit()
 }
-
-func (r *Albums) List(ctx context.Context) ([]Album, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT albumId, album, albumArtist, year, genre,
-		trackCount, duration, hasArt FROM albums ORDER BY albumArtist, album`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Album
-	for rows.Next() {
-		var a Album
-		if err := rows.Scan(&a.AlbumID, &a.Album, &a.AlbumArtist, &a.Year, &a.Genre,
-			&a.TrackCount, &a.Duration, &a.HasArt); err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
-}
-
-// ByID returns nil, nil when the album does not exist.
-func (r *Albums) ByID(ctx context.Context, albumID string) (*Album, error) {
-	var a Album
-	err := r.db.QueryRowContext(ctx, `SELECT albumId, album, albumArtist, year, genre,
-		trackCount, duration, hasArt FROM albums WHERE albumId = ?`, albumID).
-		Scan(&a.AlbumID, &a.Album, &a.AlbumArtist, &a.Year, &a.Genre, &a.TrackCount, &a.Duration, &a.HasArt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &a, nil
-}

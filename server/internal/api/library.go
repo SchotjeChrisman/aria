@@ -37,6 +37,29 @@ type onDemandEnricher interface {
 	Lyrics(ctx context.Context, t repo.Track) (json.RawMessage, error)
 }
 
+// latinNamer is the display-name substitution map (raw stored name -> Latin
+// spelling). Optional: without it names are served exactly as stored.
+type latinNamer interface {
+	LatinNames(ctx context.Context) (map[string]string, error)
+}
+
+// nameResolver maps a Latin display name back to the raw name everything is
+// keyed by. Optional: without it a name is used exactly as the client sent it.
+type nameResolver interface {
+	ResolveName(ctx context.Context, name string) string
+}
+
+// rawName undoes the display Latinisation for a name arriving in a URL. The
+// client only ever sees the Latin spelling, so every lookup keyed by an artist
+// or composer name — edits, the composer cache — has to come back through here
+// or it silently misses the row it is looking for.
+func rawName(ctx context.Context, d *Deps, name string) string {
+	if nr, ok := d.Enricher.(nameResolver); ok {
+		return nr.ResolveName(ctx, name)
+	}
+	return name
+}
+
 // notFound (Express-style 404) lives in tags.go and is shared package-wide.
 
 // writeRawJSON writes pre-encoded JSON (cache blobs served verbatim).
@@ -287,14 +310,37 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 			editAlbum[k] = m
 		}
 	}
-	// album enrichment entries only matter for their art flag here
+	// album enrichment entries carry the art flag and the classical display
+	// policy (a release-level performer, and the composers split off the
+	// artist credit)
 	artByAlbum := map[string]bool{}
+	displayByAlbum := map[string]string{}
+	composersByAlbum := map[string][]string{}
 	for k, raw := range enrichAlbum {
 		var e struct {
-			Art bool `json:"art"`
+			Art           bool     `json:"art"`
+			DisplayArtist string   `json:"displayArtist"`
+			Composers     []string `json:"composers"`
 		}
-		if json.Unmarshal(raw, &e) == nil && e.Art {
+		if json.Unmarshal(raw, &e) != nil {
+			continue
+		}
+		if e.Art {
 			artByAlbum[k] = true
+		}
+		displayByAlbum[k] = e.DisplayArtist
+		composersByAlbum[k] = e.Composers
+	}
+	// "the rule is a setting, not a hardcode"; unset means on
+	classical := true
+	if v, err := d.Settings.Get(ctx, "classicalDisplayArtist"); err == nil && v == "0" {
+		classical = false
+	}
+	// raw name -> Latin display name; empty when the enricher isn't wired
+	var latin map[string]string
+	if ln, ok := d.Enricher.(latinNamer); ok {
+		if latin, err = ln.LatinNames(ctx); err != nil {
+			return nil, err
 		}
 	}
 
@@ -323,6 +369,15 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		}
 		if t.HasArt || artByAlbum[t.AlbumID] {
 			m["hasArt"] = true
+		}
+		// classical display policy, before the edit fan-out so a user edit wins
+		if classical {
+			if da := displayByAlbum[t.AlbumID]; da != "" {
+				m["albumArtist"] = da
+			}
+			if cs := composersByAlbum[t.AlbumID]; len(cs) > 0 && str(m["composer"]) == "" {
+				m["composer"] = strings.Join(cs, ", ")
+			}
 		}
 		if ae := editAlbum[t.AlbumID]; ae != nil {
 			for _, f := range albumFan {
@@ -387,9 +442,13 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		m["genres"] = genres.Split(str(m["genre"]))
 		names := []string{}
 		seen := map[string]bool{}
+		// artist tags match on both spellings: rows written before Latinisation
+		// are keyed by the raw name, and anything the client creates from here on
+		// can only be keyed by the Latin display name it was served
 		for _, list := range [][]string{
 			tagBy["track"][str(m["id"])], tagBy["album"][str(m["albumId"])],
-			tagBy["artist"][str(m["artist"])], tagBy["artist"][str(m["albumArtist"])],
+			tagBy["artist"][str(m["artist"])], tagBy["artist"][latin[str(m["artist"])]],
+			tagBy["artist"][str(m["albumArtist"])], tagBy["artist"][latin[str(m["albumArtist"])]],
 		} {
 			for _, n := range list {
 				if !seen[n] {
@@ -400,7 +459,65 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		}
 		m["tags"] = names
 	}
+
+	// Latin display substitution runs last: tag membership (above) and the
+	// releaseType grouping match on the raw stored names, and rewriting them
+	// earlier would silently drop every latinised artist out of its user tags.
+	for _, m := range merged {
+		latinize(m, latin)
+	}
 	return merged, nil
+}
+
+// rawSpellings inverts the display map: lowercased Latin name -> the lowercased
+// original script it replaced. Smart-playlist rules are free text, so they can
+// only be matched by trying both spellings — a rule written before Latinisation
+// names the raw form, one written after names the Latin form.
+//
+// ponytail: soft-fails to nil (rules then match the Latin spelling only). The
+// caller has already built the merged views through the same LatinNames call,
+// so a failure here means it just failed there too and the request is dead
+// anyway. Thread the error through if that stops being true.
+func rawSpellings(ctx context.Context, d *Deps) map[string]string {
+	ln, ok := d.Enricher.(latinNamer)
+	if !ok {
+		return nil
+	}
+	latin, err := ln.LatinNames(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(latin))
+	for k, v := range latin {
+		if lk, lv := strings.ToLower(k), strings.ToLower(v); lk != lv {
+			out[lv] = lk
+		}
+	}
+	return out
+}
+
+// latinize rewrites the credited-name fields of one merged track to their
+// Latin spelling. Display only — the original script stays in the DB, the
+// enrich cache and the files; a name with no mapping is left exactly as it is.
+func latinize(m map[string]any, latin map[string]string) {
+	if len(latin) == 0 {
+		return
+	}
+	for _, k := range []string{"artist", "albumArtist", "composer", "conductor", "orchestra"} {
+		if v, ok := latin[str(m[k])]; ok {
+			m[k] = v
+		}
+	}
+	ps, _ := m["performers"].([]any)
+	for _, p := range ps {
+		pm, ok := p.(map[string]any)
+		if !ok {
+			continue
+		}
+		if v, ok := latin[str(pm["name"])]; ok {
+			pm["name"] = v
+		}
+	}
 }
 
 // asOnDemand returns the enricher's on-demand surface, if wired.
@@ -579,7 +696,9 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 	// requests can't pile up goroutines behind the polite MB rate limit
 	personSem := make(chan struct{}, 4)
 	mux.HandleFunc("GET /api/artist/{name}", func(w http.ResponseWriter, r *http.Request) {
-		name := r.PathValue("name")
+		// the app navigates with the Latin display name; everything here — the
+		// cache entry, the edit row — is keyed by the original script
+		name := rawName(r.Context(), d, r.PathValue("name"))
 		var doc json.RawMessage
 		var err error
 		if od, ok := asOnDemand(d); ok {
@@ -618,9 +737,11 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		writeJSON(w, http.StatusOK, p)
 	})
 
-	// sync cache only — never blocks on network
+	// sync cache only — never blocks on network. The composer cache is keyed by
+	// the raw name too, so a Latinised composer needs resolving first or the
+	// page 404s and loses its whole hero card.
 	mux.HandleFunc("GET /api/composer/{name}", func(w http.ResponseWriter, r *http.Request) {
-		doc, found, err := d.EnrichCache.Get(r.Context(), "composer", r.PathValue("name"))
+		doc, found, err := d.EnrichCache.Get(r.Context(), "composer", rawName(r.Context(), d, r.PathValue("name")))
 		if err != nil || !found || string(doc) == "null" {
 			notFound(w)
 			return

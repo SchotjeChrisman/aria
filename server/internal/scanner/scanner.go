@@ -11,9 +11,11 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,7 +40,28 @@ var losslessFmt = map[string]bool{
 // or arabic numeral. Same pattern as scanner.js; explicit tags win when present.
 var workRE = regexp.MustCompile(`^(.+)(?::|\s[-–—])\s+((?:[IVXLCDM]+|No\.?\s*\d+|\d+)[.):]\s*.+)$`)
 
+// A disc subfolder must carry a numeral. That single requirement is what keeps
+// "Disc" (a band), "Discography", "Disco", "CD Singles" and "Disc Jockey" from
+// folding. The roman numerals are an explicit whitelist, not [ivxlcdm]{1,4},
+// which would match "Disc Mix".
+var discSegRE = regexp.MustCompile(`(?i)^(?:cd|disc|disk)[ _.\-]*(\d{1,3}|i{1,3}|iv|v|vi{1,3}|ix|x|one|two|three|four|five|six|seven|eight|nine|ten)(?:[ _.\-–—(\[].*)?$`)
+
+// Trailing disc marker on an ALBUM tag: folding the directory achieves nothing
+// if the tags say "Album (Disc 1)" / "Album (Disc 2)", because the album key
+// would re-split what the directory just merged.
+var discSuffixRE = regexp.MustCompile(`(?i)[ _.,\-–—]*[(\[]?\s*(?:cd|disc|disk)[ _.\-]*(?:\d{1,3}|i{1,3}|iv|v|vi{1,3}|ix|x|one|two|three|four|five|six|seven|eight|nine|ten)\s*[)\]]?\s*$`)
+
+var discWords = map[string]int{
+	"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8, "ix": 9, "x": 10,
+	"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+	"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+
 const batchSize = 500
+
+// unknownAlbum is the placeholder for a missing ALBUM tag. albumIdentity has to
+// recognise it: it is the absence of the only tiebreak, not a title.
+const unknownAlbum = "Unknown Album"
 
 // ErrScanRunning is returned by Scan when another scan holds the run lock;
 // the API maps it to 409.
@@ -133,12 +156,13 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 
 	scanAt := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	var (
-		keep    []string
-		wg      sync.WaitGroup
-		resMu   sync.Mutex // guards parsed + artSeen during the pool
-		parsed  []repo.Track
-		jobs    = make(chan fileEntry)
-		workers = runtime.NumCPU()
+		keep     []string
+		wg       sync.WaitGroup
+		resMu    sync.Mutex // guards parsed + kept + artSeen during the pool
+		parsed   []repo.Track
+		unparsed []string // ids of already-indexed files this pass could not read
+		jobs     = make(chan fileEntry)
+		workers  = runtime.NumCPU()
 	)
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
@@ -149,6 +173,12 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 				resMu.Lock()
 				if ok {
 					parsed = append(parsed, t)
+				} else if p, indexed := byPath[fe.rel]; indexed {
+					// a file that read fine last pass and not this one (NFS
+					// hiccup, a half-finished copy, a permission change) must not
+					// take its row — and with it favourite, addedAt and every
+					// plays join — down with it
+					unparsed = append(unparsed, p.ID)
 				}
 				resMu.Unlock()
 				s.progress()
@@ -179,6 +209,7 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		parsed[i].HasArt = artSeen[parsed[i].AlbumID]
 		keep = append(keep, parsed[i].ID)
 	}
+	keep = append(keep, unparsed...)
 	for start := 0; start < len(parsed); start += batchSize {
 		end := min(start+batchSize, len(parsed))
 		if err := s.tracks.UpsertAll(ctx, parsed[start:end]); err != nil {
@@ -248,10 +279,22 @@ func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[stri
 	}
 
 	artist := or(first(tags, taglib.Artist), "Unknown Artist")
-	albumArtist := or(first(tags, taglib.AlbumArtist), artist)
-	album := or(first(tags, taglib.Album), "Unknown Album")
-	albumID := sha1Hex(strings.ToLower(albumArtist) + "\x00" + strings.ToLower(album))
+	// ALBUM ARTIST is the TXXX spelling some taggers use; first() takes varargs.
+	// COMPILATION and the TXXX fallback only fix the displayed albumArtist (and
+	// the query the enricher sends to MusicBrainz) — identity is directory-derived.
+	albumArtist := first(tags, taglib.AlbumArtist, "ALBUM ARTIST")
+	if albumArtist == "" && truthy(first(tags, taglib.Compilation)) {
+		albumArtist = "Various Artists"
+	}
+	albumArtist = or(albumArtist, artist)
+	album := or(first(tags, taglib.Album), unknownAlbum)
+	albumID, discFromDir := albumIdentity(fe.rel, album, albumArtist)
 	title := or(first(tags, taglib.Title), fe.rel)
+
+	discNo := leadInt(first(tags, taglib.DiscNumber))
+	if discNo == nil && discFromDir > 0 {
+		discNo = &discFromDir // untagged multi-disc set: the CD1/CD2 folder said it
+	}
 
 	work := first(tags, taglib.Work, taglib.Grouping)
 	movement := first(tags, taglib.MovementName, "MOVEMENT")
@@ -283,7 +326,7 @@ func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[stri
 		Album:           album,
 		AlbumID:         albumID,
 		TrackNo:         leadInt(first(tags, taglib.TrackNumber)),
-		DiscNo:          leadInt(first(tags, taglib.DiscNumber)),
+		DiscNo:          discNo,
 		Year:            yearOf(first(tags, taglib.Date, taglib.OriginalDate)),
 		Genre:           strPtr(first(tags, taglib.Genre)),
 		Composer:        strPtr(first(tags, taglib.Composer)),
@@ -326,6 +369,68 @@ func (s *Scanner) extractArt(abs, albumID, artDir string, artSeen map[string]boo
 			log.Printf("scan: skip art %s: %v", albumID, err)
 		}
 	}
+}
+
+// albumIdentity derives the album id from where the file lives, with the ALBUM
+// tag only as a tiebreak for several albums dumped in one folder. Pure function
+// of (rel path, this file's own tags) — never of its neighbours, because the
+// scanner skips unchanged files and a directory-wide rule would only ever see
+// the parsed subset, so adding one file could silently re-key a whole folder.
+// Returns the id and the disc number recovered from a CD1/Disc 2 folder (0 = none).
+func albumIdentity(rel, album, albumArtist string) (id string, discFromDir int) {
+	dir := filepath.ToSlash(filepath.Dir(rel))
+	if dir == "." {
+		dir = ""
+	}
+	if dir != "" {
+		// fold at most once, and only when a parent segment survives — so
+		// MUSIC_DIR/CD1/*.flac keeps its own group rather than dumping into the
+		// root pool. ponytail: one level; recurse if a real library ever nests
+		// disc folders.
+		if m := discSegRE.FindStringSubmatch(path.Base(dir)); m != nil && strings.Contains(dir, "/") {
+			discFromDir = discNum(m[1])
+			if dir = path.Dir(dir); dir == "." {
+				dir = ""
+			}
+		}
+	}
+	dirKey := strings.ToLower(dir)
+	// ponytail: no dash/quote folding, no NFKC — dirKey already separates a
+	// remaster from its original, and every normaliser addition is a permanent
+	// rekey ratchet.
+	albumKey := strings.ToLower(strings.Join(strings.Fields(discSuffixRE.ReplaceAllString(album, "")), " "))
+	// the artist fallback leaves the hash whenever the directory or the ALBUM tag
+	// can do the separating — that removal is what stops one compilation with a
+	// different ARTIST per track from splitting into one album per performer. It
+	// stays at library root (no directory) and for untagged files (no album key),
+	// where dropping it would collapse a folder of unrelated loose singles into
+	// one album.
+	aaKey := ""
+	if dirKey == "" || albumKey == "" || albumKey == strings.ToLower(unknownAlbum) {
+		aaKey = strings.ToLower(albumArtist)
+	}
+	return sha1Hex(dirKey + "\x00" + albumKey + "\x00" + aaKey), discFromDir
+}
+
+// AlbumID exposes the grouping rule to the one-shot migration-007 remap, which
+// recomputes stored ids from the columns they derive from rather than
+// re-parsing the library. Same function the scanner calls, so the result is
+// exactly what the next scan would write.
+func AlbumID(relPath, album, albumArtist string) (id string, discFromDir int) {
+	return albumIdentity(relPath, album, albumArtist)
+}
+
+// discNum parses the numeral of a disc folder: "2", "02", "II" or "two".
+func discNum(s string) int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return discWords[strings.ToLower(s)]
+}
+
+// truthy reads a boolean-ish tag value (iTunes writes "1", some taggers "true").
+func truthy(v string) bool {
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }
 
 func sha1Hex(s string) string {

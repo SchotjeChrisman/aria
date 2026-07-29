@@ -69,6 +69,19 @@ func main() {
 		log.Fatalf("profiles: %v", err)
 	}
 
+	// migration 007 moved album identity from tag strings to disk layout.
+	// Recompute the ids from the columns they derive from and carry tags, edits,
+	// enrichment and art over to them — pure DB work, no library re-parse, so
+	// this does not hold /healthz down while an NFS mount is walked.
+	if v, _ := deps.Settings.Get(ctx, "albumIdRemap"); v != "007" {
+		if err := upgradeAlbumIDs(ctx, sqlDB, deps.Albums); err != nil {
+			log.Printf("album identity upgrade: %v", err)
+		} else if err := remapAlbumIDs(ctx, sqlDB, cfg.DataDir); err != nil {
+			log.Printf("album id remap: %v", err)
+		} else if err := deps.Settings.Set(ctx, "albumIdRemap", "007"); err != nil {
+			log.Printf("album id remap flag: %v", err)
+		}
+	}
 	if n, err := deps.Tracks.Count(ctx); err != nil {
 		log.Fatalf("tracks: %v", err)
 	} else if n == 0 && deps.Scanner != nil {

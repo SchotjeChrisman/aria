@@ -27,6 +27,7 @@ type mbRelation struct {
 	Direction  string   `json:"direction"`
 	Attributes []string `json:"attributes"`
 	Artist     *struct {
+		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"artist"`
 	Work *struct {
@@ -37,12 +38,25 @@ type mbRelation struct {
 	} `json:"url"`
 }
 
+// mbAlias is one MB artist alias. Latin display names live here: the
+// locale=en, primary, "Artist name" alias is the name MB itself considers the
+// English spelling.
+type mbAlias struct {
+	Name     string `json:"name"`
+	SortName string `json:"sort-name"`
+	Locale   string `json:"locale"`
+	Type     string `json:"type"`
+	Primary  bool   `json:"primary"`
+}
+
 type mbArtist struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Type           string `json:"type"`
-	Disambiguation string `json:"disambiguation"`
-	Score          *int   `json:"score"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	SortName       string    `json:"sort-name"`
+	Type           string    `json:"type"`
+	Disambiguation string    `json:"disambiguation"`
+	Score          *int      `json:"score"`
+	Aliases        []mbAlias `json:"aliases"`
 	Area           *struct {
 		Name string `json:"name"`
 	} `json:"area"`
@@ -62,7 +76,9 @@ type mbArtistCredit struct {
 	Name       string `json:"name"`
 	JoinPhrase string `json:"joinphrase"`
 	Artist     struct {
-		Name string `json:"name"`
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		SortName string `json:"sort-name"`
 	} `json:"artist"`
 }
 
@@ -74,7 +90,10 @@ type mbRelease struct {
 	TrackCount   *int             `json:"track-count"`
 	Score        *int             `json:"score"`
 	ArtistCredit []mbArtistCredit `json:"artist-credit"`
-	Media        []struct {
+	// the release's own artist-rels (already requested, previously dropped by
+	// the decoder): where the conductor/soloist/orchestra roles come from
+	Relations []mbRelation `json:"relations"`
+	Media     []struct {
 		Tracks []struct {
 			Recording *mbRecording `json:"recording"`
 		} `json:"tracks"`
@@ -225,21 +244,22 @@ func creditsByRecording(rel *mbRelease) map[string]TrackCredits {
 			}
 			var out TrackCredits
 			for _, r := range tr.Recording.Relations {
-				if r.Type == "conductor" && r.Artist != nil {
-					out.Conductor = r.Artist.Name
-				}
-				if strings.Contains(r.Type, "orchestra") && r.Artist != nil {
-					out.Orchestra = r.Artist.Name
-				}
-				if (r.Type == "instrument" || r.Type == "vocal" || r.Type == "performer") && r.Artist != nil {
-					role := "performer"
-					if r.Type == "vocal" {
-						role = "vocals"
+				if r.Artist != nil {
+					switch roleOf(r) {
+					case "conductor":
+						out.Conductor = r.Artist.Name
+					case "orchestra":
+						out.Orchestra = r.Artist.Name
+					case "soloist", "performer":
+						role := "performer"
+						if r.Type == "vocal" {
+							role = "vocals"
+						}
+						if len(r.Attributes) > 0 {
+							role = strings.Join(r.Attributes, ", ")
+						}
+						out.Performers = append(out.Performers, Performer{Name: r.Artist.Name, Role: role})
 					}
-					if len(r.Attributes) > 0 {
-						role = strings.Join(r.Attributes, ", ")
-					}
-					out.Performers = append(out.Performers, Performer{Name: r.Artist.Name, Role: role})
 				}
 				if r.Type == "performance" && r.Work != nil {
 					for _, w := range r.Work.Relations {

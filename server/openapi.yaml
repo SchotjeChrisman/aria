@@ -8,7 +8,9 @@ info:
     limit/offset pagination on GET /api/tracks.
 
     ID scheme: track `id` = sha1 hex of the file path relative to MUSIC_DIR;
-    `albumId` = sha1 hex of lowercase(albumArtist + "\0" + album).
+    `albumId` = sha1 hex of lowercase(album directory + "\0" + album title), the
+    directory being the file's folder with a CD1/Disc 2 subfolder folded into its
+    parent, and the album artist replacing the (empty) directory at library root.
 
     Error convention: validation failures are 400 with `{"error": "<reason>"}`;
     not-found is a bare 404 (text/plain body "Not Found", no JSON);
@@ -567,8 +569,11 @@ paths:
         override map (may be `{}`). Field sets per kind:
         track: title, artist, album, albumArtist, genre, year, trackNo, discNo,
         composer, work, movement, conductor, orchestra.
-        album: album, albumArtist, genre, year, releaseType, label, date, country, blurb.
+        album: album, albumArtist, genre, year, releaseType, label, date, country, blurb,
+        state, disambiguation, locked.
         artist: type, area, born, died, image, bio (cache-only, never hits the network).
+        For kind=artist the key may be the Latin display name; it is resolved back to
+        the stored (original-script) name before anything is read or written.
       operationId: getEdits
       parameters:
         - name: kind
@@ -801,9 +806,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [listenbrainzToken]
+                required: [listenbrainzToken, classicalDisplayArtist]
                 properties:
                   listenbrainzToken: { type: string }
+                  classicalDisplayArtist:
+                    type: boolean
+                    description: >
+                      Show the credited performer (soloist > conductor >
+                      orchestra) as the album artist on classical releases,
+                      with the composers split off into `composer`. Default
+                      true. Album edits still win over it.
     post:
       tags: [settings]
       summary: Update settings
@@ -817,6 +829,7 @@ paths:
               type: object
               properties:
                 listenbrainzToken: { type: string, maxLength: 200 }
+                classicalDisplayArtist: { type: boolean }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1590,7 +1603,7 @@ components:
       properties:
         phase:
           type: string
-          enum: [idle, albums, artists, discographies, composers, people, faces]
+          enum: [idle, albums, artists, discographies, composers, people, names, faces]
         done: { type: integer }
         total: { type: integer }
         running: { type: boolean }
@@ -1629,6 +1642,17 @@ components:
           type: array
           items: { $ref: '#/components/schemas/DiscographyItem' }
         discographyAt: { type: string, format: date-time }
+        mbid: { type: string, description: MusicBrainz artist MBID, when one was resolved. }
+        nameLatin:
+          type: string
+          description: >
+            Latin-script display spelling of the entry's key. Absent when the
+            stored name is already Latin, or when no source yielded one — the
+            original script is never overwritten.
+        nameLatinSource:
+          type: string
+          enum: [alias-en, alias, sortname, translit, mbname, same, none]
+          description: How `nameLatin` was resolved; `translit` is approximate.
 
     DiscographyItem:
       type: object
@@ -1732,6 +1756,17 @@ components:
         date: { type: [string, 'null'] }
         country: { type: [string, 'null'] }
         blurb: { type: [string, 'null'], maxLength: 4000 }
+        artSource:
+          oneOf:
+            - { type: string, enum: [file, api, custom] }
+            - { type: 'null' }
+        state:
+          description: '`local` means the user''s metadata is authoritative and no MusicBrainz entity is pinned.'
+          oneOf:
+            - { type: string, enum: [matched, local] }
+            - { type: 'null' }
+        disambiguation: { type: [string, 'null'] }
+        locked: { type: [boolean, 'null'] }
 
     ArtistEdits:
       type: object
