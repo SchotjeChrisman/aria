@@ -11,6 +11,7 @@ import 'health_screen.dart';
 import 'library_screen.dart';
 import 'logs_screen.dart';
 import 'playback_screen.dart';
+import '../review/review_screen.dart';
 import 'settings_page.dart';
 
 final settingsFeatureEntry = FeatureEntry(
@@ -35,6 +36,7 @@ final settingsFeatureEntry = FeatureEntry(
         GoRoute(path: 'eq', builder: (_, _) => const EqScreen()),
         GoRoute(path: 'logs', builder: (_, _) => const LogsScreen()),
         GoRoute(path: 'health', builder: (_, _) => const HealthScreen()),
+        GoRoute(path: 'review', builder: (_, _) => const ReviewScreen()),
         GoRoute(
           path: 'downloads',
           builder: (_, _) => const DownloadsScreen(),

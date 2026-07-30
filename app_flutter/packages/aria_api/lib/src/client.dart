@@ -10,6 +10,7 @@ import 'json.dart';
 import 'models/enrichment.dart';
 import 'models/eq.dart';
 import 'models/health.dart';
+import 'models/match.dart';
 import 'models/misc.dart';
 import 'models/mixes.dart';
 import 'models/playlist.dart';
@@ -116,9 +117,14 @@ class AriaClient {
 
   /// Awaits [f] with [_timeout], mapping [TimeoutException] into the normal
   /// [AriaApiException] flow (statusCode 0 = no response).
-  Future<T> _timed<T>(Future<T> f, String path) async {
+  ///
+  /// [timeout] overrides the default for the handful of endpoints that are
+  /// synchronous by design and legitimately slower than a UI call should be.
+  /// It is per-call on purpose: raising [_timeout] itself would weaken
+  /// fail-fast for the other sixty-odd requests to buy headroom for one.
+  Future<T> _timed<T>(Future<T> f, String path, {Duration? timeout}) async {
     try {
-      return await f.timeout(_timeout);
+      return await f.timeout(timeout ?? _timeout);
     } on TimeoutException {
       throw AriaApiException(0, 'request timed out', path: path);
     }
@@ -150,21 +156,22 @@ class AriaClient {
 
   static const _jsonHeaders = {'Content-Type': 'application/json'};
 
-  Future<Object?> _send(String method, String path, [Object? body]) async {
+  Future<Object?> _send(String method, String path,
+      [Object? body, Duration? timeout]) async {
     final req = http.Request(method, _u(path));
     if (body != null) {
       req.headers.addAll(_jsonHeaders);
       req.body = jsonEncode(body);
     }
-    final r =
-        await _timed(_http.send(req).then(http.Response.fromStream), path);
+    final r = await _timed(_http.send(req).then(http.Response.fromStream), path,
+        timeout: timeout);
     if (r.statusCode < 200 || r.statusCode >= 300) _throw(r, path);
     if (r.body.isEmpty) return null;
     return jsonDecode(utf8.decode(r.bodyBytes));
   }
 
-  Future<Object?> _post(String path, [Object? body]) =>
-      _send('POST', path, body);
+  Future<Object?> _post(String path, [Object? body, Duration? timeout]) =>
+      _send('POST', path, body, timeout);
   Future<Object?> _patch(String path, Object body) =>
       _send('PATCH', path, body);
   Future<Object?> _put(String path, Object body) => _send('PUT', path, body);
@@ -297,6 +304,41 @@ class AriaClient {
       AlbumInfo.fromJson(asMap(await _post(
           '/api/album/${Uri.encodeComponent(albumId)}/reidentify',
           {'mbid': mbid})));
+
+  // ---- match review
+
+  /// Every album the matcher could not settle — both `review` (it found
+  /// releases and could not choose between them) and `local` (it found nothing
+  /// worth offering) — best-scoring first. Reads stored decisions, so it makes
+  /// no MusicBrainz request and is cheap to poll.
+  Future<List<MatchDecision>> matchReview() async =>
+      _list(await _get('/api/match/review'), MatchDecision.fromJson);
+
+  /// One album's stored decision; null when the matcher has never run on it.
+  /// Note the plural path segment — `/api/albums/…/match`, unlike the singular
+  /// `/api/album/…/reidentify` right above.
+  Future<MatchDecision?> albumMatch(String albumId) async {
+    final j = await _get('/api/albums/${Uri.encodeComponent(albumId)}/match',
+        nullOn404: true);
+    return j == null ? null : MatchDecision.fromJson(asMap(j));
+  }
+
+  /// Re-decides one album now, synchronously, and returns the fresh decision.
+  ///
+  /// The server bounds this at twelve MusicBrainz fetches, which it documents
+  /// as about thirteen seconds — so it carries its own timeout. The default
+  /// fifteen leaves two seconds of headroom against a slow upstream, and when
+  /// it loses that race the failure arrives as `statusCode 0, request timed
+  /// out`, which is indistinguishable from an unreachable server. A caller
+  /// would report "cannot reach aria" about a server that is working fine.
+  ///
+  /// 502 means matching is unavailable (the enricher has no matcher) or the
+  /// attempt failed upstream.
+  Future<MatchDecision> rematchAlbum(String albumId) async =>
+      MatchDecision.fromJson(asMap(await _post(
+          '/api/albums/${Uri.encodeComponent(albumId)}/match',
+          null,
+          const Duration(seconds: 60))));
 
   // ---- tags
 

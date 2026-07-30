@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:aria_api/aria_api.dart';
 import 'package:test/test.dart';
@@ -510,5 +511,110 @@ void main() {
   test('round-trips through jsonEncode/jsonDecode', () {
     final decoded = jsonDecode(jsonEncode(trackJson())) as Map<String, dynamic>;
     expect(Track.fromJson(decoded).sampleRate, 96000);
+  });
+
+  // The whole review feature rests on these two models parsing what the server
+  // actually sends. match_review_fixture.json is not invented — it is a
+  // verbatim capture of GET /api/match/review from a 7572-track library, so
+  // every shape below is one the app will really meet.
+  group('MatchDecision', () {
+    List<MatchDecision> fixture() => (jsonDecode(
+                File('test/match_review_fixture.json').readAsStringSync())
+            as List)
+        .map((j) => MatchDecision.fromJson(j as Map<String, dynamic>))
+        .toList();
+
+    test('parses every decision in a real review queue', () {
+      final ds = fixture();
+      expect(ds, hasLength(69));
+      // 41 local + 28 review, and nothing else: the endpoint is defined as
+      // "not matched", so a `matched` row here would mean the server changed
+      // its contract underneath us.
+      expect(ds.where((d) => d.state == 'review'), hasLength(28));
+      expect(ds.where((d) => d.state == 'local'), hasLength(41));
+      expect(ds.where((d) => d.state == 'matched'), isEmpty);
+    });
+
+    test('a separation of zero survives arriving as a bare JSON int', () {
+      // Go marshals float64(0) as `0`, not `0.0`. A cast to double throws on
+      // that, which would take the whole screen down over one album in 69 —
+      // and this library contains exactly one such row.
+      final raw = jsonDecode(
+          File('test/match_review_fixture.json').readAsStringSync()) as List;
+      final ints = raw.where((j) => (j as Map)['separation'] is int).toList();
+      expect(ints, isNotEmpty, reason: 'fixture must still cover the int case');
+
+      final d = MatchDecision.fromJson(ints.first as Map<String, dynamic>);
+      expect(d.separation, 0.0);
+    });
+
+    test('an unscored album keeps a null distance, never zero', () {
+      // 0 is the BEST possible distance. Coercing "never scored" to 0 would
+      // present the least certain albums in the library as perfect matches —
+      // the same inversion that made unanalysed tracks the quietest ones.
+      final unscored = fixture().where((d) => d.distance == null);
+      expect(unscored, hasLength(40));
+      for (final d in unscored) {
+        expect(d.reason, 'no-candidates');
+        expect(d.candidates, isEmpty);
+        expect(d.hasNoCandidates, isTrue);
+      }
+    });
+
+    test('the candidate-less majority is the dominant case, not an edge', () {
+      // 58% of the queue. A detail view that only knows how to draw a picker
+      // has nothing to say about most of its own contents.
+      final ds = fixture();
+      expect(ds.where((d) => d.hasNoCandidates).length, greaterThan(ds.length / 2));
+    });
+
+    test('scored candidates carry their breakdown', () {
+      final withCandidates =
+          fixture().firstWhere((d) => d.candidates.isNotEmpty);
+      final c = withCandidates.candidates.first;
+      expect(c.mbid, isNotEmpty);
+      expect(c.distance, isNotNull);
+      expect(c.why, isNotEmpty);
+      // The breakdown is what turns "unsure" into "unsure because the artist
+      // credit does not match".
+      expect(c.why.keys, contains('artist'));
+      expect(c.why.values.every((v) => v >= 0), isTrue);
+    });
+
+    test('no decision in the queue claims an accepted release', () {
+      // These are by definition the albums with no accepted release, so no UI
+      // element may assume releaseMbid is present.
+      for (final d in fixture()) {
+        expect(d.releaseMbid, isNull);
+        expect(d.releaseGroupMbid, isNull);
+      }
+    });
+
+    test('survives candidates arriving as literal null', () {
+      // candidates is a json.RawMessage server-side: unset marshals to `null`,
+      // not to `[]`.
+      final d = MatchDecision.fromJson({
+        'albumId': 'a',
+        'state': 'local',
+        'reason': 'no-candidates',
+        'candidates': null,
+      });
+      expect(d.candidates, isEmpty);
+      expect(d.distance, isNull);
+      expect(d.pinned, isFalse);
+    });
+
+    test('an unknown why component is kept, a junk value is dropped', () {
+      // The server may add a distance component without an app release; an
+      // unknown key must still render. A value that will not coerce is dropped
+      // rather than becoming 0, which would read as "this component is perfect".
+      final c = MatchCandidate.fromJson({
+        'mbid': 'm',
+        'why': {'artist': 1, 'somethingNew': 0.5, 'broken': 'nope'},
+      });
+      expect(c.why['artist'], 1.0);
+      expect(c.why['somethingNew'], 0.5);
+      expect(c.why.containsKey('broken'), isFalse);
+    });
   });
 }
