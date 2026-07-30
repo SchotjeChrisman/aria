@@ -132,8 +132,12 @@ loudness measurement that feeds the ReplayGain figures on `GET /api/tracks`;
 
 `id` = sha1 of the file path relative to `MUSIC_DIR`.
 `albumId` = sha1 of `album directory + "\0" + album title` (lowercased) — the
-directory being the file's folder with a `CD1`/`Disc 2` subfolder folded into
-its parent, and the album artist standing in for the directory at library root.
+directory being the file's folder with a disc subfolder folded into its parent,
+and the album artist standing in for the directory at library root. A disc
+subfolder is one named for a disc label and a numeral — `CD1`, `Disc 2`, and the
+MusicBrainz medium formats a tagger like Picard writes instead (`Digital Media
+01`, `Hybrid SACD 2`, `Vinyl 1`). The numeral is required, so `Vinyl Days` and
+`Discography` stay albums of their own.
 Identity comes from where the files live, not from what the tags say, so two
 identically-tagged concerts in two folders stay two albums.
 
@@ -149,6 +153,17 @@ identically-tagged concerts in two folders stay two albums.
 | `ACOUSTID_KEY`      | *(none)* | AcoustID lookups; without it fingerprints are computed but never looked up |
 | `DISCOGS_TOKEN`     | *(none)* | Discogs genre/style/label/catalogue-number enrichment; skipped entirely if missing |
 | `TRANSCODE_CACHE_MB`| `5000`   | on-disk Opus cache budget under `DATA_DIR` |
+| `SCAN_INTERVAL`     | `1h`     | how often the library is walked for new/changed files; `0` disables |
+| `FULL_SCAN_INTERVAL`| `24h`    | how often the enrich/fingerprint/analysis passes run even when nothing changed; `0` disables |
+
+The two scan cadences do the same walk — the difference is what follows it. The
+hourly one only runs the enrichment passes when the walk actually found new or
+changed files, so a quiet library costs one directory walk and nothing else. The
+daily one runs them regardless, which is what lets already-enriched albums pick
+up new metadata: the enricher's own TTLs (discography 7 days, artist popularity
+30 days) can only expire on a pass that reaches them. Both accept any
+`time.ParseDuration` string (`90m`, `6h`); an unparseable value logs and falls
+back to the default rather than silently disabling the scan.
 
 Scanned extensions: flac, mp3, m4a, m4b, ogg, oga, opus, spx, wav, aiff, aif,
 aifc, afc, ape, wv, dsf, wma, tta, shn, mpc. Deliberately excluded: dff/dsdiff

@@ -66,8 +66,16 @@ func upgradeAlbumIDs(ctx context.Context, db *sql.DB, albums *repo.Albums) error
 	}
 	defer tx.Rollback()
 	for _, u := range todo {
+		// legacyAlbumId is re-stamped from the id being replaced, not left at
+		// whatever migration 007 wrote. On the 007 run itself the two are already
+		// equal so this is a no-op; on any LATER grouping-rule change it is what
+		// points the remap at the ids the data is actually filed under today
+		// rather than at a generation whose rows were moved and deleted long ago.
+		// SQLite evaluates the whole SET list against the pre-update row, so
+		// reading albumId here yields the old value.
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tracks SET albumId = ?, discNo = ? WHERE id = ?`, u.albumID, u.disc, u.id); err != nil {
+			`UPDATE tracks SET legacyAlbumId = albumId, albumId = ?, discNo = ? WHERE id = ?`,
+			u.albumID, u.disc, u.id); err != nil {
 			return err
 		}
 	}
@@ -278,6 +286,40 @@ func remapAlbumIDs(ctx context.Context, db *sql.DB, dataDir string) error {
 		string(oldJSON)); err != nil {
 		return err
 	}
+
+	// match_decisions (migration 011, added after this remap was first written):
+	// same 1:1-or-drop rule as enrich_cache, and for a stronger reason. A merge
+	// is the case that matters here — five per-disc folders becoming one album —
+	// and each disc carried its own decision against its own MB release. None of
+	// them describes the merged album, and the stored trackSig, which is what
+	// tells the matcher its decision still applies to these tracks, is computed
+	// over the disc's tracks and cannot survive the merge either. Dropping them
+	// costs one re-match of an album that was mis-identified anyway; copying one
+	// would pin the whole set to whichever disc happened to win.
+	var matchRows int64
+	for _, pr := range p.cacheMove {
+		res, err := tx.ExecContext(ctx, `UPDATE OR IGNORE match_decisions SET albumId = ? WHERE albumId = ?`,
+			pr.new, pr.old)
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		matchRows += n
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM match_decisions WHERE albumId IN (SELECT value FROM json_each(?))`,
+		string(oldJSON)); err != nil {
+		return err
+	}
+
+	// legacyAlbumId has now been consumed. Clearing it is what makes a SECOND
+	// re-key possible: the next grouping-rule change re-stamps it (see
+	// upgradeAlbumIDs) and this remap's `legacyAlbumId <> ''` filter then sees
+	// exactly the tracks that moved in THAT pass, not a mix of two generations.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE tracks SET legacyAlbumId = '' WHERE legacyAlbumId <> ''`); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -337,8 +379,8 @@ func remapAlbumIDs(ctx context.Context, db *sql.DB, dataDir string) error {
 	// every albumId consumer is string-keyed with no FK and no compile-time link
 	// to the scanner: an incomplete remap builds, runs, and just returns nothing.
 	// This line is the only thing that will ever tell you.
-	log.Printf("album id remap: %d mappings (%d 1:1, %d re-identify), %d tag items, %d edits, %d cache rows, %d art files",
-		len(p.pairs), len(p.cacheMove), len(p.oldIDs)-len(p.cacheMove), tagRows, editRows, cacheRows, artFiles)
+	log.Printf("album id remap: %d mappings (%d 1:1, %d re-identify), %d tag items, %d edits, %d cache rows, %d matches, %d art files",
+		len(p.pairs), len(p.cacheMove), len(p.oldIDs)-len(p.cacheMove), tagRows, editRows, cacheRows, matchRows, artFiles)
 	return nil
 }
 

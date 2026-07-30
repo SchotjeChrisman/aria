@@ -224,6 +224,11 @@ func TestParseMD5(t *testing.T) {
 		{"uppercase rejected", "MD5=2A75B09672DD942A457873379CF702B2\n", ""},
 		{"non-hex", "MD5=zz75b09672dd942a457873379cf702b2!\n", ""},
 		{"garbage", "not a hash at all\n", ""},
+		// A file whose audio stream decodes to zero samples still exits 0 and
+		// still gets an MD5 — of nothing at all. Every such file in the library
+		// produces this same constant, so storing it would make them all
+		// "byte-identical" to each other in the duplicates view.
+		{"zero samples decoded", "MD5=d41d8cd98f00b204e9800998ecf8427e\n", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

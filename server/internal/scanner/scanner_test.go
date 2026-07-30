@@ -174,6 +174,27 @@ func TestAlbumIdentity(t *testing.T) {
 			sameAs: "Box/CD2/01.flac", wantDisc: 1},
 		{name: "Disc 1 (Remastered)", rel: "Box/Disc 1 (Remastered)/01.flac", album: "X",
 			sameAs: "Box/CD2/01.flac", wantDisc: 1},
+		// MusicBrainz-aware taggers (Picard) name disc folders after the release
+		// MEDIUM FORMAT, not "CD" — a library tagged that way splits every
+		// multi-disc set into one album per disc. These must fold like CD1 does,
+		// and interoperate with it: a set with mixed folder styles is one album.
+		{name: "Digital Media 01", rel: "Box/Digital Media 01/01.flac", album: "X",
+			sameAs: "Box/CD2/01.flac", wantDisc: 1},
+		{name: "Digital Media 02", rel: "Box/Digital Media 02/01.flac", album: "X", wantDisc: 2},
+		{name: "Vinyl 1", rel: "Box/Vinyl 1/01.flac", album: "X", sameAs: "Box/CD2/01.flac", wantDisc: 1},
+		{name: "Cassette 2", rel: "Box/Cassette 2/01.flac", album: "X", wantDisc: 2},
+		{name: "Hybrid SACD 1", rel: "Box/Hybrid SACD 1/01.flac", album: "X",
+			sameAs: "Box/CD2/01.flac", wantDisc: 1},
+		{name: "DVD-Audio 1", rel: "Box/DVD-Audio 1/01.flac", album: "X",
+			sameAs: "Box/CD2/01.flac", wantDisc: 1},
+		{name: "Blu-ray 2", rel: "Box/Blu-ray 2/01.flac", album: "X", wantDisc: 2},
+		// ... without swallowing a real album folder that merely starts with one
+		// of those words. The numeral is required, and so is the word boundary.
+		{name: "Vinyl Days", rel: "Vinyl Days/01.flac", album: "X", differsFrom: "01.flac"},
+		{name: "Digital Media Archive", rel: "Digital Media Archive/01.flac", album: "X",
+			differsFrom: "01.flac"},
+		{name: "Cassette Tapes", rel: "Cassette Tapes/01.flac", album: "X", differsFrom: "01.flac"},
+		{name: "Vinyl", rel: "Box/Vinyl/01.flac", album: "X", differsFrom: "Box/01.flac"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

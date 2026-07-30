@@ -9,8 +9,10 @@ info:
 
     ID scheme: track `id` = sha1 hex of the file path relative to MUSIC_DIR;
     `albumId` = sha1 hex of lowercase(album directory + "\0" + album title), the
-    directory being the file's folder with a CD1/Disc 2 subfolder folded into its
+    directory being the file's folder with a disc subfolder folded into its
     parent, and the album artist replacing the (empty) directory at library root.
+    A disc subfolder is one named for a disc label plus a numeral: CD1, Disc 2,
+    or a MusicBrainz medium format ("Digital Media 01", "Hybrid SACD 2").
 
     Error convention: validation failures are 400 with `{"error": "<reason>"}`;
     not-found is a bare 404 (text/plain body "Not Found", no JSON);

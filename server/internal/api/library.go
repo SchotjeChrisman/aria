@@ -695,41 +695,10 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 			return
 		}
 		d.InvalidateTracks()
-		if d.Enricher != nil || d.Analyzer != nil || d.Fingerprinter != nil {
-			// One GoBg, chained: enrichment is network-bound and quick,
-			// fingerprinting is minutes, the analysis pass is hours of decoding.
-			// Running them in sequence is also what guarantees neither job is
-			// ever concurrent with itself on the scan path, and keeps three
-			// disk-heavy passes off each other.
-			d.GoBg(func(ctx context.Context) {
-				// FIRST, not merely before the analyzer. Matching is a phase of
-				// the enricher, and its strongest candidate source is the release
-				// groups AcoustID voted for — which do not exist until this pass
-				// has run. Behind the enricher, the first scan of a library would
-				// decide every album on text search alone, and a `matched`
-				// decision is never revisited (retryAfter is empty for matched),
-				// so that first weak answer would be permanent. 64 ms/file buys
-				// the evidence the decision is supposed to rest on.
-				// Nothing it writes reaches /api/tracks, hence no invalidate.
-				if d.Fingerprinter != nil {
-					if err := d.Fingerprinter.Run(ctx); err != nil {
-						log.Printf("fingerprint: %v", err)
-					}
-				}
-				if d.Enricher != nil {
-					if err := d.Enricher.Run(ctx); err != nil {
-						log.Printf("enrich: %v", err)
-					}
-					d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
-				}
-				if d.Analyzer != nil {
-					if err := d.Analyzer.Run(ctx); err != nil {
-						log.Printf("analyze: %v", err)
-					}
-					d.InvalidateTracks() // loudness feeds trackGainDb/albumGainDb
-				}
-			})
-		}
+		// One GoBg, chained — see RunPasses for why the order is what it is.
+		// Unconditional here, unlike the periodic scan: an explicit Rescan is
+		// the user asking for the passes, whether or not any file changed.
+		d.GoBg(d.RunPasses)
 		writeJSON(w, http.StatusOK, map[string]int{"tracks": n})
 	})
 

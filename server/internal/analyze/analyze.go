@@ -166,13 +166,27 @@ type probe struct {
 	MD5                                 string // decoded-audio hash, "" when ffmpeg gave none
 }
 
+// emptyMD5 is the MD5 of zero bytes. A file whose audio stream describes itself
+// fine but decodes to no samples at all — a FLAC with a valid header and no
+// readable frames is the case seen in the wild — still exits 0, and the md5
+// muxer dutifully hashes the nothing it received. The digest is therefore not
+// an identity for the file: EVERY undecodable file in the library produces this
+// same constant, so storing it groups them all as byte-identical copies of one
+// another in /api/library/duplicates — a false positive in the one view a user
+// deletes from. The truncated-file reasoning in analyseOne does not cover this:
+// that is about a PARTIAL decode, whose hash is still derived from this file's
+// own audio.
+const emptyMD5 = "d41d8cd98f00b204e9800998ecf8427e"
+
 // parseMD5 reads the md5 muxer's entire stdout, which is exactly
 // "MD5=<32 lowercase hex>\n" (verified with od -c: no other byte is written).
 // Anything that is not exactly that shape yields "", which is stored as an
 // empty string so the file is not re-decoded forever, per 009_audio_md5.sql.
+// A hash over zero decoded samples is treated the same way, for the reason on
+// emptyMD5: no hash is strictly better than a colliding one.
 func parseMD5(stdout string) string {
 	h, ok := strings.CutPrefix(strings.TrimSpace(stdout), "MD5=")
-	if !ok || len(h) != 32 {
+	if !ok || len(h) != 32 || h == emptyMD5 {
 		return ""
 	}
 	for _, c := range h {
@@ -495,10 +509,15 @@ func (a *Analyzer) one(ctx context.Context, p repo.Pending) error {
 	pr := parse(errBuf.String())
 	// A truncated file exits 0 and still emits an MD5 over whatever decoded.
 	// That partial hash is stored as-is: it is stable across runs and cannot
-	// false-POSITIVE against a different file. The only cost is that a truncated
-	// copy of X will not match X — a false negative in dedup, the harmless
-	// direction. -xerror would fix it and would also change the loudness path's
-	// failure behaviour, regressing a shipped feature for this.
+	// false-POSITIVE against a different file, because it is still derived from
+	// this file's own audio. The only cost is that a truncated copy of X will not
+	// match X — a false negative in dedup, the harmless direction. -xerror would
+	// fix it and would also change the loudness path's failure behaviour,
+	// regressing a shipped feature for this.
+	//
+	// The one hash NOT derived from this file's audio is the zero-sample case,
+	// which every undecodable file shares alike — parseMD5 drops it to "" rather
+	// than store a collision. See emptyMD5.
 	//
 	// ponytail: lossless sources (FLAC/ALAC/WavPack/APE) decode bit-exactly so
 	// their hash is stable across ffmpeg versions; lossy sources decode to float

@@ -147,6 +147,10 @@ func TestRemapAlbumIDs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for _, key := range []string{m1, m2, s, o} {
+		mustExec(t, d, `INSERT INTO match_decisions (albumId, state, reason, decidedAt, attempts)
+			VALUES (?, 'matched', 'test', '2026-01-01', 1)`, key)
+	}
 
 	if err := remapAlbumIDs(ctx, d, dataDir); err != nil {
 		t.Fatalf("remap: %v", err)
@@ -197,6 +201,33 @@ func TestRemapAlbumIDs(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("enrich_cache for %s = %d rows, want %d", tc.key, got, tc.want)
 		}
+	}
+
+	// match_decisions: same 1:1-or-drop rule as enrich_cache, and stricter about
+	// why. A merged album's stored trackSig was computed over one disc's tracks,
+	// so a carried-over decision would claim to describe a set it has never seen.
+	for _, tc := range []struct {
+		key  string
+		want int
+	}{{o2, 1}, {o, 0}, {n, 0}, {t1, 0}, {t2, 0}, {m1, 0}, {m2, 0}, {s, 0}} {
+		var got int
+		if err := d.QueryRow(`SELECT COUNT(*) FROM match_decisions WHERE albumId=?`, tc.key).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Errorf("match_decisions for %s = %d rows, want %d", tc.key, got, tc.want)
+		}
+	}
+
+	// legacyAlbumId is consumed, not left lying around: it is what a LATER
+	// grouping-rule change re-stamps, and a leftover value would point that pass
+	// at a generation whose rows this one already moved and deleted.
+	var stale int
+	if err := d.QueryRow(`SELECT COUNT(*) FROM tracks WHERE legacyAlbumId <> ''`).Scan(&stale); err != nil {
+		t.Fatal(err)
+	}
+	if stale != 0 {
+		t.Errorf("%d tracks still carry legacyAlbumId, want it cleared", stale)
 	}
 
 	// art: the custom slot is served with no fallback, so a stranded upload is a
@@ -354,5 +385,33 @@ func TestUpgradeAlbumIDs(t *testing.T) {
 	}
 	if again, _ := get("t1"); again != a1 {
 		t.Errorf("albumId changed on the second run: %s -> %s", a1, again)
+	}
+
+	// legacyAlbumId points at the id being REPLACED, not at whatever migration
+	// 007 first wrote there. This is what lets the grouping rule change a second
+	// time: the remap reads legacyAlbumId to find where tags, edits, enrichment
+	// and art are filed, and after one re-key that is the id this pass just
+	// overwrote — not the tag-hash generation, whose rows are long deleted.
+	var legacy string
+	if err := d.QueryRow(`SELECT legacyAlbumId FROM tracks WHERE id='t1'`).Scan(&legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy != id("old") {
+		t.Errorf("legacyAlbumId = %s, want the replaced id %s", legacy, id("old"))
+	}
+
+	// ... and a re-key of an ALREADY-remapped library re-stamps it again. Faked
+	// here by moving the file, which is the only input the rule reads — the real
+	// trigger is discSegRE learning a new disc-folder spelling.
+	mustExec(t, d, `UPDATE tracks SET legacyAlbumId = '' WHERE id='t1'`) // as the remap leaves it
+	mustExec(t, d, `UPDATE tracks SET path = 'Knopfler/Amsterdam 2/01.flac' WHERE id='t1'`)
+	if err := upgradeAlbumIDs(ctx, d, albums); err != nil {
+		t.Fatalf("third upgrade: %v", err)
+	}
+	if err := d.QueryRow(`SELECT legacyAlbumId FROM tracks WHERE id='t1'`).Scan(&legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy != a1 {
+		t.Errorf("second re-key stamped legacyAlbumId = %s, want the id it replaced %s", legacy, a1)
 	}
 }
