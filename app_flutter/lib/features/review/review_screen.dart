@@ -88,7 +88,8 @@ class ReviewScreen extends ConsumerWidget {
                       'one on its own.',
                   count: undecided.length,
                 ),
-                for (final d in undecided) _DecisionTile(decision: d),
+                for (final d in undecided)
+                  _DecisionTile(decision: d, pageRef: ref),
                 const SizedBox(height: AriaSpace.s6),
               ],
               if (unfound.isNotEmpty) ...[
@@ -99,7 +100,8 @@ class ReviewScreen extends ConsumerWidget {
                       'used as-is, and the server retries on its own.',
                   count: unfound.length,
                 ),
-                for (final d in unfound) _DecisionTile(decision: d),
+                for (final d in unfound)
+                  _DecisionTile(decision: d, pageRef: ref),
               ],
             ],
           );
@@ -140,13 +142,19 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _DecisionTile extends ConsumerWidget {
-  const _DecisionTile({required this.decision});
+/// Stateless, and it takes the SCREEN's ref rather than obtaining its own.
+/// Acting on a decision invalidates the queue, which rebuilds this list and
+/// unmounts the row for any album that has just been resolved — taking a
+/// tile-scoped ref down with it while the dialog is still open. See
+/// [showMatchDetail].
+class _DecisionTile extends StatelessWidget {
+  const _DecisionTile({required this.decision, required this.pageRef});
 
   final MatchDecision decision;
+  final WidgetRef pageRef;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final d = decision;
     final (label, _) = _reasonLabels[d.reason] ?? (d.reason, '');
     final sub = [
@@ -167,7 +175,7 @@ class _DecisionTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
-      onTap: () => showMatchDetail(context, ref, d),
+      onTap: () => showMatchDetail(context, pageRef, d),
     );
   }
 }

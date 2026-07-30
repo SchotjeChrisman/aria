@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection.dart';
 import '../../core/library_providers.dart';
+import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../album/providers.dart' show albumInfoProvider;
 import 'providers.dart';
@@ -27,6 +28,13 @@ const _whyLabels = <String, String>{
 
 /// Resolve one album's identity: pick a release, give up on matching, or ask
 /// the server to try again.
+///
+/// [ref] MUST outlive the row that opened this dialog. Every action here
+/// invalidates `reviewQueueProvider`, which rebuilds the very list the row
+/// belongs to — and a row whose album has just left the queue is unmounted by
+/// that rebuild. A tile's own ref would be disposed underneath the still-open
+/// dialog, so the next action taken in it would throw instead of running.
+/// Pass the screen's ref, which lives as long as the route.
 Future<void> showMatchDetail(
   BuildContext context,
   WidgetRef ref,
@@ -36,9 +44,9 @@ Future<void> showMatchDetail(
   builder: (_) => _MatchDetailDialog(ref: ref, decision: decision),
 );
 
-/// The injected ref is the PAGE's ref, deliberately — invalidations fired from
-/// here must still land after this dialog pops. Same shape as the album
-/// re-identify dialog.
+/// The injected ref must be the SCREEN's, never a list tile's — see the note on
+/// [showMatchDetail]. Invalidations fired from here have to land after this
+/// dialog pops AND after the list underneath it has rebuilt.
 class _MatchDetailDialog extends StatefulWidget {
   const _MatchDetailDialog({required this.ref, required this.decision});
 
@@ -53,6 +61,17 @@ class _MatchDetailDialogState extends State<_MatchDetailDialog> {
   late MatchDecision _d = widget.decision;
   String? _status;
   bool _busy = false;
+
+  /// Captured once from the row that opened this dialog, and never re-read from
+  /// [_d]. The queue endpoint joins the albums table for a title; the
+  /// single-album match endpoints do NOT, and `album`/`albumArtist` are
+  /// `omitempty` — so the decision returned by "Try again" carries neither.
+  /// Recomputing the title from the refreshed decision blanks the header of
+  /// the dialog the user is looking at.
+  late final String _title = [
+    widget.decision.albumArtist,
+    widget.decision.album,
+  ].where((s) => s.isNotEmpty).join(' — ');
 
   /// Every action here changes an album's identity, which moves credits and
   /// artwork as well as the title — so the whole library view goes stale, not
@@ -94,8 +113,15 @@ class _MatchDetailDialogState extends State<_MatchDetailDialog> {
     });
     try {
       await body();
-      if (!mounted) return;
+      // BEFORE the mounted guard, deliberately. The dialog is dismissible
+      // (barrier, Close, back button) while a ~10s request is in flight, and
+      // closing it does not cancel the request — the server still commits. If
+      // the invalidations sat behind `mounted` they would be skipped for a
+      // mutation that succeeded, leaving the library, credits, artwork and this
+      // very queue showing the old identity until the app restarts. _refresh
+      // touches no BuildContext, only the ref, so it is safe when unmounted.
       _refresh();
+      if (!mounted) return;
       if (close) {
         Navigator.of(context).pop();
         return;
@@ -141,19 +167,22 @@ class _MatchDetailDialogState extends State<_MatchDetailDialog> {
     close: false,
   );
 
+  /// Pop first: pushInShell must not run with this dialog still on top, or the
+  /// album page opens underneath it.
+  void _openAlbum() {
+    Navigator.of(context).pop();
+    pushInShell(context, '/album/${_d.albumId}');
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AriaColors.of(context);
     final theme = Theme.of(context);
-    final title = [
-      _d.albumArtist,
-      _d.album,
-    ].where((s) => s.isNotEmpty).join(' — ');
 
     return AlertDialog(
       backgroundColor: c.bgRaised,
       title: Text(
-        title.isEmpty ? 'Match review' : title,
+        _title.isEmpty ? 'Match review' : _title,
         style: theme.textTheme.titleMedium,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -183,6 +212,15 @@ class _MatchDetailDialogState extends State<_MatchDetailDialog> {
         ),
       ),
       actions: [
+        // The way out of a dead end. For an album with no candidates there is
+        // nothing here to pick, and the answer is a manual MusicBrainz search
+        // — which the album page already offers, along with the metadata
+        // editor and artwork. Rebuilding a search box in this dialog would
+        // duplicate a flow that exists two taps away.
+        TextButton(
+          onPressed: _busy ? null : _openAlbum,
+          child: const Text('Open album'),
+        ),
         TextButton(
           onPressed: _busy ? null : _tryAgain,
           child: const Text('Try again'),

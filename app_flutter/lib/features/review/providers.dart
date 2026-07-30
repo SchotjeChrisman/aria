@@ -9,12 +9,15 @@ import '../../core/connection.dart';
 
 /// Albums the matcher could not settle, best-scoring first.
 ///
-/// Deliberately NOT autoDispose, unlike the diagnostics providers next door:
-/// the Library settings tile reads the same list to show its count, so leaving
-/// the screen must not throw the fetch away and make the tile refetch and
-/// flicker on every visit. The list only changes when a matching pass runs or
-/// the user decides something, and both invalidate it explicitly.
-final reviewQueueProvider = FutureProvider<List<MatchDecision>>(
+/// autoDispose, like the diagnostics providers next door, and for the reason
+/// they are: the queue also changes from OUTSIDE the app. A scan, an
+/// enrichment pass or a periodic rescan re-decides albums server-side, and
+/// nothing in the client hears about it. Cached for the session, the tile
+/// badge and this list would keep reporting a number that stopped being true
+/// hours ago — and the only cure would be restarting the app. Disposing when
+/// nothing watches means each visit to the Library page or this screen asks
+/// the server again, which is one cheap query over stored decisions.
+final reviewQueueProvider = FutureProvider.autoDispose<List<MatchDecision>>(
   (ref) => ref.watch(apiClientProvider).matchReview(),
 );
 
