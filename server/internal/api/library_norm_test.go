@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The Deezer supplement is only ever reached for a list enrich.contributorsAgree
 // already accepted, and that check keys on norm(). Every pair below is one
@@ -53,5 +56,59 @@ func TestMergeAlbumArtistsDedupesTheWayTheAgreementCheckDid(t *testing.T) {
 func TestNormNameKeepsEditionWords(t *testing.T) {
 	if normName("Berlin Live Orchestra") == normName("Berlin Orchestra") {
 		t.Error("normName stripped an edition-looking word out of an ensemble name")
+	}
+}
+
+// Both cases below are REAL blobs from a production library, found by reading
+// what the fix actually rendered rather than by imagining failures.
+func TestMergeAlbumArtistsRejectsAWrongDeezerAlbum(t *testing.T) {
+	// Tchaikovsky's "The Symphonies". Deezer answered with a BRAHMS record by
+	// the same orchestra: the institution agrees, the conductor does not, and
+	// without a second agreeing performer Gardiner and Brahms both land on a
+	// Tchaikovsky album.
+	got := mergeAlbumArtists(
+		[]string{"Royal Concertgebouw Orchestra", "Bernard Haitink"},
+		[]string{"Tchaikovsky"},
+		[]string{"Royal Concertgebouw Orchestra", "Johannes Brahms", "John Eliot Gardiner"},
+		nil)
+	want := []string{"Royal Concertgebouw Orchestra", "Bernard Haitink"}
+	if len(got) != len(want) {
+		t.Fatalf("got %q, want the MusicBrainz list untouched %q", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMergeAlbumArtistsDropsAComposerSpelledInFull(t *testing.T) {
+	// "Beethoven and Beyond": MB credits the composer as "Beethoven", Deezer
+	// sends "Ludwig van Beethoven". Equality misses; the composer then appears
+	// among the performers.
+	got := mergeAlbumArtists(
+		[]string{"María Dueñas", "Wiener Symphoniker", "Manfred Honeck"},
+		[]string{"Beethoven"},
+		[]string{"María Dueñas", "Ludwig van Beethoven", "Wiener Symphoniker", "Manfred Honeck"},
+		nil)
+	for _, n := range got {
+		if strings.Contains(strings.ToLower(n), "beethoven") {
+			t.Errorf("composer %q survived into the performer list: %q", n, got)
+		}
+	}
+	if len(got) != 3 {
+		t.Errorf("got %q, want the three performers", got)
+	}
+}
+
+// The word boundary is what makes the containment check safe.
+func TestComposerFilterDoesNotSwallowASimilarName(t *testing.T) {
+	got := mergeAlbumArtists(
+		[]string{"Gina Bachauer", "London Symphony Orchestra"},
+		[]string{"Bach"},
+		[]string{"Gina Bachauer", "London Symphony Orchestra", "Antal Doráti"},
+		nil)
+	if len(got) != 3 || got[2] != "Antal Doráti" {
+		t.Fatalf("got %q, want Doráti appended", got)
 	}
 }

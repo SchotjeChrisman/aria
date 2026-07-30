@@ -728,26 +728,59 @@ func mergeAlbumArtists(performers, composers, dz []string, latin map[string]stri
 	if !resolved || len(dz) == 0 {
 		return out
 	}
+	// Deezer's search resolves loosely, and one shared name is not enough
+	// evidence when that name is an institution: Tchaikovsky's "The Symphonies"
+	// (Royal Concertgebouw Orchestra, Bernard Haitink) matched a BRAHMS record
+	// by the same orchestra, and put Gardiner and Brahms on the Tchaikovsky
+	// album. The orchestra alone agrees on both; the conductor does not. Demand
+	// that a second credited performer agrees too, wherever there is one.
+	//
+	// Costs nothing when Deezer is right: measured over the classical albums in
+	// a real library, the only other list this rejects is one where Deezer had
+	// contributed no new name anyway.
 	seen := make(map[string]bool, len(out)+len(composers))
 	for _, n := range out {
 		seen[normName(n)] = true
+	}
+	agree := 0
+	for _, c := range dz {
+		if seen[normName(c)] {
+			agree++
+		}
+	}
+	if agree < min(2, len(performers)) {
+		return out
 	}
 	// Composers are on the credit, not on the stage, and Deezer lists them as
 	// contributors anyway — without this, "Antonio Vivaldi" appears among the
 	// performers of Janine Jansen's Four Seasons.
 	//
-	// ponytail: matched on the credit name only, because that is all the album
-	// blob carries. Ceiling is a release that credits a composer under a name
-	// Deezer spells differently ("Bruch" vs "Max Bruch"); the upgrade is to
-	// store the underlying artist name alongside the credit name and check both.
+	// The blob carries MusicBrainz's CREDIT name, which on classical is the bare
+	// surname, while Deezer publishes the full one — so an equality test misses.
+	// Measured: MB credits "Beethoven" and Deezer sends "Ludwig van Beethoven",
+	// which put the composer among the performers of "Beethoven and Beyond".
+	// Matching a whole word rather than the whole string closes that without
+	// needing the artist name stored too, and the word boundary is what keeps
+	// "Bach" from swallowing a performer called "Bachauer".
+	var composerWords []string
 	for _, c := range composers {
 		if v, ok := latin[c]; ok {
 			c = v
 		}
-		seen[normName(c)] = true
+		k := normName(c)
+		seen[k] = true
+		composerWords = append(composerWords, k)
+	}
+	isComposer := func(k string) bool {
+		for _, w := range composerWords {
+			if w != "" && slices.Contains(strings.Fields(k), w) {
+				return true
+			}
+		}
+		return false
 	}
 	for _, c := range dz {
-		if k := normName(c); !seen[k] {
+		if k := normName(c); !seen[k] && !isComposer(k) {
 			seen[k] = true
 			out = append(out, c)
 		}
