@@ -24,7 +24,14 @@ import (
 	"aria/internal/scanner"
 )
 
-const version = "3.0.0"
+// version is what /api/status reports. Set at link time from the release tag
+// (-X main.version=...; see the Dockerfile and release.yml), because a constant
+// bumped by hand is a constant that goes stale — this one sat at "3.0.0" across
+// the 3.4, 3.5 and 3.6 releases without anyone noticing.
+//
+// "dev" is the honest answer for any other build. A local binary claiming a
+// release number it is not is worse than one that says it is a local binary.
+var version = "dev"
 
 // clearUnpinnedDecisions drops every non-pinned match decision so the next
 // enrichment pass re-decides the album from scratch, and reports how many went.
