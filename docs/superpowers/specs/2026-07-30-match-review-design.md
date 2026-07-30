@@ -68,6 +68,38 @@ New client methods: `matchReview()`, `albumMatch(id)` (404 → null),
 - `review_detail.dart` — candidates as selectable cards, each expanding to the
   `why` breakdown, above an action bar.
 
+#### The two sections need different affordances
+
+Measured against the live library, the split is not cosmetic:
+
+| state | reason | n | candidates |
+| --- | --- | --- | --- |
+| `review` | `weak-match` | 16 | 1–2 |
+| `review` | `low-separation` | 12 | 2–12 |
+| `local` | `no-candidates` | **40** | **0** |
+| `local` | `no-plausible-candidate` | 1 | 3 |
+
+**58% of the queue has no candidates at all.** MusicBrainz returned nothing for
+those albums, so a candidate picker renders an empty list and the screen has
+nothing to say. The dominant case cannot be the edge case.
+
+So the detail view branches on `candidates.isEmpty`, not on state:
+
+- **With candidates** — the picker, the `why` breakdown, Accept.
+- **Without** — no picker. State plainly that MusicBrainz returned no
+  candidates, and offer the two actions that can actually help: *Try again*
+  (`rematchAlbum`), and *Search MusicBrainz* — which opens the **existing**
+  `reidentify_dialog`, already backed by `identifyAlbum(albumId)` for a manual
+  title search. That flow is built; the review screen routes to it rather than
+  reimplementing a search box.
+
+"Use my tags" is hidden for albums already in `state == local`, where it is a
+no-op.
+
+`retryAfter` is surfaced on these rows ("retries automatically on …"). Every
+one of the 40 carries a real timestamp, and knowing the server will try again
+on its own is usually the answer to "do I need to do something about this?"
+
 ### 3. Discoverability
 
 Route `/settings/review` alongside `health`, and **counts on both Library
@@ -103,13 +135,33 @@ view.
   predicates, where `toNum(nil)` returning `0` made every unanalysed track the
   quietest in the library. A null distance means "not scored", and a UI that
   prints `0.00` claims the opposite of the truth — a perfect match.
+- **`separation` can arrive as a JSON integer.** Go marshals a float64 `0` as
+  `0`, not `0.0`, and the live library contains exactly one such decision. In
+  Dart `j['separation'] as double` **throws** on that value, taking the whole
+  screen down over one album in sixty-nine. Every numeric field on both models
+  parses through `(j[k] as num?)?.toDouble()`. `tracks` and `media` are ints and
+  parse as `num?` → `toInt()` for the same reason in reverse.
+- `releaseMbid` and `releaseGroupMbid` are null on **every** row in the live
+  queue — unsurprising, since these are the albums with no accepted release. No
+  UI element may assume they are present.
 
 ## Testing
 
-Model parsing (a `why` object with missing and extra keys, null
-distance/separation, an empty candidates array) and the queue grouping/sort as a
-pure function. Unit tests only, matching the existing Dart test style — this
-codebase does not widget-test screens.
+Model parsing and the queue counting logic. The app does widget-test some
+screens (`library_page_scroll_test.dart`), but these are cheaper as unit tests
+and the widget harness here needs the player stubbed out to avoid tripping the
+pending-timer invariant.
+
+The parsing tests are written against **the real payload**, not invented
+fixtures. Required cases, each drawn from something the live server actually
+returns:
+
+- `separation: 0` as a bare JSON integer (one real decision)
+- `distance: null` and `separation: null` (40 and 55 real decisions)
+- `candidates: []` (40 real decisions)
+- a `why` object with keys missing, and with an unknown key added — the server
+  is free to add a distance component without a client release
+- `releaseMbid: null` / `releaseGroupMbid: null` (every real decision)
 
 ## Not building
 

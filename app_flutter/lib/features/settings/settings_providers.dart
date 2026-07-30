@@ -145,3 +145,19 @@ class ScanController extends Notifier<ScanState> {
     }
   }
 }
+
+/// Diagnostics, fetched on demand rather than kept live: nothing here changes
+/// until a scan, analysis or matching pass runs, and all three already announce
+/// themselves over SSE.
+///
+/// Public and shared rather than private to the health screen, because the
+/// Library tile shows the issue count — a silent tile is exactly why the
+/// report went unnoticed. Two providers would double every request and leave
+/// the refresh button only half working.
+final healthProvider = FutureProvider.autoDispose<LibraryHealth>(
+  (ref) => ref.watch(apiClientProvider).libraryHealth(),
+);
+
+final duplicatesProvider = FutureProvider.autoDispose<List<DuplicateGroup>>(
+  (ref) => ref.watch(apiClientProvider).duplicates(),
+);

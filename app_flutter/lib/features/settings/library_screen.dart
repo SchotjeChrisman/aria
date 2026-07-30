@@ -5,6 +5,7 @@ import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/theme.dart';
+import '../review/providers.dart';
 import 'settings_providers.dart';
 
 /// Library maintenance: rescan and metadata enrichment.
@@ -17,25 +18,56 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Library')),
       body: ListView(
         padding: ariaPagePadding(context),
-        children: const [_LibraryTools(), _HealthTile()],
+        children: const [_LibraryTools(), _HealthTile(), _ReviewTile()],
       ),
     );
   }
 }
 
 /// Entry to the diagnostics; the report itself is /settings/health.
-class _HealthTile extends StatelessWidget {
+///
+/// The count is the point. This tile said only "Library health" for a release
+/// and the owner of the library never found out the page existed; a tile that
+/// states how many things are wrong advertises itself.
+class _HealthTile extends ConsumerWidget {
   const _HealthTile();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final issues = ref.watch(healthProvider).value?.issues
+        .fold<int>(0, (a, i) => a + i.count);
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: const Text('Library health'),
       subtitle: const Text(
         'Unidentified albums, missing artwork, suspect files, duplicates',
       ),
+      trailing: (issues == null || issues == 0)
+          ? null
+          : Text('$issues', style: Theme.of(context).textTheme.labelMedium),
       onTap: () => context.push('/settings/health'),
+    );
+  }
+}
+
+/// The other half: health says what is wrong, this is where identity gets
+/// resolved. Counts only the albums still awaiting an answer.
+class _ReviewTile extends ConsumerWidget {
+  const _ReviewTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(reviewCountProvider);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Match review'),
+      subtitle: const Text(
+        'Albums the matcher could not identify on its own',
+      ),
+      trailing: n == 0
+          ? null
+          : Text('$n', style: Theme.of(context).textTheme.labelMedium),
+      onTap: () => context.push('/settings/review'),
     );
   }
 }
