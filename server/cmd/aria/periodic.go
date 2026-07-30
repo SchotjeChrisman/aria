@@ -35,6 +35,11 @@ func periodicScan(ctx context.Context, deps *api.Deps, full bool) {
 		}
 		return
 	}
+	// Unconditional, though it costs a cache drop on every quiet tick: a scan
+	// that parsed NOTHING can still have deleted rows for files that vanished,
+	// and LastParsed does not count those. An hourly rebuild of the merged view,
+	// lazily on the next reader, is the cheaper mistake than serving an album
+	// whose files are gone.
 	deps.InvalidateTracks()
 	// LastParsed is read straight after Scan returned, while this goroutine is
 	// the only caller — the select loop that drives both cadences is what
