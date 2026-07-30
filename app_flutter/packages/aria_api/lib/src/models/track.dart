@@ -53,6 +53,7 @@ class Track {
     this.genres = const [],
     this.tags = const [],
     this.performers = const [],
+    this.albumArtists = const [],
   });
 
   final String id;
@@ -97,6 +98,12 @@ class Track {
   final List<String> tags; // user tag names (incl. ancestor chain)
   final List<Performer> performers;
 
+  /// Album-header credits in Qobuz order (lead performer, ensembles, rest),
+  /// sent only when MusicBrainz split the release credit into composers and
+  /// performers — i.e. classical. Empty on ordinary albums and on servers
+  /// predating the field; render [albumArtist] then.
+  final List<String> albumArtists;
+
   /// Alias for [format].
   String? get codec => format;
 
@@ -137,6 +144,7 @@ class Track {
         releaseType: asString(j['releaseType']),
         genres: asStringList(j['genres']),
         tags: asStringList(j['tags']),
+        albumArtists: asStringList(j['albumArtists']),
         performers: j['performers'] is List
             ? (j['performers'] as List)
                 .whereType<Map<String, dynamic>>()

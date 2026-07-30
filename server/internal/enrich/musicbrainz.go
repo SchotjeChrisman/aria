@@ -87,6 +87,10 @@ type mbArtistCredit struct {
 		ID       string `json:"id"`
 		Name     string `json:"name"`
 		SortName string `json:"sort-name"`
+		// "Person", "Orchestra", "Choir", "Group", … MB only sends this once
+		// artist-credits is in the inc= set, and it is what separates the
+		// ensembles from the people in an album-header credit list.
+		Type string `json:"type"`
 	} `json:"artist"`
 }
 

@@ -1,0 +1,22 @@
+[
+ {"key": "baseline-acdc",      "mbid": "83ff6988-2f79-40b9-82d5-437f2a5da5f3",
+  "why": "BASELINE. Single artist credit, no relations, unambiguous title. Today scores artist:1 like everything else; after the fix it must score artist:0. If this one does not improve, the fix did not land."},
+ {"key": "baseline-portishead","mbid": "1d6b086a-aca2-4511-8dfc-789b560ae3fb",
+  "why": "BASELINE. Second clean single-artist album, different genre/era, guards against a fix that only works for one release shape."},
+ {"key": "classical-barber",   "mbid": "ec17a59b-6ca3-4817-9ca9-67b137550819",
+  "why": "THE REPORTED BUG. Credit 'Barber, Bruch; Esther Yoo, ...' has the ';' joinphrase but ZERO release-level artist relations, so displayArtist must fall back to artist-credit ORDER and pick Esther Yoo."},
+ {"key": "classical-toscanini","mbid": "a893c87d-92aa-4c3a-8965-598faa1e9e01",
+  "why": "Second composer split with a different shape (conductor, not soloist, as the performer). Confirms the ';' split is not tuned to one album."},
+ {"key": "trap-vivaldi",       "mbid": "a84870f5-962e-4e08-8953-b746615894b3",
+  "why": "AMBIGUITY TRAP. Dozens of 'Le quattro stagioni' releases share near-identical track titles and counts, so with the artist signal dead the matcher is choosing on title alone. Performer is the only distinguishing evidence."},
+ {"key": "compilation-trainspotting", "mbid": "165de88c-8af7-34f2-8bcf-94b4eb839692",
+  "why": "Various Artists. Release credit is 'Various Artists' but every track has a different artist. Exercises isVarious/vaRE and the empty-artist search fallback; must not regress now that artist distance counts."},
+ {"key": "multidisc-wall",     "mbid": "d2ef6b62-9d76-40eb-92c0-f5d677c40ea1",
+  "why": "Multi-disc (2 media, 26 tracks). Exercises the mediums distance component and the discSegRE folding alongside a live artist signal."},
+ {"key": "nonlatin-utada",     "mbid": "473a3b32-58e4-4fe5-91dd-473ce25f0f49",
+  "why": "Non-Latin credit. The new albumArtist correction writes the original script; latinize() must still rewrite it for display without corrupting the stored value."},
+ {"key": "selftitled-weezer94","mbid": "1e477f68-c407-4eae-ad01-518528cedc2c",
+  "why": "SEPARATION TRAP part 1. Self-titled, so album == artist. Paired with the 2001 album below, artist distance is IDENTICAL for both, and only the tracklist separates them. Guards against the fix creating false confidence."},
+ {"key": "selftitled-weezer01","mbid": "ca6577b7-21d4-441b-94ab-cf0f0a8d52f7",
+  "why": "SEPARATION TRAP part 2. Same artist, same title, different tracklist. Must stay separated on tracks, not artist."}
+]

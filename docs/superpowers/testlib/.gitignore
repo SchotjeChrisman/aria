@@ -1,0 +1,9 @@
+# generated: 123 MB of synthetic FLAC, the server's data dir, and run output
+testlib/
+testdata/
+server.log
+server.pid
+snap-*.json
+expected.json
+latin.json
+aria-server

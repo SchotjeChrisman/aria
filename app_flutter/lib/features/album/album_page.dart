@@ -102,6 +102,13 @@ class _AlbumBody extends ConsumerWidget {
     final c = AriaColors.of(context);
     final ty = album.releaseType;
     final dim = TextStyle(color: c.fgDim);
+    // Classical releases carry the full credited list (performer, ensembles,
+    // conductor); everything else — and any older server — has none, and gets
+    // the single album artist. Only this header expands: grids, search and
+    // now playing keep one name, long credits truncate badly in a tile.
+    final credited = album.tracks.isEmpty
+        ? const <String>[]
+        : album.tracks.first.albumArtists;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,7 +134,13 @@ class _AlbumBody extends ConsumerWidget {
               Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  _PersonLink(name: album.albumArtist),
+                  if (credited.isEmpty)
+                    _PersonLink(name: album.albumArtist)
+                  else
+                    for (final (i, name) in credited.indexed) ...[
+                      if (i > 0) Text(' · ', style: dim),
+                      _PersonLink(name: name),
+                    ],
                   if (album.year != null) Text(' · ${album.year}', style: dim),
                   if (ty != null && ty != 'Album') ...[
                     Text(' · ', style: dim),

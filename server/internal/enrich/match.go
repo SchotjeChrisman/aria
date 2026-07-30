@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -325,13 +326,23 @@ func (e *Enricher) gather(ctx context.Context, p repo.PendingAlbum, la localAlbu
 		if len(out) == maxVerify || ctx.Err() != nil {
 			break
 		}
-		rel := e.mb.release(ctx, c.Mbid, "recordings+labels+release-groups")
+		// artist-credits is not optional: without it MB answers with
+		// artist-credit:null, candidateOf's Artist is permanently "", and the
+		// scorer's artist distance is a CONSTANT maximum penalty on every
+		// candidate — a component that cannot discriminate is a component that
+		// is not there. It was missing here for the whole life of the matcher.
+		rel := e.mb.release(ctx, c.Mbid, "artist-credits+recordings+labels+release-groups")
 		if rel == nil {
 			continue
 		}
 		full := candidateOf(*rel, c.Source)
 		if full.RGMbid == "" {
 			full.RGMbid = c.RGMbid
+		}
+		// Same shape as the group fallback above: search hits carry the credit
+		// natively, so a re-fetch that came back thin must not blank it.
+		if full.Artist == "" {
+			full.Artist = c.Artist
 		}
 		full.mb = flattenMedia(rel)
 		scoreCandidate(la, &full)
@@ -378,6 +389,17 @@ func candidateOf(rel mbRelease, source string) candidate {
 		Mbid: rel.ID, Title: rel.Title, Date: rel.Date, Country: rel.Country,
 		Disambiguation: rel.Disambiguation, Source: source,
 		Artist: joinCredit(rel.ArtistCredit), Media: len(rel.Media),
+	}
+	// Both spellings of every credit: the artist's own name and the name this
+	// release credited them under. They differ constantly on classical — the
+	// credit reads "Barber" where the artist is "Samuel Barber" — and the
+	// ALBUMARTIST tag can hold either.
+	for _, ac := range rel.ArtistCredit {
+		for _, n := range [2]string{ac.Artist.Name, ac.Name} {
+			if n != "" && !slices.Contains(c.ArtistNames, n) {
+				c.ArtistNames = append(c.ArtistNames, n)
+			}
+		}
 	}
 	if rel.ReleaseGroup != nil {
 		c.RGMbid = rel.ReleaseGroup.ID

@@ -309,6 +309,78 @@ func TestEnrichAlbumHonoursTheDecision(t *testing.T) {
 	}
 }
 
+// Both release lookups must ask MusicBrainz for artist-credits. Omitting it is
+// a regression with no visible symptom — MB answers artist-credit:null, the
+// matcher's artist distance quietly becomes a constant maximum penalty on every
+// candidate, and the composer/performer split never runs. It shipped that way
+// once; this is the guard against it shipping that way again.
+func TestReleaseLookupsAskForArtistCredits(t *testing.T) {
+	e, ctx := newTestEnricher(t)
+	seedAlbum(t, e, ctx, 12)
+	body := mbReleaseJSON("mb-right", "rg-1", "Abbey Road", 12)
+
+	var incs []string // the transport is driven from this goroutine only
+	stubMB(e, func(r *http.Request) (*http.Response, error) {
+		if !strings.Contains(r.URL.Host, "musicbrainz") {
+			return resp(404, ""), nil
+		}
+		if strings.Contains(r.URL.RawQuery, "query=") {
+			return resp(200, `{"releases":[`+body+`]}`), nil
+		}
+		incs = append(incs, r.URL.Query().Get("inc"))
+		return resp(200, body), nil
+	})
+
+	if err := e.runMatching(ctx); err != nil { // the matcher's verification fetch
+		t.Fatal(err)
+	}
+	if err := e.enrichAlbum(ctx, testAlbumID, mustTracks(t, e, ctx)); err != nil { // the enricher's
+		t.Fatal(err)
+	}
+	if len(incs) != 2 {
+		t.Fatalf("inc sets seen = %v, want both lookups", incs)
+	}
+	for _, inc := range incs {
+		if !strings.Contains(inc, "artist-credits") {
+			t.Errorf("inc=%q is missing artist-credits", inc)
+		}
+	}
+}
+
+// The search hit carries the artist credit natively; a verification fetch that
+// comes back without one must not blank it, or the fix above buys nothing on
+// the very candidates the search found.
+func TestVerificationKeepsTheSearchHitsArtist(t *testing.T) {
+	e, ctx := newTestEnricher(t)
+	seedAlbum(t, e, ctx, 12)
+	hit := mbReleaseJSON("mb-right", "rg-1", "Abbey Road", 12)
+	thin := `{"id":"mb-right","title":"Abbey Road","date":"2019-01-01","country":"GB",
+		"release-group":{"id":"rg-1"},"media":` + mbTracksJSON(12) + `}`
+	var n int32
+	countingStub(e, &n, `{"releases":[`+hit+`]}`, map[string]string{"mb-right": thin})
+
+	if err := e.runMatching(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, ok, err := e.matches.Get(ctx, testAlbumID)
+	if err != nil || !ok {
+		t.Fatalf("no decision stored (ok=%v err=%v)", ok, err)
+	}
+	var cands []candidate
+	if err := json.Unmarshal(d.Candidates, &cands); err != nil {
+		t.Fatal(err)
+	}
+	if len(cands) != 1 {
+		t.Fatalf("candidates = %d, want 1", len(cands))
+	}
+	if cands[0].Artist != "The Beatles" {
+		t.Errorf("candidate artist = %q, want %q (the search hit's credit)", cands[0].Artist, "The Beatles")
+	}
+	if cands[0].RGMbid != "rg-1" {
+		t.Errorf("candidate rgMbid = %q, want rg-1", cands[0].RGMbid)
+	}
+}
+
 func mustTracks(t *testing.T, e *Enricher, ctx context.Context) []repo.Track {
 	t.Helper()
 	ts, err := e.tracks.ByAlbum(ctx, testAlbumID)

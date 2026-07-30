@@ -119,6 +119,70 @@ func TestDiscography(t *testing.T) {
 	}
 }
 
+// dzAlbumServer fakes /search/album + /album/{id} for the contributor lookup.
+func dzAlbumServer(t *testing.T, searchAlbum, album string) *Deezer {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search/album", func(rw http.ResponseWriter, r *http.Request) { rw.Write([]byte(searchAlbum)) })
+	mux.HandleFunc("/album/", func(rw http.ResponseWriter, r *http.Request) { rw.Write([]byte(album)) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return &Deezer{c: newPoliteClient(), base: srv.URL}
+}
+
+func TestAlbumContributors(t *testing.T) {
+	const found = `{"data":[{"id":42,"title":"Barber & Bruch Violin Concertos","artist":{"name":"Esther Yoo"}}]}`
+
+	tests := []struct {
+		name, search, album string
+		want                []string
+		wantErr             bool
+	}{
+		{
+			name:   "contributors in Deezer order",
+			search: found,
+			album:  `{"id":42,"contributors":[{"name":"Esther Yoo"},{"name":"Royal Philharmonic Orchestra"},{"name":"Vasily Petrenko"}]}`,
+			want:   []string{"Esther Yoo", "Royal Philharmonic Orchestra", "Vasily Petrenko"},
+		},
+		{"missing contributors", found, `{"id":42}`, nil, false},
+		{"empty contributors", found, `{"id":42,"contributors":[]}`, nil, false},
+		{"album 404s", found, `{"error":{"type":"DataException"}}`, nil, false},
+		{"album not found in search", `{"data":[]}`, `{"id":42,"contributors":[{"name":"X"}]}`, nil, false},
+		{"malformed album JSON", found, `{"id":42,"contributors":`, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := dzAlbumServer(t, tt.search, tt.album)
+			got, err := d.AlbumContributors(context.Background(), "Esther Yoo", "Barber & Bruch Violin Concertos")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %#v, want %#v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestContributorsAgree(t *testing.T) {
+	dz := []string{"Esther Yoo", "Royal Philharmonic Orchestra", "Vasily Petrenko"}
+	if !contributorsAgree(dz, []string{"Василий Петренко", "The Royal Philharmonic Orchestra"}) {
+		t.Error("one overlap (modulo norm) should be enough")
+	}
+	// the T2 Trainspotting case: right query, wrong album, no shared credit.
+	if contributorsAgree([]string{"Wolf Alice", "Young Fathers"}, []string{"Iggy Pop", "Brian Eno"}) {
+		t.Error("disjoint credits must not agree")
+	}
+	if contributorsAgree(nil, []string{"Iggy Pop"}) {
+		t.Error("no contributors must not agree")
+	}
+}
+
 func TestAlbumCoverURL(t *testing.T) {
 	d := dzServer(t, "", "", "", `{"data":[{"id":1,"cover_xl":"https://c/xl.jpg"}]}`)
 	got, err := d.AlbumCoverURL(context.Background(), "Daft Punk", "Discovery")

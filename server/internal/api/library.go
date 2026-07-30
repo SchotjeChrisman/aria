@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"aria/internal/analyze"
 	"aria/internal/genres"
@@ -350,6 +351,10 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	artByAlbum := map[string]bool{}
 	displayByAlbum := map[string]string{}
 	composersByAlbum := map[string][]string{}
+	// the two halves of the album-header artist line, kept apart until the
+	// Latin map is in hand below — they are only comparable once latinised
+	perfByAlbum := map[string][]string{}
+	dzByAlbum := map[string][]string{}
 	// corrections from a confirmed MusicBrainz match, fanned onto the album's
 	// tracks. Built as a map rather than fanned field-by-field so an absent
 	// correction is simply an absent key — an empty string here must not blank
@@ -357,12 +362,14 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 	fixByAlbum := map[string]map[string]any{}
 	for k, raw := range enrichAlbum {
 		var e struct {
-			Art           bool     `json:"art"`
-			DisplayArtist string   `json:"displayArtist"`
-			Composers     []string `json:"composers"`
-			Album         string   `json:"album"`
-			AlbumArtist   string   `json:"albumArtist"`
-			Year          int      `json:"year"`
+			Art            bool     `json:"art"`
+			DisplayArtist  string   `json:"displayArtist"`
+			Composers      []string `json:"composers"`
+			Performers     []string `json:"performers"`
+			DzContributors []string `json:"dzContributors"`
+			Album          string   `json:"album"`
+			AlbumArtist    string   `json:"albumArtist"`
+			Year           int      `json:"year"`
 		}
 		if json.Unmarshal(raw, &e) != nil {
 			continue
@@ -372,6 +379,8 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		}
 		displayByAlbum[k] = e.DisplayArtist
 		composersByAlbum[k] = e.Composers
+		perfByAlbum[k] = e.Performers
+		dzByAlbum[k] = e.DzContributors
 		fix := map[string]any{}
 		if e.Album != "" {
 			fix["album"] = e.Album
@@ -397,6 +406,17 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		if latin, err = ln.LatinNames(ctx); err != nil {
 			return nil, err
 		}
+	}
+	// The album-header artist line, one list per album. Only albums whose credit
+	// actually split into composers and performers have one — the enricher
+	// stores `performers` only in that case, so an ordinary album gets no key at
+	// all rather than an empty array.
+	albumArtists := make(map[string][]string, len(perfByAlbum))
+	for k, ps := range perfByAlbum {
+		if len(ps) == 0 {
+			continue
+		}
+		albumArtists[k] = mergeAlbumArtists(ps, composersByAlbum[k], dzByAlbum[k], latin)
 	}
 
 	// Enrichment-derived genres per album: MusicBrainz's community-voted genre
@@ -488,12 +508,27 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 			if cs := composersByAlbum[t.AlbumID]; len(cs) > 0 && str(m["composer"]) == "" {
 				m["composer"] = strings.Join(cs, ", ")
 			}
+			// The scalar above is unchanged and stays authoritative: it is what
+			// the grids, search and now-playing render and what album grouping
+			// keys on. This is the album page's fuller credit line, and nothing
+			// else reads it.
+			if list := albumArtists[t.AlbumID]; len(list) > 0 {
+				m["albumArtists"] = list
+			}
 		}
 		if ae := editAlbum[t.AlbumID]; ae != nil {
 			for _, f := range albumFan {
 				if v, ok := ae[f]; ok {
 					m[f] = v
 				}
+			}
+			// A user-set album artist takes the derived list with it rather than
+			// overriding one of its entries. albumArtists is deliberately NOT in
+			// albumFan: no editor writes a list, so fanning it would only mean an
+			// edit that names the album artist leaves the album page still
+			// showing the credit it was overriding.
+			if _, ok := ae["albumArtist"]; ok {
+				delete(m, "albumArtists")
 			}
 		}
 		if raw, ok := editTrack[t.ID]; ok {
@@ -650,6 +685,106 @@ func latinize(m map[string]any, latin map[string]string) {
 			pm["name"] = v
 		}
 	}
+}
+
+// isLatinName reports whether every letter in s is Latin script; digits, spaces
+// and punctuation are ignored. Mirrors enrich.isLatin, which is unexported —
+// one loop here is cheaper than widening that package's surface for it.
+func isLatinName(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeAlbumArtists builds the album-header artist line: MusicBrainz's release
+// performers (already in Qobuz's order — lead, then ensembles, then the rest —
+// and in the raw script) latinised, then supplemented with any contributor
+// Deezer credits that MusicBrainz left off.
+//
+// The merge happens HERE, at display time, and not in the enricher: each side
+// is cached exactly as its source published it, and the only thing that makes
+// the two comparable is the Latin substitution — which is itself a display step
+// whose map grows every time the names phase resolves another spelling. Merging
+// at write time would freeze one pass's half-resolved view into the cache.
+func mergeAlbumArtists(performers, composers, dz []string, latin map[string]string) []string {
+	out := make([]string, 0, len(performers)+len(dz))
+	resolved := true
+	for _, p := range performers {
+		if v, ok := latin[p]; ok {
+			p = v
+		}
+		resolved = resolved && isLatinName(p)
+		out = append(out, p)
+	}
+	// One unresolved name suppresses the Deezer supplement for the whole album.
+	// Deezer publishes Latin names, so a performer still reading "Василий
+	// Петренко" cannot be recognised in Deezer's "Vasily Petrenko" and the same
+	// person would be listed twice. Skipping is self-healing: the names phase
+	// resolves the spelling and the next build merges cleanly, so the cost is a
+	// slightly short list for one pass instead of a visible duplicate.
+	if !resolved || len(dz) == 0 {
+		return out
+	}
+	seen := make(map[string]bool, len(out)+len(composers))
+	for _, n := range out {
+		seen[normName(n)] = true
+	}
+	// Composers are on the credit, not on the stage, and Deezer lists them as
+	// contributors anyway — without this, "Antonio Vivaldi" appears among the
+	// performers of Janine Jansen's Four Seasons.
+	//
+	// ponytail: matched on the credit name only, because that is all the album
+	// blob carries. Ceiling is a release that credits a composer under a name
+	// Deezer spells differently ("Bruch" vs "Max Bruch"); the upgrade is to
+	// store the underlying artist name alongside the credit name and check both.
+	for _, c := range composers {
+		if v, ok := latin[c]; ok {
+			c = v
+		}
+		seen[normName(c)] = true
+	}
+	for _, c := range dz {
+		if k := normName(c); !seen[k] {
+			seen[k] = true
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// normName is the key the Deezer supplement dedupes on. It deliberately mirrors
+// enrich.norm, the function that decided these two lists agree in the first
+// place: contributorsAgree only caches a Deezer list once norm() says it
+// overlaps MusicBrainz's performers, so a WEAKER key here admits exactly the
+// pairs that check waved through and prints them twice. Verified pairs that
+// plain lowercasing splits and norm() joins: "Academy of St. Martin in the
+// Fields" / "Academy of St Martin in the Fields", "Orchestre de l'Opéra" with a
+// straight versus a curly apostrophe, and "The Royal Philharmonic Orchestra" /
+// "Royal Philharmonic Orchestra".
+//
+// Not normTitle: that strips edition markers ("(Live)", "(Deluxe)"), which is
+// right for a release title and wrong for a person or an ensemble.
+func normName(s string) string {
+	var b strings.Builder
+	prevSpace := true
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			prevSpace = false
+		case r == '\'' || r == '’':
+			// deleted, not spaced — same reasoning as enrich.norm: taggers
+			// disagree about the glyph, and splitting the word there invents a
+			// difference that is not in the name
+		case !prevSpace:
+			b.WriteRune(' ')
+			prevSpace = true
+		}
+	}
+	return strings.TrimPrefix(strings.TrimSpace(b.String()), "the ")
 }
 
 // asOnDemand returns the enricher's on-demand surface, if wired.

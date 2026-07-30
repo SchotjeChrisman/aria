@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"log"
@@ -24,6 +25,18 @@ import (
 )
 
 const version = "3.0.0"
+
+// clearUnpinnedDecisions drops every non-pinned match decision so the next
+// enrichment pass re-decides the album from scratch, and reports how many went.
+// Raw SQL rather than repo.Matches.Reset only for that count — a boot-time
+// one-shot that silently empties a table is the one thing the log should say.
+func clearUnpinnedDecisions(ctx context.Context, db *sql.DB) (int64, error) {
+	res, err := db.ExecContext(ctx, `DELETE FROM match_decisions WHERE COALESCE(pinned, 0) = 0`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe /healthz on localhost and exit 0/1 (container healthcheck)")
@@ -122,6 +135,29 @@ func main() {
 			log.Printf("album id remap flag: %v", err)
 		}
 	}
+
+	// One-shot re-match. Neither release lookup asked MusicBrainz for
+	// artist-credits, so rel.ArtistCredit was always empty and the matcher's
+	// artist distance scored a constant maximum on every candidate of every
+	// album. Both the stored distances and the verdicts drawn from them were
+	// therefore decided without the artist signal entirely; nothing short of
+	// re-deciding picks it up, because a decision is only revisited when the
+	// album's trackSig moves and no file has changed.
+	//
+	// Pinned rows are the user's explicit choice of release and survive. `edits`
+	// is untouched too: "use my own tags" is a user `local` living there, not in
+	// match_decisions, so those albums keep their override while still
+	// re-deciding underneath it.
+	if v, _ := deps.Settings.Get(ctx, "artistCreditRematch"); v != "1" {
+		if n, err := clearUnpinnedDecisions(ctx, sqlDB); err != nil {
+			log.Printf("artist-credit re-match: %v", err)
+		} else if err := deps.Settings.Set(ctx, "artistCreditRematch", "1"); err != nil {
+			log.Printf("artist-credit re-match flag: %v", err)
+		} else {
+			log.Printf("artist-credit re-match: %d decisions cleared", n)
+		}
+	}
+
 	if n, err := deps.Tracks.Count(ctx); err != nil {
 		log.Fatalf("tracks: %v", err)
 	} else if n == 0 && deps.Scanner != nil {

@@ -67,6 +67,85 @@ func classicalDeps(t *testing.T) *Deps {
 	return deps
 }
 
+// putAlbumBlob replaces the album's enrichment entry — classicalDeps writes the
+// pre-v5 shape, with no header list on it.
+func putAlbumBlob(t *testing.T, d *Deps, doc string) {
+	t.Helper()
+	if err := d.EnrichCache.Put(context.Background(), "album", classicalAlbumID, json.RawMessage(doc), "now"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The album-header artist line: MusicBrainz's performers latinised, then
+// supplemented from Deezer — with the two failure modes that make the merge a
+// display-time step rather than something the enricher could have cached.
+func TestMergedAlbumArtists(t *testing.T) {
+	const (
+		yoo = `"displayArtist":"Esther Yoo","composers":["Barber","Bruch"]`
+		rpo = "Royal Philharmonic Orchestra"
+	)
+	for _, tc := range []struct {
+		name, blob string
+		want       []string
+	}{
+		{
+			name: "Deezer supplements what MusicBrainz left out",
+			blob: `{"v":5,"done":true,` + yoo + `,"performers":["Esther Yoo","` + rpo + `"],` +
+				`"dzContributors":["Esther Yoo","` + rpo + `","Vasily Petrenko"]}`,
+			want: []string{"Esther Yoo", rpo, "Vasily Petrenko"},
+		},
+		{
+			// the whole reason both sides are latinised before comparing: the
+			// stored performer is Cyrillic and Deezer's is not
+			name: "a name already on the list is not appended in its Latin spelling",
+			blob: `{"v":5,"done":true,` + yoo + `,"performers":["Esther Yoo","` + rpo + `","Василий Петренко"],` +
+				`"dzContributors":["Esther Yoo","` + rpo + `","Vasily Petrenko"]}`,
+			want: []string{"Esther Yoo", rpo, "Vasily Petrenko"},
+		},
+		{
+			name: "a composer Deezer credits is not a performer",
+			blob: `{"v":5,"done":true,"displayArtist":"Janine Jansen","composers":["Antonio Vivaldi"],` +
+				`"performers":["Janine Jansen"],"dzContributors":["Janine Jansen","Antonio Vivaldi"]}`,
+			want: []string{"Janine Jansen"},
+		},
+		{
+			// unresolved spelling: merging would list the same person twice, so
+			// the supplement is skipped until the names phase catches up
+			name: "an unresolvable performer suppresses the supplement",
+			blob: `{"v":5,"done":true,` + yoo + `,"performers":["Esther Yoo","Иван Иванов"],` +
+				`"dzContributors":["Esther Yoo","Ivan Ivanov","` + rpo + `"]}`,
+			want: []string{"Esther Yoo", "Иван Иванов"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := classicalDeps(t)
+			putAlbumBlob(t, d, tc.blob)
+			out, err := buildMergedTracks(context.Background(), d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := out[0]["albumArtists"].([]string)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("albumArtists = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// An ordinary album has no composer split, so there is no header list to
+// publish and no empty array either — the key is simply absent.
+func TestOrdinaryAlbumHasNoAlbumArtists(t *testing.T) {
+	d := classicalDeps(t)
+	putAlbumBlob(t, d, `{"v":5,"done":true,"mbid":"rel-1","album":"A","albumArtist":"B"}`)
+	out, err := buildMergedTracks(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := out[0]["albumArtists"]; ok {
+		t.Errorf("albumArtists = %v, want the key to be absent", v)
+	}
+}
+
 // Display policy: MB's performer becomes the album artist, the composers split
 // off the credit, and every credited name reads Latin — while the DB and the
 // enrich cache keep the original script.
@@ -206,10 +285,14 @@ func TestLatinNameResolvesOnReads(t *testing.T) {
 	}
 }
 
-// A user's album edit pins the display artist: it is applied after the policy.
+// A user's album edit pins the display artist: it is applied after the policy,
+// and it takes the derived header list with it — otherwise the album page would
+// keep rendering the credit the user was overriding.
 func TestAlbumEditBeatsDisplayArtist(t *testing.T) {
 	ctx := context.Background()
 	d := classicalDeps(t)
+	putAlbumBlob(t, d, `{"v":5,"done":true,"displayArtist":"Esther Yoo","composers":["Barber"],`+
+		`"performers":["Esther Yoo","Royal Philharmonic Orchestra"]}`)
 	if err := d.Edits.Put(ctx, "album", classicalAlbumID, json.RawMessage(`{"albumArtist":"My Own Name"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -219,6 +302,9 @@ func TestAlbumEditBeatsDisplayArtist(t *testing.T) {
 	}
 	if got := str(out[0]["albumArtist"]); got != "My Own Name" {
 		t.Errorf("albumArtist = %v, want %v", got, "My Own Name")
+	}
+	if v, ok := out[0]["albumArtists"]; ok {
+		t.Errorf("albumArtists = %v, want it gone with the edited scalar", v)
 	}
 }
 

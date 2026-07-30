@@ -96,6 +96,33 @@ void main() {
       expect(t.performers.first.role, 'violin');
       expect(t.performers.last.role, isNull);
     });
+
+    test('parses albumArtists, degrading to empty on anything unexpected', () {
+      expect(
+        Track.fromJson(trackJson(extra: {
+          'albumArtists': ['Esther Yoo', 'Royal Philharmonic Orchestra'],
+        })).albumArtists,
+        ['Esther Yoo', 'Royal Philharmonic Orchestra'],
+      );
+      // absent (ordinary album, or a server predating the field)
+      expect(Track.fromJson(trackJson()).albumArtists, isEmpty);
+      expect(
+        Track.fromJson(trackJson(extra: {'albumArtists': null})).albumArtists,
+        isEmpty,
+      );
+      expect(
+        Track.fromJson(trackJson(extra: {'albumArtists': 'Esther Yoo'}))
+            .albumArtists,
+        isEmpty,
+      );
+      // a list with non-string members keeps the strings, drops the rest
+      expect(
+        Track.fromJson(trackJson(extra: {
+          'albumArtists': ['Esther Yoo', 7, null, {'name': 'x'}],
+        })).albumArtists,
+        ['Esther Yoo'],
+      );
+    });
   });
 
   group('Album.group', () {

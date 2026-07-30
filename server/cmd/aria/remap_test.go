@@ -328,6 +328,51 @@ func TestRemapMergeCollisions(t *testing.T) {
 	}
 }
 
+// The one-shot artist-credit re-match. Every decision was scored with an artist
+// distance that was a constant, so all of them have to be re-decided — except
+// the pinned ones, which are the user's own choice of release and were never
+// scored at all. Boot runs it before the settings flag is written, so it must
+// also be safe to run twice.
+func TestClearUnpinnedDecisions(t *testing.T) {
+	d, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		key    string
+		pinned int
+	}{{id("a"), 0}, {id("b"), 0}, {id("p"), 1}} {
+		mustExec(t, d, `INSERT INTO match_decisions (albumId, state, reason, decidedAt, attempts, pinned)
+			VALUES (?, 'matched', 'test', '2026-01-01', 1, ?)`, tc.key, tc.pinned)
+	}
+
+	n, err := clearUnpinnedDecisions(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("deleted %d rows, want 2", n)
+	}
+	var left string
+	if err := d.QueryRow(`SELECT albumId FROM match_decisions`).Scan(&left); err != nil {
+		t.Fatalf("the pinned decision did not survive: %v", err)
+	}
+	if left != id("p") {
+		t.Errorf("surviving decision = %s, want the pinned %s", left, id("p"))
+	}
+
+	// a crash between the delete and the settings flag re-runs this at next boot
+	if n, err := clearUnpinnedDecisions(ctx, d); err != nil || n != 0 {
+		t.Errorf("second run deleted %d rows (%v), want 0", n, err)
+	}
+	if err := d.QueryRow(`SELECT albumId FROM match_decisions`).Scan(&left); err != nil || left != id("p") {
+		t.Errorf("pinned decision after re-run = %s (%v), want it still there", left, err)
+	}
+}
+
 // The 007 upgrade re-keys albums from stored columns alone — no re-parse, so no
 // boot-blocking scan, nothing to lose on a restart, and no row can go missing
 // because one file happened to be unreadable.
