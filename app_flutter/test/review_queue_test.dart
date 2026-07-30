@@ -89,4 +89,30 @@ void main() {
     expect(ds.single.separation, 0.0);
     expect(ds.single.candidates.single.why['artist'], 1.0);
   });
+
+  test('a rematched decision carries no title, so the dialog must not re-read it', () {
+    // GET/POST /api/albums/{id}/match return the decision WITHOUT album or
+    // albumArtist — Matches.Get does not join the albums table the way the
+    // queue's NonMatched does, and both fields are omitempty. Verified against
+    // the live server. A dialog that recomputes its header from the refreshed
+    // decision blanks the title of the album the user is looking at.
+    final fromQueue = MatchDecision.fromJson({
+      'albumId': 'a',
+      'state': 'review',
+      'reason': 'weak-match',
+      'album': 'Puppet Show',
+      'albumArtist': 'Ally Venable Band',
+      'candidates': null,
+    });
+    final fromRematch = MatchDecision.fromJson({
+      'albumId': 'a',
+      'state': 'review',
+      'reason': 'weak-match',
+      'candidates': null,
+    });
+
+    expect(fromQueue.album, 'Puppet Show');
+    expect(fromRematch.album, isEmpty);
+    expect(fromRematch.albumArtist, isEmpty);
+  });
 }
