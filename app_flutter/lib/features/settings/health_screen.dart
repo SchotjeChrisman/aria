@@ -2,20 +2,9 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/connection.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
-
-/// Diagnostics, fetched on demand rather than kept live: nothing here changes
-/// until a scan, analysis or matching pass runs, and all three already announce
-/// themselves over SSE.
-final _healthProvider = FutureProvider.autoDispose<LibraryHealth>(
-  (ref) => ref.watch(apiClientProvider).libraryHealth(),
-);
-
-final _duplicatesProvider = FutureProvider.autoDispose<List<DuplicateGroup>>(
-  (ref) => ref.watch(apiClientProvider).duplicates(),
-);
+import 'settings_providers.dart';
 
 /// Section headings and the one line explaining why each is worth knowing.
 /// Kinds the server adds later fall through to their raw name rather than
@@ -53,7 +42,7 @@ class HealthScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final health = ref.watch(_healthProvider);
+    final health = ref.watch(healthProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Library health'),
@@ -62,8 +51,8 @@ class HealthScreen extends ConsumerWidget {
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              ref.invalidate(_healthProvider);
-              ref.invalidate(_duplicatesProvider);
+              ref.invalidate(healthProvider);
+              ref.invalidate(duplicatesProvider);
             },
           ),
         ],
@@ -172,7 +161,7 @@ class _Duplicates extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final dupes = ref.watch(_duplicatesProvider);
+    final dupes = ref.watch(duplicatesProvider);
     return dupes.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: AriaSpace.s3),

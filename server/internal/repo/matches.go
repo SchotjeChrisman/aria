@@ -150,12 +150,24 @@ func (r *Matches) Get(ctx context.Context, albumID string) (*Decision, bool, err
 
 // NonMatched is the review queue: every album the matcher did not settle,
 // joined to its title and artist so the client needs no second request.
+//
+// The edits join mirrors PendingAlbums, and it is not optional. "state: local"
+// is the user answering "this is not in MusicBrainz, my tags are the truth",
+// and it is stored in edits — the matcher's own decision row is left alone,
+// because the answer is the user's, not a verdict to be recomputed. Without
+// this clause the two queries disagree about what settled means: PendingAlbums
+// stops re-deciding the album, so its match_decisions row keeps whatever state
+// it had forever, and a review queue reading only match_decisions shows it
+// forever too. The album could never be cleared from the queue by the person
+// who just cleared it.
 func (r *Matches) NonMatched(ctx context.Context) ([]Decision, error) {
 	return r.query(ctx, `
 		SELECT `+mDecisionCols+`, COALESCE(a.album, ''), COALESCE(a.albumArtist, '')
 		FROM match_decisions m
 		LEFT JOIN (`+albumsExpr+`) a ON a.albumId = m.albumId
+		LEFT JOIN edits e ON e.kind = 'album' AND e.key = m.albumId
 		WHERE m.state <> 'matched'
+		  AND COALESCE(json_extract(e.json, '$.state'), '') <> 'local'
 		ORDER BY m.distance IS NULL, m.distance, m.albumId`)
 }
 

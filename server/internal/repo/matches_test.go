@@ -184,3 +184,51 @@ func TestReleaseGroupVotes(t *testing.T) {
 		t.Errorf("votes = %v, want one each for rg-a and rg-b", got)
 	}
 }
+
+// The review queue and the pending set must agree on what "settled" means.
+// A user answering "not in MusicBrainz, use my tags" writes edits.state=local,
+// and PendingAlbums stops re-deciding the album — so its match_decisions row
+// freezes at whatever it last was. A queue reading only match_decisions would
+// list that album forever, and the one action offered to clear it is the very
+// action that put it there.
+func TestNonMatchedHonoursTheLocalEdit(t *testing.T) {
+	m, tr, ed, ctx := matchesFixture(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, tr, ctx, "answered", "open")
+	for _, id := range []string{"answered", "open"} {
+		if err := m.Put(ctx, Decision{AlbumID: id, State: "review", Reason: "weak-match", DecidedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := m.NonMatched(ctx); err != nil || len(got) != 2 {
+		t.Fatalf("NonMatched = %+v (err %v), want both before either is answered", got, err)
+	}
+
+	if err := ed.Put(ctx, "album", "answered", json.RawMessage(`{"state":"local"}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.NonMatched(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].AlbumID != "open" {
+		t.Fatalf("NonMatched = %+v, want just `open` — the user answered `answered`", got)
+	}
+
+	// PendingAlbums must agree about the answered one specifically: dropping it
+	// from the queue while still re-deciding it behind the user's back is the
+	// same disagreement in the other direction.
+	for _, id := range pendingIDs(t, m, ctx, now) {
+		if id == "answered" {
+			t.Errorf("PendingAlbums still re-decides %q after the user answered it", id)
+		}
+	}
+
+	// An unrelated edit says nothing about identity and must not empty the queue.
+	if err := ed.Put(ctx, "album", "open", json.RawMessage(`{"blurb":"hi"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := m.NonMatched(ctx); len(got) != 1 {
+		t.Fatalf("NonMatched = %d rows, want `open` still listed", len(got))
+	}
+}
