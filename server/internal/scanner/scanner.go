@@ -85,10 +85,25 @@ func isLossless(format, codec string) bool {
 var workRE = regexp.MustCompile(`^(.+)(?::|\s[-–—])\s+((?:[IVXLCDM]+|No\.?\s*\d+|\d+)[.):]\s*.+)$`)
 
 // A disc subfolder must carry a numeral. That single requirement is what keeps
-// "Disc" (a band), "Discography", "Disco", "CD Singles" and "Disc Jockey" from
-// folding. The roman numerals are an explicit whitelist, not [ivxlcdm]{1,4},
-// which would match "Disc Mix".
-var discSegRE = regexp.MustCompile(`(?i)^(?:cd|disc|disk)[ _.\-]*(\d{1,3}|i{1,3}|iv|v|vi{1,3}|ix|x|one|two|three|four|five|six|seven|eight|nine|ten)(?:[ _.\-–—(\[].*)?$`)
+// "Disc" (a band), "Discography", "Disco", "CD Singles", "Disc Jockey",
+// "Vinyl Days" and "Cassette Tapes" from folding. The roman numerals are an
+// explicit whitelist, not [ivxlcdm]{1,4}, which would match "Disc Mix".
+//
+// The leading word is the folder's disc LABEL. cd/disc/disk cover hand-made
+// libraries; the rest are MusicBrainz medium formats, which is what a
+// MusicBrainz-aware tagger writes instead ("Digital Media 01", "Hybrid SACD 2").
+// Unrecognised, every one of those folders becomes its own album and a boxed set
+// fragments into one album per disc — the single largest source of phantom
+// albums in a Picard-organised library.
+//
+// ponytail: a fixed word list, not "any word followed by a number" — the latter
+// swallows an album genuinely called "Apollo 11". The robust rule (are this
+// folder's SIBLINGS named the same way?) needs cross-folder context, and
+// albumIdentity is deliberately a pure function of one path so migration 007's
+// remap can recompute ids from stored columns without re-walking the library.
+// Ceiling: formats not listed here (`7" Vinyl`, localised names) still split.
+// Upgrade: hand the sibling listing to the scanner and fold on the shape.
+var discSegRE = regexp.MustCompile(`(?i)^(?:digital media|hybrid sacd|reel-to-reel|dvd-audio|dvd-video|dualdisc|minidisc|cassette|blu-ray|shm-cd|vinyl|sacd|hdcd|dvd|cd|disc|disk)[ _.\-]*(\d{1,3}|i{1,3}|iv|v|vi{1,3}|ix|x|one|two|three|four|five|six|seven|eight|nine|ten)(?:[ _.\-–—(\[].*)?$`)
 
 // Trailing disc marker on an ALBUM tag: folding the directory achieves nothing
 // if the tags say "Album (Disc 1)" / "Album (Disc 2)", because the album key
@@ -139,6 +154,17 @@ func (s *Scanner) Status() any {
 		Done     int  `json:"done"`
 		Total    int  `json:"total"`
 	}{s.scanning, s.done, s.total}
+}
+
+// LastParsed is how many files the most recent scan actually re-read, as
+// opposed to skipped on unchanged mtime+size. Zero after a scan means the
+// library is byte-for-byte what it was, which is what lets the periodic scan
+// decide whether the enrich/fingerprint/analyse chain has anything to chew on.
+// Read it straight after Scan returns: it is overwritten by the next scan.
+func (s *Scanner) LastParsed() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.parsed
 }
 
 // Busy reports whether a scan is in flight. The loudness-analysis job reads it

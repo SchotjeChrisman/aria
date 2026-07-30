@@ -104,14 +104,21 @@ func main() {
 
 	// migration 007 moved album identity from tag strings to disk layout.
 	// Recompute the ids from the columns they derive from and carry tags, edits,
-	// enrichment and art over to them — pure DB work, no library re-parse, so
-	// this does not hold /healthz down while an NFS mount is walked.
-	if v, _ := deps.Settings.Get(ctx, "albumIdRemap"); v != "007" {
+	// enrichment, matches and art over to them — pure DB work, no library
+	// re-parse, so this does not hold /healthz down while an NFS mount is walked.
+	//
+	// The sentinel is bumped whenever the GROUPING RULE changes, not only by a
+	// schema migration: the ids are a pure function of stored columns, so
+	// re-running this is how a rule change reaches a library that will otherwise
+	// never re-parse the unchanged files it applies to. "012" is discSegRE
+	// learning the MusicBrainz medium formats ("Digital Media 01"), which folds
+	// multi-disc sets that had been one album per disc.
+	if v, _ := deps.Settings.Get(ctx, "albumIdRemap"); v != "012" {
 		if err := upgradeAlbumIDs(ctx, sqlDB, deps.Albums); err != nil {
 			log.Printf("album identity upgrade: %v", err)
 		} else if err := remapAlbumIDs(ctx, sqlDB, cfg.DataDir); err != nil {
 			log.Printf("album id remap: %v", err)
-		} else if err := deps.Settings.Set(ctx, "albumIdRemap", "007"); err != nil {
+		} else if err := deps.Settings.Set(ctx, "albumIdRemap", "012"); err != nil {
 			log.Printf("album id remap flag: %v", err)
 		}
 	}
@@ -127,39 +134,58 @@ func main() {
 	}
 
 	// legacy kickEnrich() at boot: resume/refresh enrichment on every start,
-	// not only after POST /api/scan. Signal ctx stops it between items.
+	// not only after POST /api/scan. Signal ctx stops it between items. Kicked at
+	// boot because the alternative is that a server upgraded in place never
+	// analyses anything — nothing else calls it unless the user happens to
+	// rescan. "Hours of decoding on every restart" is not the cost: with nothing
+	// pending each pass is one query and an idle frame.
+	deps.GoBg(deps.RunPasses)
+
+	// Periodic rescan. Nothing else discovers a new album: the boot scan above
+	// only fires on an EMPTY library, so before this a server that was never
+	// manually rescanned would show a library frozen at first-run forever, and
+	// files changed on disk kept analysis results measured from their old bytes.
 	//
-	// The analysis pass is chained after it in the same GoBg, exactly as
-	// POST /api/scan does: sequential is what keeps the analyzer off the disk
-	// while the quick network-bound enrichment runs, and off itself. Kicked at
-	// boot too, because the alternative is that a server upgraded in place
-	// never analyses anything — nothing else calls it unless the user happens
-	// to rescan. "Hours of decoding on every restart" is not the cost:
-	// ListPending is empty once the library is analysed, so every later start
-	// is one query and an idle frame.
-	deps.GoBg(func(ctx context.Context) {
-		// Fingerprinting leads, for the reason POST /api/scan does the same: the
-		// enricher's matching phase scores candidates against the release groups
-		// AcoustID voted for, and a `matched` decision is never re-decided. An
-		// enricher that runs first on a fresh library locks in a text-search
-		// answer permanently. Same resume-on-boot argument as the others — with
-		// nothing pending it is one query and an idle frame.
-		if deps.Fingerprinter != nil {
-			if err := deps.Fingerprinter.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("fingerprint: %v", err)
+	// Two cadences, one goroutine, one select — which is also what serialises
+	// them: a tick that arrives while the other cadence is mid-scan waits its
+	// turn instead of colliding. (Scanner.Scan would refuse the overlap anyway,
+	// but refusing it means silently skipping that cadence's turn.)
+	//
+	// ponytail: tickers, not a cron expression — "every day at 04:00" needs a
+	// parser, a timezone and a UI to set it in, and this is a home-server rescan
+	// whose exact minute nobody cares about. Ceiling: the daily pass lands at
+	// boot-time + 24h, so a server restarted at 19:00 enriches at 19:00. If that
+	// ever needs to be an off-peak hour, the upgrade is one time.Until to the
+	// next 04:00 before the loop, not a cron dependency.
+	if cfg.ScanInterval > 0 || cfg.FullScanInterval > 0 {
+		log.Printf("periodic scan: every %s, with enrichment every %s",
+			orNever(cfg.ScanInterval), orNever(cfg.FullScanInterval))
+		deps.GoBg(func(ctx context.Context) {
+			// A nil channel blocks forever in a select, which is how a zero
+			// interval disables one cadence without branching the loop.
+			var quick, full <-chan time.Time
+			if cfg.ScanInterval > 0 {
+				t := time.NewTicker(cfg.ScanInterval)
+				defer t.Stop()
+				quick = t.C
 			}
-		}
-		if err := deps.Enricher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			log.Printf("enrich: %v", err)
-		}
-		deps.InvalidateTracks() // enrichment feeds credits/hasArt into /api/tracks
-		if deps.Analyzer != nil {
-			if err := deps.Analyzer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("analyze: %v", err)
+			if cfg.FullScanInterval > 0 {
+				t := time.NewTicker(cfg.FullScanInterval)
+				defer t.Stop()
+				full = t.C
 			}
-			deps.InvalidateTracks() // loudness feeds trackGainDb/albumGainDb
-		}
-	})
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-quick:
+					periodicScan(ctx, deps, false)
+				case <-full:
+					periodicScan(ctx, deps, true)
+				}
+			}
+		})
+	}
 
 	srv := &http.Server{
 		Addr: ":" + cfg.Port, Handler: api.New(deps),

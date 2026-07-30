@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"log"
 	"sync"
 
 	"aria/internal/config"
@@ -11,9 +13,12 @@ import (
 
 // Scanner runs a full library scan (concurrent, incremental). Scan returns the
 // resulting track count. Status is JSON-shaped progress, e.g.
-// {"scanning":bool,"done":int,"total":int}.
+// {"scanning":bool,"done":int,"total":int}. LastParsed is how many files the
+// last scan re-read rather than skipped, which is how the periodic scan tells
+// a quiet hour from one that needs the enrichment passes run.
 type Scanner interface {
 	Scan(ctx context.Context) (int, error)
+	LastParsed() int
 	Status() any
 }
 
@@ -112,6 +117,45 @@ func (d *Deps) GoBg(f func(context.Context)) {
 
 // WaitBg blocks until all GoBg work has finished.
 func (d *Deps) WaitBg() { d.bgWG.Wait() }
+
+// RunPasses is the fingerprint -> enrich -> analyse chain that follows a scan,
+// in that order and strictly sequentially. Three callers need it identically —
+// boot, POST /api/scan and the periodic scan — and it was copy-pasted between
+// the first two before the third made that untenable.
+//
+// The ORDER is load-bearing, not stylistic. Matching is a phase of the
+// enricher, and its strongest candidate source is the release groups AcoustID
+// voted for, which do not exist until fingerprinting has run. Behind the
+// enricher, a fresh library decides every album on text search alone, and a
+// `matched` decision is never revisited (retryAfter is empty for matched), so
+// that first weak answer is permanent.
+//
+// Sequential is what guarantees no pass ever runs concurrently with itself, and
+// keeps three disk-heavy jobs off each other and off the scanner. Each pass is
+// incremental: with nothing pending, every one of them is a single query.
+//
+// Cancellation is not an error worth logging: SIGTERM cancels the shared bg
+// context mid-pass by design, and every pass resumes from the DB next boot.
+func (d *Deps) RunPasses(ctx context.Context) {
+	if d.Fingerprinter != nil {
+		if err := d.Fingerprinter.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("fingerprint: %v", err)
+		}
+		// Nothing it writes reaches /api/tracks, hence no invalidate.
+	}
+	if d.Enricher != nil {
+		if err := d.Enricher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("enrich: %v", err)
+		}
+		d.InvalidateTracks() // enrichment feeds credits/hasArt into the merge
+	}
+	if d.Analyzer != nil {
+		if err := d.Analyzer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("analyze: %v", err)
+		}
+		d.InvalidateTracks() // loudness feeds trackGainDb/albumGainDb
+	}
+}
 
 // InvalidateTracks drops the cached merged /api/tracks view. Every mutation
 // that feeds the merge (scan/enrich done, edits, reidentify, tags) calls it;
