@@ -54,7 +54,13 @@ type popularCache struct {
 // v4: the release MBID no longer comes from an unverified top hit but from
 // match_decisions, so every album must be re-evaluated against its decision —
 // including the ones a previous pass matched to the wrong sibling release.
-const albumV = 4
+//
+// v5: neither release lookup asked MusicBrainz for artist-credits, so
+// rel.ArtistCredit was empty on every album ever enriched — no albumArtist
+// correction, no composer/performer split, and an artist distance that was a
+// constant. The inc= sets are fixed; this bump is what re-enriches the albums
+// that were cached against the broken responses.
+const albumV = 5
 
 type albumCache struct {
 	V    int     `json:"v"`
@@ -64,6 +70,15 @@ type albumCache struct {
 	// classical display policy, stored in the original script
 	DisplayArtist string   `json:"displayArtist,omitempty"`
 	Composers     []string `json:"composers,omitempty"`
+	// The album-header performer list, in Qobuz's order (lead, then ensembles,
+	// then the rest) and in MusicBrainz's RAW script — latinisation is a
+	// display-time step, so what is cached stays the source's own spelling.
+	Performers []string `json:"performers,omitempty"`
+	// The same list as Deezer publishes it: already Latin, and an independent
+	// witness to the ordering. Absent whenever Deezer is unreachable, does not
+	// know the album, or answers with an album whose credits do not overlap
+	// ours at all — see contributorsAgree.
+	DzContributors []string `json:"dzContributors,omitempty"`
 
 	// Corrections taken from the confirmed release. This is the DERIVED layer,
 	// deliberately not an `edits` row: `edits` is the human layer — it is what
@@ -789,7 +804,10 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 		return nil
 	}
 
-	if rel := e.mb.release(ctx, mbid, "recordings+recording-level-rels+work-rels+work-level-rels+artist-rels"); rel != nil {
+	// artist-credits first: without it MB returns artist-credit:null, and the
+	// album artist correction, the composer/performer split and the header list
+	// below all silently do nothing (see albumV v5).
+	if rel := e.mb.release(ctx, mbid, "artist-credits+recordings+recording-level-rels+work-rels+work-level-rels+artist-rels"); rel != nil {
 		// Corrections from the confirmed release, into the derived layer only.
 		// Reaching here already IS the safety gate: mbid is non-empty only for a
 		// decision of state `matched` — auto-applied past both distance and
@@ -802,8 +820,23 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 		// classical credit: "Barber, Bruch; Esther Yoo, …" is composers then
 		// performers. Only a real split is stored — on an ordinary release the
 		// tags are the better album artist than MB's first credit.
-		if da, comps := displayArtist(rel); len(comps) > 0 {
-			a.DisplayArtist, a.Composers = da, comps
+		if da, comps, perfs := displayArtist(rel); len(comps) > 0 {
+			a.DisplayArtist, a.Composers, a.Performers = da, comps, perfs
+			// Deezer's own header order, as a cross-check on ours. Keyed on the
+			// LEAD PERFORMER and never on the file's albumArtist tag: that tag on
+			// a classical rip is the composer, and searching Deezer for "Samuel
+			// Barber" confidently returns a Gregorio Allegri record by The
+			// Sixteen. Non-fatal by construction — Deezer is an extra, and an
+			// album that enriched fine yesterday must not start failing because
+			// api.deezer.com is down.
+			if e.dz != nil {
+				switch dzc, err := e.dz.AlbumContributors(ctx, da, rel.Title); {
+				case err != nil:
+					e.log("deezer contributors " + da + " – " + rel.Title + ": " + err.Error())
+				case contributorsAgree(dzc, perfs):
+					a.DzContributors = dzc
+				}
+			}
 		}
 		if err := e.put(ctx, KindAlbum, albumID, a); err != nil {
 			return err
@@ -824,7 +857,20 @@ func (e *Enricher) enrichAlbum(ctx context.Context, albumID string, ts []repo.Tr
 	// holds real embedded art (scanner-written). only a confirmed-absent file
 	// triggers a fetch — a transient stat error must not overwrite existing art
 	artPath := filepath.Join(e.dataDir, "art", albumID+".api.jpg")
-	if _, err := os.Stat(artPath); !ts[0].HasArt && errors.Is(err, os.ErrNotExist) {
+	switch _, err := os.Stat(artPath); {
+	case err == nil:
+		// The FILE outlives the cache entry, so the flag has to be recovered
+		// from disk rather than only set by a successful fetch. persist() drops
+		// the album blob whenever a decision changes, and the re-match sentinel
+		// makes that happen for every unpinned album at once; enrichAlbum then
+		// rebuilds `a` from the zero value with Art=false. Without this branch
+		// the fetch below is skipped (the file is right there), Art is never
+		// re-set, artByAlbum loses the album and the cover silently becomes a
+		// placeholder — permanently, because the V marker stops the album ever
+		// being revisited.
+		a.Art = true
+		return e.put(ctx, KindAlbum, albumID, a)
+	case !ts[0].HasArt && errors.Is(err, os.ErrNotExist):
 		if img := e.AlbumArt(ctx, ts[0].AlbumArtist, ts[0].Album, mbid); img != nil {
 			if err := os.WriteFile(artPath, img, 0o644); err != nil {
 				e.log("art write " + albumID + ": " + err.Error())

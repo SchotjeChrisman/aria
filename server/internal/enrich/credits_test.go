@@ -6,10 +6,14 @@ import (
 )
 
 // credit builds one artist-credit entry; id is what the release's artist-rels
-// are keyed by.
-func credit(id, name, join string) mbArtistCredit {
+// are keyed by. The optional typ is MB's artist type ("Orchestra", "Person", …),
+// which only arrives when the lookup asked for artist-credits.
+func credit(id, name, join string, typ ...string) mbArtistCredit {
 	c := mbArtistCredit{Name: name, JoinPhrase: join}
 	c.Artist.ID, c.Artist.Name = id, name
+	if len(typ) > 0 {
+		c.Artist.Type = typ[0]
+	}
 	return c
 }
 
@@ -35,9 +39,9 @@ func barberBruch() []mbArtistCredit {
 	return []mbArtistCredit{
 		credit("mb-barber", "Barber", ", "),
 		credit("mb-bruch", "Bruch", "; "), // MB's structural composer/performer split
-		credit("mb-yoo", "Esther Yoo", ", "),
-		credit("mb-petrenko", "Василий Петренко", ", "),
-		credit("mb-rpo", "Royal Philharmonic Orchestra", ""),
+		credit("mb-yoo", "Esther Yoo", ", ", "Person"),
+		credit("mb-petrenko", "Василий Петренко", ", ", "Person"),
+		credit("mb-rpo", "Royal Philharmonic Orchestra", "", "Orchestra"),
 	}
 }
 
@@ -112,12 +116,15 @@ func TestRoleOf(t *testing.T) {
 
 // The acceptance case: "Barber, Bruch" must display as Esther Yoo, with Barber
 // and Bruch as composers — and never the naive joined credit string.
+// The header list is the Qobuz/Deezer order: lead, then the ensembles, then
+// everyone else — never the raw credit order, which buries the orchestra behind
+// the conductor.
 func TestDisplayArtist(t *testing.T) {
 	cases := []struct {
-		name          string
-		in            mbRelease
-		wantArtist    string
-		wantComposers []string
+		name                          string
+		in                            mbRelease
+		wantArtist                    string
+		wantComposers, wantPerformers []string
 	}{
 		{
 			name: "barber bruch: soloist wins",
@@ -127,30 +134,52 @@ func TestDisplayArtist(t *testing.T) {
 				rel("mb-rpo", "orchestra"),
 			}},
 			wantArtist: "Esther Yoo", wantComposers: []string{"Barber", "Bruch"},
+			wantPerformers: []string{"Esther Yoo", "Royal Philharmonic Orchestra", "Василий Петренко"},
 		},
 		{
 			name: "no soloist: the conductor wins",
 			in: mbRelease{ArtistCredit: []mbArtistCredit{
-				credit("mb-bruch", "Bruch", "; "), credit("mb-rpo", "Royal Philharmonic Orchestra", ", "), credit("mb-petrenko", "Петренко", ""),
+				credit("mb-bruch", "Bruch", "; "), credit("mb-rpo", "Royal Philharmonic Orchestra", ", ", "Orchestra"), credit("mb-petrenko", "Петренко", "", "Person"),
 			}, Relations: []mbRelation{rel("mb-rpo", "orchestra"), rel("mb-petrenko", "conductor")}},
 			wantArtist: "Петренко", wantComposers: []string{"Bruch"},
+			wantPerformers: []string{"Петренко", "Royal Philharmonic Orchestra"},
 		},
 		{
 			name: "orchestra and choir only: credit order breaks the rank tie",
 			in: mbRelease{ArtistCredit: []mbArtistCredit{
-				credit("mb-bruch", "Bruch", "; "), credit("mb-rpo", "Royal Philharmonic Orchestra", ", "), credit("mb-choir", "RPO Chorus", ""),
+				credit("mb-bruch", "Bruch", "; "), credit("mb-rpo", "Royal Philharmonic Orchestra", ", ", "Orchestra"), credit("mb-choir", "RPO Chorus", "", "Choir"),
 			}, Relations: []mbRelation{rel("mb-choir", "chorus"), rel("mb-rpo", "orchestra")}},
 			wantArtist: "Royal Philharmonic Orchestra", wantComposers: []string{"Bruch"},
+			wantPerformers: []string{"Royal Philharmonic Orchestra", "RPO Chorus"},
 		},
 		{
 			name:       "no relations at all: first performer credit",
 			in:         mbRelease{ArtistCredit: barberBruch()},
 			wantArtist: "Esther Yoo", wantComposers: []string{"Barber", "Bruch"},
+			// the real ec17a59b case: MB publishes no release-level performance
+			// rels, so this — not the ranked branch above — is what actually runs
+			wantPerformers: []string{"Esther Yoo", "Royal Philharmonic Orchestra", "Василий Петренко"},
+		},
+		{
+			name: "ensemble-free classical credit keeps plain credit order",
+			in: mbRelease{ArtistCredit: []mbArtistCredit{
+				credit("mb-bach", "Bach", "; "), credit("mb-gould", "Glenn Gould", ", ", "Person"),
+				credit("mb-mm", "Yehudi Menuhin", "", "Person"),
+			}},
+			wantArtist: "Glenn Gould", wantComposers: []string{"Bach"},
+			wantPerformers: []string{"Glenn Gould", "Yehudi Menuhin"},
 		},
 		{
 			name:       "ordinary release: today's behaviour, unchanged",
 			in:         mbRelease{ArtistCredit: []mbArtistCredit{credit("a", "Dire Straits", "")}},
-			wantArtist: "Dire Straits", wantComposers: nil,
+			wantArtist: "Dire Straits", wantComposers: nil, wantPerformers: nil,
+		},
+		{
+			name: "no split: a multi-artist pop credit publishes no header list",
+			in: mbRelease{ArtistCredit: []mbArtistCredit{
+				credit("a", "Queen", " & ", "Group"), credit("b", "David Bowie", "", "Person"),
+			}},
+			wantArtist: "Queen", wantComposers: nil, wantPerformers: nil,
 		},
 		{
 			name: "relation for an artist that isn't credited is ignored",
@@ -158,21 +187,25 @@ func TestDisplayArtist(t *testing.T) {
 				rel("mb-nobody", "instrument", "kazoo"), rel("mb-petrenko", "conductor"),
 			}},
 			wantArtist: "Василий Петренко", wantComposers: []string{"Barber", "Bruch"},
+			wantPerformers: []string{"Василий Петренко", "Royal Philharmonic Orchestra", "Esther Yoo"},
 		},
 		{
 			name:       "no credits at all",
 			in:         mbRelease{Relations: []mbRelation{rel("mb-yoo", "instrument")}},
-			wantArtist: "", wantComposers: nil,
+			wantArtist: "", wantComposers: nil, wantPerformers: nil,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			artist, composers := displayArtist(&c.in)
+			artist, composers, performers := displayArtist(&c.in)
 			if artist != c.wantArtist {
 				t.Errorf("displayArtist = %v, want %v", artist, c.wantArtist)
 			}
 			if !slices.Equal(composers, c.wantComposers) {
 				t.Errorf("composers = %v, want %v", composers, c.wantComposers)
+			}
+			if !slices.Equal(performers, c.wantPerformers) {
+				t.Errorf("performers = %v, want %v", performers, c.wantPerformers)
 			}
 		})
 	}
@@ -183,7 +216,7 @@ func TestDisplayArtist(t *testing.T) {
 		credit("mb-bruch", "Bruch", "; "), credit("mb-yoo", "Esther Yoo", ", "), credit("mb-other", "Janine Jansen", ""),
 	}, Relations: []mbRelation{rel("mb-other", "instrument", "violin"), rel("mb-yoo", "instrument", "violin")}}
 	for i := 0; i < 20; i++ {
-		if artist, _ := displayArtist(&two); artist != "Esther Yoo" {
+		if artist, _, _ := displayArtist(&two); artist != "Esther Yoo" {
 			t.Fatalf("two soloists run %d = %v, want %v", i, artist, "Esther Yoo")
 		}
 	}

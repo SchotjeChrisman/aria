@@ -230,6 +230,65 @@ func (d *Deezer) Album(ctx context.Context, id int64) (*ExtAlbum, error) {
 	return out, nil
 }
 
+// AlbumContributors returns the album-header credits Deezer shows, in Deezer's
+// own order. nil (no error) when the album is unknown or has no contributors,
+// so callers can degrade silently to the MusicBrainz ordering.
+//
+// Only the names are useful: Deezer labels EVERY contributor's role "Main",
+// classical included, so there is no composer/performer split to extract here.
+// The order is worth having though — it independently agrees with Qobuz on
+// classical releases (release ec17a59b comes back "Esther Yoo", "Royal
+// Philharmonic Orchestra", "Vasily Petrenko" from both), which is what makes
+// it usable as a cross-check on our own ordering.
+func (d *Deezer) AlbumContributors(ctx context.Context, artist, album string) ([]string, error) {
+	id, err := d.AlbumID(ctx, artist, album)
+	if err != nil || id == 0 {
+		return nil, err
+	}
+	var raw struct {
+		Contributors []struct {
+			Name string `json:"name"`
+		} `json:"contributors"`
+		Error *struct{} `json:"error"`
+	}
+	if err := d.c.getJSON(ctx, fmt.Sprintf("%s/album/%d", d.base, id), &raw); err != nil {
+		return nil, err
+	}
+	if raw.Error != nil {
+		return nil, nil
+	}
+	var out []string
+	for _, c := range raw.Contributors {
+		if c.Name != "" {
+			out = append(out, c.Name)
+		}
+	}
+	return out, nil
+}
+
+// contributorsAgree is the guard on the list above: a Deezer album is only
+// trustworthy when it credits at least one name MusicBrainz also lists as a
+// performer. Deezer's search resolves loosely, and a wrong album's ordering is
+// worse than none — querying "Various Artists Trainspotting" returns "T2
+// Trainspotting - The Complete Fantasy Playlist", the sequel, whose
+// contributors have nothing to do with the release we matched.
+//
+// One overlap is enough on purpose: scripts differ (MusicBrainz has "Василий
+// Петренко" where Deezer has "Vasily Petrenko"), so demanding more would throw
+// away correct albums. norm() handles the case/punctuation noise.
+func contributorsAgree(dz, mbPerformers []string) bool {
+	seen := make(map[string]bool, len(mbPerformers))
+	for _, p := range mbPerformers {
+		seen[norm(p)] = true
+	}
+	for _, c := range dz {
+		if seen[norm(c)] {
+			return true
+		}
+	}
+	return false
+}
+
 // AlbumCoverURL finds a cover_xl for a missing-art album (fallback after
 // Cover Art Archive); "" when the top hit has none.
 func (d *Deezer) AlbumCoverURL(ctx context.Context, albumArtist, album string) (string, error) {

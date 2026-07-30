@@ -135,13 +135,52 @@ class ArtistEntry {
   final Set<String> albumIds = {};
 }
 
+/// Album artists, plus the credited people the enrichment knows about
+/// (conductor, orchestra, per-track performers) — their artist pages already
+/// work, they just had no way in.
+///
+/// Credited-only names need >= 2 distinct albums to make the list: the library
+/// holds ~2400 distinct credited names against ~157 album artists, and merging
+/// them all buries the browse list under one-off session players. Album artists
+/// are always listed, however few albums they have.
 final artistsProvider = Provider<List<ArtistEntry>>((ref) {
-  final byName = <String, ArtistEntry>{};
-  for (final t in ref.watch(loadedTracksProvider)) {
-    final n = displayArtist(t);
-    byName.putIfAbsent(n, () => ArtistEntry(n)).albumIds.add(t.albumId);
+  // Kept apart on purpose. albumIds drives the "N albums" subtitle and the
+  // "most albums" sort in artists_section, and that has always meant albums the
+  // artist FRONTS. Folding appearances into it would silently restate every
+  // existing artist's count — Mark Knopfler is credited on 350 tracks he does
+  // not front. So an album artist keeps exactly the count it has today, and a
+  // credited-only name (an orchestra, a conductor) is counted by its
+  // appearances, which are the only albums it has.
+  final fronted = <String, Set<String>>{};
+  final credited = <String, Set<String>>{};
+
+  void credit(Map<String, Set<String>> into, String? name, String albumId) {
+    if (name == null || name.isEmpty) return;
+    (into[name] ??= <String>{}).add(albumId);
   }
-  return byName.values.toList();
+
+  for (final t in ref.watch(loadedTracksProvider)) {
+    credit(fronted, displayArtist(t), t.albumId);
+    credit(credited, t.conductor, t.albumId);
+    credit(credited, t.orchestra, t.albumId);
+    for (final p in t.performers) {
+      credit(credited, p.name, t.albumId);
+    }
+  }
+
+  final out = <ArtistEntry>[];
+  for (final name in {...fronted.keys, ...credited.keys}) {
+    final own = fronted[name];
+    if (own != null) {
+      out.add(ArtistEntry(name)..albumIds.addAll(own)); // unchanged behaviour
+      continue;
+    }
+    final appears = credited[name]!;
+    if (appears.length >= 2) {
+      out.add(ArtistEntry(name)..albumIds.addAll(appears));
+    }
+  }
+  return out;
 });
 
 // -------------------------------------------------------------- composers

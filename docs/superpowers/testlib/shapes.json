@@ -1,0 +1,3306 @@
+{
+ "baseline-acdc": {
+  "mbid": "83ff6988-2f79-40b9-82d5-437f2a5da5f3",
+  "title": "Back in Black",
+  "date": "2003-02-18",
+  "country": "US",
+  "credit": "AC/DC",
+  "credit_parts": [
+   "AC/DC"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {
+   "art direction": [
+    "Bob Defrin"
+   ],
+   "design": [
+    "Smay Vision"
+   ],
+   "engineer": [
+    "Benjamin Armbrister",
+    "Jack Nuber"
+   ],
+   "liner notes": [
+    "David Fricke"
+   ],
+   "mastering": [
+    "George Marino"
+   ],
+   "photography": [
+    "Paul Cox",
+    "Bob Ellis",
+    "Robert Ellis",
+    "Frank Griffin",
+    "Ross Halfin",
+    "Mike Kagan",
+    "Anastasia Pantsios",
+    "Michael Putland",
+    "Chris Walter"
+   ]
+  },
+  "mediums": 1,
+  "track_count": 10,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Hells Bells",
+    "length": 311866,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Shoot to Thrill",
+    "length": 317026,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "What Do You Do for Money Honey",
+    "length": 214933,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Given the Dog a Bone",
+    "length": 211706,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Let Me Put My Love Into You",
+    "length": 254626,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Back in Black",
+    "length": 254866,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "You Shook Me All Night Long",
+    "length": 209600,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Have a Drink on Me",
+    "length": 238400,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Shake a Leg",
+    "length": 245133,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "Rock and Roll Ain’t Noise Pollution",
+    "length": 252840,
+    "artist": "AC/DC",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "name": "AC/DC",
+    "joinphrase": "",
+    "artist": {
+     "name": "AC/DC",
+     "country": "AU",
+     "id": "66c662b6-6e2f-4930-8610-912e24c63ed1",
+     "sort-name": "AC/DC",
+     "disambiguation": "Australian hard rock band",
+     "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+     "type": "Group"
+    }
+   }
+  ],
+  "relations": [
+   {
+    "end": null,
+    "attribute-ids": {},
+    "begin": null,
+    "target-type": "artist",
+    "direction": "backward",
+    "attributes": [],
+    "source-credit": "",
+    "attribute-values": {},
+    "ended": false,
+    "target-credit": "",
+    "type": "art direction",
+    "type-id": "f3b80a09-5ebf-4ad2-9c46-3e6bce971d1b",
+    "artist": {
+     "disambiguation": "US art director & graphic designer",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "type": "Person",
+     "id": "c7bbcb0e-881a-4662-bdf2-fa9af163c0b6",
+     "sort-name": "Defrin, Bob",
+     "country": "US",
+     "name": "Bob Defrin"
+    }
+   },
+   {
+    "attribute-values": {},
+    "ended": false,
+    "target-credit": "",
+    "type-id": "9c02ea37-7680-4fb5-8555-e330c7aa885b",
+    "artist": {
+     "name": "Smay Vision",
+     "country": "US",
+     "type": "Other",
+     "type-id": "ac897045-5043-3294-969b-187360e45d86",
+     "disambiguation": "",
+     "id": "13e4faa5-f151-4970-a5ae-08ef68588f1d",
+     "sort-name": "Smay Vision"
+    },
+    "type": "design",
+    "end": null,
+    "attribute-ids": {},
+    "begin": null,
+    "direction": "backward",
+    "attributes": [],
+    "target-type": "artist",
+    "source-credit": ""
+   },
+   {
+    "end": "1980-05",
+    "attribute-ids": {
+     "additional": "0a5341f8-3b1d-4f99-a0c6-26b7f4e42c7f"
+    },
+    "begin": "1980-04",
+    "target-type": "artist",
+    "attributes": [
+     "additional"
+    ],
+    "direction": "backward",
+    "source-credit": "",
+    "attribute-values": {},
+    "ended": true,
+    "target-credit": "Benji Armbrister",
+    "type": "engineer",
+    "artist": {
+     "name": "Benjamin Armbrister",
+     "country": "BS",
+     "id": "4a426313-00dd-4f87-9844-43abaf2b206e",
+     "sort-name": "Armbrister, Benjamin",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "",
+     "type": "Person"
+    },
+    "type-id": "87e922ba-872e-418a-9f41-0a63aa3c30cc"
+   },
+   {
+    "begin": "1980-04",
+    "attribute-ids": {
+     "additional": "0a5341f8-3b1d-4f99-a0c6-26b7f4e42c7f"
+    },
+    "end": "1980-05",
+    "source-credit": "",
+    "direction": "backward",
+    "attributes": [
+     "additional"
+    ],
+    "target-type": "artist",
+    "ended": true,
+    "attribute-values": {},
+    "artist": {
+     "id": "dc22a70f-0f64-4b4e-acba-fc71cda82dfb",
+     "sort-name": "Nuber, Jack",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "",
+     "type": "Person",
+     "country": "GB",
+     "name": "Jack Nuber"
+    },
+    "type-id": "87e922ba-872e-418a-9f41-0a63aa3c30cc",
+    "type": "engineer",
+    "target-credit": "Jack Newber"
+   },
+   {
+    "target-credit": "",
+    "type-id": "01323b4f-7aba-410c-8c91-cb224b963a40",
+    "artist": {
+     "sort-name": "Fricke, David",
+     "id": "0c7491ef-38da-41f2-9e08-90d3d59712e5",
+     "disambiguation": "",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "type": "Person",
+     "country": "US",
+     "name": "David Fricke"
+    },
+    "type": "liner notes",
+    "attribute-values": {},
+    "ended": true,
+    "direction": "backward",
+    "attributes": [],
+    "target-type": "artist",
+    "source-credit": "",
+    "end": "2003-01",
+    "begin": "2003-01",
+    "attribute-ids": {}
+   },
+   {
+    "attribute-values": {},
+    "ended": false,
+    "target-credit": "",
+    "artist": {
+     "name": "George Marino",
+     "country": "US",
+     "sort-name": "Marino, George",
+     "id": "26a5dbc0-72f1-4e72-b5a2-40acd6aa84e5",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "mastering engineer",
+     "type": "Person"
+    },
+    "type-id": "84453d28-c3e8-4864-9aae-25aa968bcf9e",
+    "type": "mastering",
+    "end": null,
+    "attribute-ids": {
+     "re": "9b72452f-550e-4ace-93ed-fb8789cdc245"
+    },
+    "begin": null,
+    "attributes": [
+     "re"
+    ],
+    "direction": "backward",
+    "target-type": "artist",
+    "source-credit": ""
+   },
+   {
+    "type": "photography",
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "artist": {
+     "country": "GB",
+     "name": "Paul Cox",
+     "sort-name": "Cox, Paul",
+     "id": "a038bf41-b275-4398-84c0-fb5390ea2ced",
+     "disambiguation": "photographer",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "type": "Person"
+    },
+    "target-credit": "",
+    "ended": false,
+    "attribute-values": {},
+    "source-credit": "",
+    "target-type": "artist",
+    "attributes": [],
+    "direction": "backward",
+    "begin": null,
+    "attribute-ids": {},
+    "end": null
+   },
+   {
+    "artist": {
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "British photographer",
+     "type": "Person",
+     "id": "178d0700-ed06-4916-8906-e75f4e907c86",
+     "sort-name": "Ellis, Bob",
+     "country": "GB",
+     "name": "Bob Ellis"
+    },
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "type": "photography",
+    "target-credit": "",
+    "ended": false,
+    "attribute-values": {},
+    "source-credit": "",
+    "direction": "backward",
+    "attributes": [],
+    "target-type": "artist",
+    "begin": null,
+    "attribute-ids": {},
+    "end": null
+   },
+   {
+    "target-credit": "",
+    "type": "photography",
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "artist": {
+     "country": "US",
+     "name": "Robert Ellis",
+     "disambiguation": "Nashville TN Alt-Country singer-songwriter and guitarist",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "type": "Person",
+     "sort-name": "Ellis, Robert",
+     "id": "4f9e220f-a0c7-4b26-be35-70d88b3d0ca0"
+    },
+    "attribute-values": {},
+    "ended": false,
+    "target-type": "artist",
+    "attributes": [],
+    "direction": "backward",
+    "source-credit": "",
+    "end": null,
+    "begin": null,
+    "attribute-ids": {}
+   },
+   {
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "artist": {
+     "sort-name": "Griffin, Frank",
+     "id": "0b7ce55c-9fe7-435a-972e-03e9a8769e65",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "photographer",
+     "type": "Person",
+     "country": null,
+     "name": "Frank Griffin"
+    },
+    "type": "photography",
+    "target-credit": "",
+    "ended": false,
+    "attribute-values": {},
+    "source-credit": "",
+    "attributes": [],
+    "direction": "backward",
+    "target-type": "artist",
+    "begin": null,
+    "attribute-ids": {},
+    "end": null
+   },
+   {
+    "direction": "backward",
+    "attributes": [],
+    "target-type": "artist",
+    "source-credit": "",
+    "end": null,
+    "begin": null,
+    "attribute-ids": {},
+    "target-credit": "",
+    "artist": {
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "",
+     "type": "Person",
+     "id": "6e306c30-6fd6-4bce-8de3-e153e3fe3b0c",
+     "sort-name": "Halfin, Ross",
+     "name": "Ross Halfin",
+     "country": "GB"
+    },
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "type": "photography",
+    "attribute-values": {},
+    "ended": false
+   },
+   {
+    "end": null,
+    "begin": null,
+    "attribute-ids": {},
+    "target-type": "artist",
+    "attributes": [],
+    "direction": "backward",
+    "source-credit": "",
+    "attribute-values": {},
+    "ended": false,
+    "target-credit": "",
+    "type": "photography",
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "artist": {
+     "country": null,
+     "name": "Mike Kagan",
+     "type": "Person",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "photographer",
+     "sort-name": "Kagan, Mike",
+     "id": "322b38d8-2e6c-40aa-ae2a-3169a924d4d3"
+    }
+   },
+   {
+    "artist": {
+     "sort-name": "Pantsios, Anastasia",
+     "id": "3ff58584-361e-4689-8072-79545e2734f3",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "",
+     "type": "Person",
+     "country": null,
+     "name": "Anastasia Pantsios"
+    },
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "type": "photography",
+    "target-credit": "",
+    "ended": false,
+    "attribute-values": {},
+    "source-credit": "",
+    "direction": "backward",
+    "attributes": [],
+    "target-type": "artist",
+    "begin": null,
+    "attribute-ids": {},
+    "end": null
+   },
+   {
+    "ended": false,
+    "attribute-values": {},
+    "type": "photography",
+    "artist": {
+     "id": "ed35146a-3d92-47a0-b45f-dccce31a23a6",
+     "sort-name": "Putland, Michael",
+     "type": "Person",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "",
+     "country": "GB",
+     "name": "Michael Putland"
+    },
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "target-credit": "",
+    "begin": null,
+    "attribute-ids": {},
+    "end": null,
+    "source-credit": "",
+    "target-type": "artist",
+    "attributes": [],
+    "direction": "backward"
+   },
+   {
+    "attribute-ids": {},
+    "begin": null,
+    "end": null,
+    "source-credit": "",
+    "direction": "backward",
+    "attributes": [],
+    "target-type": "artist",
+    "ended": false,
+    "attribute-values": {},
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "artist": {
+     "id": "2ef66eb5-a90c-45c1-a56a-af66da166895",
+     "sort-name": "Walter, Chris",
+     "type": "Person",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "English photographer",
+     "country": "GB",
+     "name": "Chris Walter"
+    },
+    "type": "photography",
+    "target-credit": ""
+   }
+  ],
+  "why": "BASELINE. Single artist credit, no relations, unambiguous title. Today scores artist:1 like everything else; after the fix it must score artist:0. If this one does not improve, the fix did not land.",
+  "deezer_contributors": [
+   "AC/DC"
+  ]
+ },
+ "baseline-portishead": {
+  "mbid": "1d6b086a-aca2-4511-8dfc-789b560ae3fb",
+  "title": "Dummy",
+  "date": "1994",
+  "country": "CA",
+  "credit": "Portishead",
+  "credit_parts": [
+   "Portishead"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {},
+  "mediums": 1,
+  "track_count": 11,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Mysterons",
+    "length": 306200,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Sour Times",
+    "length": 254000,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Strangers",
+    "length": 238000,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "It Could Be Sweet",
+    "length": 259973,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Wandering Star",
+    "length": 293960,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "It’s a Fire",
+    "length": 229306,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Numb",
+    "length": 237960,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Roads",
+    "length": 305173,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument arranger",
+     "instrument arranger",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Pedestal",
+    "length": 221000,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "Biscuit",
+    "length": 304093,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 11,
+    "title": "Glory Box",
+    "length": 305573,
+    "artist": "Portishead",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "producer",
+     "producer",
+     "programming",
+     "vocal"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "artist": {
+     "type": "Group",
+     "disambiguation": "",
+     "sort-name": "Portishead",
+     "id": "8f6bd1e4-fbe1-4f50-aa9b-94c450ec0f11",
+     "country": "GB",
+     "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+     "name": "Portishead"
+    },
+    "joinphrase": "",
+    "name": "Portishead"
+   }
+  ],
+  "relations": [],
+  "why": "BASELINE. Second clean single-artist album, different genre/era, guards against a fix that only works for one release shape.",
+  "deezer_contributors": [
+   "Portishead"
+  ]
+ },
+ "classical-barber": {
+  "mbid": "ec17a59b-6ca3-4817-9ca9-67b137550819",
+  "title": "Barber, Bruch",
+  "date": "2023-01-26",
+  "country": null,
+  "credit": "Barber, Bruch; Esther Yoo, Василий Петренко, Royal Philharmonic Orchestra",
+  "credit_parts": [
+   "Barber",
+   "Bruch",
+   "Esther Yoo",
+   "Василий Петренко",
+   "Royal Philharmonic Orchestra"
+  ],
+  "joinphrases": [
+   ", ",
+   "; ",
+   ", ",
+   ", ",
+   ""
+  ],
+  "has_composer_split": true,
+  "release_artist_rels": {},
+  "mediums": 1,
+  "track_count": 8,
+  "has_feat": false,
+  "per_track_artists": 3,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Violin Concerto No. 1 in G minor, Op. 26: I. Vorspiel. Allegro moderato",
+    "length": 506706,
+    "artist": "Max Bruch",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Violin Concerto No. 1 in G minor, Op. 26: II. Adagio",
+    "length": 536520,
+    "artist": "Max Bruch",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Violin Concerto No. 1 in G minor, Op. 26: III. Finale. Allegro energico",
+    "length": 448413,
+    "artist": "Max Bruch",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Adagio appassionato, Op. 57",
+    "length": 608320,
+    "artist": "Max Bruch",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Violin Concerto, Op. 14: I. Allegro",
+    "length": 621293,
+    "artist": "Samuel Barber",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Violin Concerto, Op. 14: II. Andante",
+    "length": 546026,
+    "artist": "Samuel Barber",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Violin Concerto, Op. 14: III. Presto in moto perpetuo",
+    "length": 239680,
+    "artist": "Samuel Barber",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Vieuxtemps: Souvenir d'Amerique, Variations on \"Yankee Doodle\", Op. 17",
+    "length": 357440,
+    "artist": "Henri Vieuxtemps",
+    "rec_artist_rels": []
+   }
+  ],
+  "artist-credit": [
+   {
+    "artist": {
+     "id": "74ed34ce-ee95-44e9-a87d-4d2d5056c24a",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Barber, Samuel",
+     "country": "US",
+     "type": "Person",
+     "name": "Samuel Barber",
+     "disambiguation": "American composer"
+    },
+    "name": "Barber",
+    "joinphrase": ", "
+   },
+   {
+    "name": "Bruch",
+    "joinphrase": "; ",
+    "artist": {
+     "id": "e3d5cfcd-e42b-411d-add2-716a5029f59b",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Bruch, Max",
+     "country": "DE",
+     "type": "Person",
+     "name": "Max Bruch",
+     "disambiguation": "composer and conductor"
+    }
+   },
+   {
+    "artist": {
+     "country": "US",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Yoo, Esther",
+     "id": "fb169e2f-2636-4f84-9041-079a28a2a066",
+     "disambiguation": "violinist",
+     "name": "Esther Yoo",
+     "type": "Person"
+    },
+    "joinphrase": ", ",
+    "name": "Esther Yoo"
+   },
+   {
+    "name": "Василий Петренко",
+    "joinphrase": ", ",
+    "artist": {
+     "disambiguation": "conductor",
+     "type": "Person",
+     "name": "Василий Петренко",
+     "country": "RU",
+     "id": "7de3202f-0e33-4485-a27c-ec1302df73aa",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Petrenko, Vasily"
+    }
+   },
+   {
+    "name": "Royal Philharmonic Orchestra",
+    "joinphrase": "",
+    "artist": {
+     "country": "GB",
+     "sort-name": "Royal Philharmonic Orchestra",
+     "type-id": "a0b36c92-3eb1-3839-a4f9-4799823f54a5",
+     "id": "299597ae-3a20-4bf1-973e-03704af69f6b",
+     "disambiguation": "",
+     "name": "Royal Philharmonic Orchestra",
+     "type": "Orchestra"
+    }
+   }
+  ],
+  "relations": [],
+  "why": "THE REPORTED BUG. Credit 'Barber, Bruch; Esther Yoo, ...' has the ';' joinphrase but ZERO release-level artist relations, so displayArtist must fall back to artist-credit ORDER and pick Esther Yoo.",
+  "deezer_contributors": [
+   "Esther Yoo",
+   "Royal Philharmonic Orchestra",
+   "Vasily Petrenko"
+  ]
+ },
+ "classical-toscanini": {
+  "mbid": "a893c87d-92aa-4c3a-8965-598faa1e9e01",
+  "title": "Symphony no. 9",
+  "date": "1990",
+  "country": "GB",
+  "credit": "Beethoven; Arturo Toscanini",
+  "credit_parts": [
+   "Beethoven",
+   "Arturo Toscanini"
+  ],
+  "joinphrases": [
+   "; ",
+   ""
+  ],
+  "has_composer_split": true,
+  "release_artist_rels": {},
+  "mediums": 1,
+  "track_count": 4,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Symphony No. 9 in D minor, Op. 125 \"Choral\": I. Allegro ma non troppo, un poco maestoso",
+    "length": 810000,
+    "artist": "Ludwig van Beethoven",
+    "rec_artist_rels": [
+     "conductor",
+     "performing orchestra"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Symphony No. 9 in D minor, Op. 125 \"Choral\": II. Molto vivace",
+    "length": 789000,
+    "artist": "Ludwig van Beethoven",
+    "rec_artist_rels": [
+     "conductor",
+     "performing orchestra"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Symphony No. 9 in D minor, Op. 125 \"Choral\": III. Adagio molto e cantabile - Andante moderato",
+    "length": 861000,
+    "artist": "Ludwig van Beethoven",
+    "rec_artist_rels": [
+     "conductor",
+     "performing orchestra"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Symphony No. 9 in D minor, Op. 125 \"Choral\": IV. Presto - Allegro assai",
+    "length": 1404000,
+    "artist": "Ludwig van Beethoven",
+    "rec_artist_rels": [
+     "chorus master",
+     "conductor",
+     "performing orchestra",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "artist": {
+     "type": "Person",
+     "name": "Ludwig van Beethoven",
+     "disambiguation": "German composer",
+     "id": "1f9df192-a621-4f54-8850-2c5373b7eac9",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Beethoven, Ludwig van",
+     "country": "DE"
+    },
+    "joinphrase": "; ",
+    "name": "Beethoven"
+   },
+   {
+    "joinphrase": "",
+    "name": "Arturo Toscanini",
+    "artist": {
+     "disambiguation": "conductor",
+     "type": "Person",
+     "name": "Arturo Toscanini",
+     "country": "IT",
+     "id": "da96be23-ef88-420e-8173-3efb7fd995cc",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Toscanini, Arturo"
+    }
+   }
+  ],
+  "relations": [],
+  "why": "Second composer split with a different shape (conductor, not soloist, as the performer). Confirms the ';' split is not tuned to one album.",
+  "deezer_contributors": [
+   "Arturo Toscanini",
+   "NBC Symphony Orchestra"
+  ]
+ },
+ "trap-vivaldi": {
+  "mbid": "a1c1c5fe-62fe-4ce2-a745-1d66c929ce39",
+  "title": "The Four Seasons",
+  "date": "2005-07-03",
+  "country": "NL",
+  "credit": "Antonio Vivaldi; Janine Jansen",
+  "credit_parts": [
+   "Antonio Vivaldi",
+   "Janine Jansen"
+  ],
+  "joinphrases": [
+   "; ",
+   ""
+  ],
+  "has_composer_split": true,
+  "release_artist_rels": {
+   "art direction": [
+    "Paul Chessell"
+   ],
+   "photography": [
+    "Mitch Jenkins"
+   ],
+   "producer": [
+    "Joanne Baines",
+    "Dominic Fyfe"
+   ]
+  },
+  "mediums": 1,
+  "track_count": 12,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Concerto for Violin in E major, op. 8 no. 1 “Spring”: I. Allegro",
+    "length": 201226,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Concerto for Violin in E major, op. 8 no. 1 “Spring”: II. Largo",
+    "length": 145880,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Concerto for Violin in E major, op. 8 no. 1 “Spring”: III. Allegro",
+    "length": 241920,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Concerto for Violin in G minor, op. 8 no. 2 “Summer”: I. Allegro non molto",
+    "length": 315413,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Concerto for Violin in G minor, op. 8 no. 2 “Summer”: II. Adagio – Presto",
+    "length": 132173,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Concerto for Violin in G minor, op. 8 no. 2 “Summer”: III. Presto",
+    "length": 167626,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Concerto for Violin in F major, op. 8 no. 3 “Autumn”: I. Allegro",
+    "length": 301720,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Concerto for Violin in F major, op. 8 no. 3 “Autumn”: II. Adagio molto",
+    "length": 165760,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Concerto for Violin in F major, op. 8 no. 3 “Autumn”: III. Allegro",
+    "length": 199093,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "Concerto for Violin in F minor, op. 8 no. 4 “Winter”: I. Allegro non molto",
+    "length": 180466,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 11,
+    "title": "Concerto for Violin in F minor, op. 8 no. 4 “Winter”: II. Adagio molto",
+    "length": 94080,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 12,
+    "title": "Concerto for Violin in F minor, op. 8 no. 4 “Winter”: III. Allegro",
+    "length": 195613,
+    "artist": "Antonio Vivaldi",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "recording"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "joinphrase": "; ",
+    "artist": {
+     "id": "ad79836d-9849-44df-8789-180bbc823f3c",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "sort-name": "Vivaldi, Antonio",
+     "country": "IT",
+     "disambiguation": "Italian baroque composer and violinist",
+     "type": "Person",
+     "name": "Antonio Vivaldi"
+    },
+    "name": "Antonio Vivaldi"
+   },
+   {
+    "joinphrase": "",
+    "artist": {
+     "name": "Janine Jansen",
+     "type": "Person",
+     "disambiguation": "Dutch violinist and violist",
+     "country": "NL",
+     "sort-name": "Jansen, Janine",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "6c5f045e-7f1e-42b8-8cbc-d2fad7279513"
+    },
+    "name": "Janine Jansen"
+   }
+  ],
+  "relations": [
+   {
+    "ended": false,
+    "artist": {
+     "id": "e3123140-e0f0-4cb1-a625-a1174b47a71b",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "disambiguation": "art director",
+     "sort-name": "Chessell, Paul",
+     "country": "GB",
+     "type": "Person",
+     "name": "Paul Chessell"
+    },
+    "end": null,
+    "direction": "backward",
+    "attribute-ids": {},
+    "source-credit": "",
+    "begin": null,
+    "attribute-values": {},
+    "type-id": "f3b80a09-5ebf-4ad2-9c46-3e6bce971d1b",
+    "target-credit": "",
+    "target-type": "artist",
+    "attributes": [],
+    "type": "art direction"
+   },
+   {
+    "begin": null,
+    "source-credit": "",
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "attribute-values": {},
+    "attribute-ids": {},
+    "type": "photography",
+    "target-credit": "",
+    "attributes": [],
+    "target-type": "artist",
+    "artist": {
+     "disambiguation": "Photographer",
+     "country": null,
+     "sort-name": "Jenkins, Mitch",
+     "name": "Mitch Jenkins",
+     "type": "Person",
+     "id": "b06c255c-c250-459d-8deb-f1e9d521b13f",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+    },
+    "ended": false,
+    "end": null,
+    "direction": "backward"
+   },
+   {
+    "type": "producer",
+    "target-credit": "",
+    "attributes": [
+     "additional"
+    ],
+    "target-type": "artist",
+    "begin": null,
+    "source-credit": "",
+    "attribute-values": {},
+    "type-id": "8bf377ba-8d71-4ecc-97f2-7bb2d8a2a75f",
+    "attribute-ids": {
+     "additional": "0a5341f8-3b1d-4f99-a0c6-26b7f4e42c7f"
+    },
+    "direction": "backward",
+    "ended": false,
+    "artist": {
+     "name": "Joanne Baines",
+     "type": "Person",
+     "country": null,
+     "sort-name": "Baines, Joanne",
+     "disambiguation": "",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "13204585-b64e-4e0a-a52b-98857d962648"
+    },
+    "end": null
+   },
+   {
+    "direction": "backward",
+    "ended": false,
+    "artist": {
+     "name": "Dominic Fyfe",
+     "type": "Person",
+     "country": null,
+     "sort-name": "Fyfe, Dominic",
+     "disambiguation": "",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "2aaaf50a-cc22-4377-b0a3-4642468806c1"
+    },
+    "end": null,
+    "target-credit": "",
+    "attributes": [
+     "executive"
+    ],
+    "target-type": "artist",
+    "type": "producer",
+    "attribute-ids": {
+     "executive": "e0039285-6667-4f94-80d6-aa6520c6d359"
+    },
+    "begin": null,
+    "source-credit": "",
+    "attribute-values": {},
+    "type-id": "8bf377ba-8d71-4ecc-97f2-7bb2d8a2a75f"
+   }
+  ],
+  "why": "AMBIGUITY TRAP. The well-known 2005 Decca recording. MusicBrainz holds ELEVEN near-identical 'Four Seasons' releases all credited 'Antonio Vivaldi; Janine Jansen' with 12-13 tracks, so the restored artist signal CANNOT separate them — it must not manufacture confidence either. Separation has to come from tracklist and year.",
+  "deezer_contributors": [
+   "Janine Jansen",
+   "Antonio Vivaldi"
+  ]
+ },
+ "compilation-trainspotting": {
+  "mbid": "165de88c-8af7-34f2-8bcf-94b4eb839692",
+  "title": "Trainspotting",
+  "date": "1996-02-19",
+  "country": "FR",
+  "credit": "Various Artists",
+  "credit_parts": [
+   "Various Artists"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {},
+  "mediums": 1,
+  "track_count": 14,
+  "has_feat": false,
+  "per_track_artists": 13,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Lust for Life",
+    "length": 313266,
+    "artist": "Iggy Pop",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Deep Blue Day",
+    "length": 236493,
+    "artist": "Brian Eno",
+    "rec_artist_rels": [
+     "producer",
+     "producer"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Trainspotting",
+    "length": 634773,
+    "artist": "Primal Scream",
+    "rec_artist_rels": [
+     "producer"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Atomic",
+    "length": 309426,
+    "artist": "Sleeper",
+    "rec_artist_rels": [
+     "producer"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Temptation",
+    "length": 420200,
+    "artist": "New Order",
+    "rec_artist_rels": [
+     "engineer",
+     "producer"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Nightclubbing",
+    "length": 253666,
+    "artist": "Iggy Pop",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Sing",
+    "length": 360973,
+    "artist": "Blur",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Perfect Day",
+    "length": 224760,
+    "artist": "Lou Reed",
+    "rec_artist_rels": [
+     "arranger",
+     "arranger",
+     "arranger",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Mile End",
+    "length": 271733,
+    "artist": "Pulp",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "producer",
+     "programming"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "For What You Dream Of",
+    "length": 387906,
+    "artist": "Bedrock feat. KYO",
+    "rec_artist_rels": []
+   },
+   {
+    "medium": 1,
+    "pos": 11,
+    "title": "2:1",
+    "length": 153533,
+    "artist": "Elastica",
+    "rec_artist_rels": [
+     "mix",
+     "producer",
+     "producer"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 12,
+    "title": "A Final Hit",
+    "length": 195800,
+    "artist": "Leftfield",
+    "rec_artist_rels": [
+     "producer"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 13,
+    "title": "Born Slippy (NUXX)",
+    "length": 584600,
+    "artist": "Underworld",
+    "rec_artist_rels": [
+     "mix",
+     "mix",
+     "mix",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 14,
+    "title": "Closet Romantic",
+    "length": 189000,
+    "artist": "Damon Albarn",
+    "rec_artist_rels": [
+     "producer"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "artist": {
+     "sort-name": "Various Artists",
+     "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+     "disambiguation": "add compilations to this artist",
+     "type-id": "ac897045-5043-3294-969b-187360e45d86",
+     "type": "Other",
+     "country": null,
+     "name": "Various Artists"
+    },
+    "joinphrase": "",
+    "name": "Various Artists"
+   }
+  ],
+  "relations": [],
+  "why": "Various Artists. Release credit is 'Various Artists' but every track has a different artist. Exercises isVarious/vaRE and the empty-artist search fallback; must not regress now that artist distance counts.",
+  "deezer_contributors": []
+ },
+ "multidisc-wall": {
+  "mbid": "d2ef6b62-9d76-40eb-92c0-f5d677c40ea1",
+  "title": "The Wall",
+  "date": "1982",
+  "country": "US",
+  "credit": "Pink Floyd",
+  "credit_parts": [
+   "Pink Floyd"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {
+   "design": [
+    "Gerald Scarfe",
+    "Roger Waters"
+   ]
+  },
+  "mediums": 2,
+  "track_count": 26,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "In the Flesh?",
+    "length": 199560,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "The Thin Ice",
+    "length": 149906,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Another Brick in the Wall, Part 1",
+    "length": 190800,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "The Happiest Days of Our Lives",
+    "length": 111093,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Another Brick in the Wall, Part 2",
+    "length": 240733,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Mother",
+    "length": 333706,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Goodbye Blue Sky",
+    "length": 169933,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Empty Spaces",
+    "length": 127160,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Young Lust",
+    "length": 213066,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "One of My Turns",
+    "length": 214706,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 11,
+    "title": "Don’t Leave Me Now",
+    "length": 256760,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 12,
+    "title": "Another Brick in the Wall, Part 3",
+    "length": 77533,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 13,
+    "title": "Goodbye Cruel World",
+    "length": 74640,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 1,
+    "title": "Hey You",
+    "length": 284000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 2,
+    "title": "Is There Anybody Out There?",
+    "length": 163000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument arranger",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 3,
+    "title": "Nobody Home",
+    "length": 207000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performing orchestra",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 4,
+    "title": "Vera",
+    "length": 96000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performing orchestra",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 5,
+    "title": "Bring the Boys Back Home",
+    "length": 89000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 6,
+    "title": "Comfortably Numb",
+    "length": 386000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "orchestrator",
+     "performer",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 7,
+    "title": "The Show Must Go On",
+    "length": 98000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 8,
+    "title": "In the Flesh",
+    "length": 260000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 9,
+    "title": "Run Like Hell",
+    "length": 267000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 10,
+    "title": "Waiting for the Worms",
+    "length": 240000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 11,
+    "title": "Stop",
+    "length": 32000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 12,
+    "title": "The Trial",
+    "length": 322000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "conductor",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performing orchestra",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 13,
+    "title": "Outside the Wall",
+    "length": 104000,
+    "artist": "Pink Floyd",
+    "rec_artist_rels": [
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "producer",
+     "producer",
+     "producer",
+     "producer",
+     "vocal",
+     "vocal"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "joinphrase": "",
+    "name": "Pink Floyd",
+    "artist": {
+     "type": "Group",
+     "name": "Pink Floyd",
+     "disambiguation": "",
+     "sort-name": "Pink Floyd",
+     "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+     "id": "83d91898-7763-47d7-b03b-b92132375c47",
+     "country": "GB"
+    }
+   }
+  ],
+  "relations": [
+   {
+    "target-credit": "",
+    "attribute-ids": {},
+    "source-credit": "",
+    "direction": "backward",
+    "ended": false,
+    "type": "design",
+    "end": null,
+    "attributes": [],
+    "artist": {
+     "disambiguation": "",
+     "name": "Gerald Scarfe",
+     "type": "Person",
+     "country": "GB",
+     "sort-name": "Scarfe, Gerald",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "996ea318-df3d-460f-91b2-348ce05aded8"
+    },
+    "type-id": "9c02ea37-7680-4fb5-8555-e330c7aa885b",
+    "target-type": "artist",
+    "attribute-values": {},
+    "begin": null
+   },
+   {
+    "target-credit": "",
+    "source-credit": "",
+    "attribute-ids": {},
+    "ended": false,
+    "direction": "backward",
+    "end": null,
+    "type": "design",
+    "artist": {
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "0f50beab-d77d-4f0f-ac26-0b87d3e9b11b",
+     "sort-name": "Waters, Roger",
+     "country": "GB",
+     "type": "Person",
+     "name": "Roger Waters",
+     "disambiguation": ""
+    },
+    "attributes": [],
+    "target-type": "artist",
+    "type-id": "9c02ea37-7680-4fb5-8555-e330c7aa885b",
+    "attribute-values": {},
+    "begin": null
+   }
+  ],
+  "why": "Multi-disc (2 media, 26 tracks). Exercises the mediums distance component and the discSegRE folding alongside a live artist signal.",
+  "deezer_contributors": [
+   "Pink Floyd"
+  ]
+ },
+ "nonlatin-utada": {
+  "mbid": "473a3b32-58e4-4fe5-91dd-473ce25f0f49",
+  "title": "First Love",
+  "date": "1999",
+  "country": "JP",
+  "credit": "宇多田ヒカル",
+  "credit_parts": [
+   "宇多田ヒカル"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {},
+  "mediums": 2,
+  "track_count": 13,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Automatic -Album Edit-",
+    "length": 328000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "arranger",
+     "arranger",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "programming",
+     "recording",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Movin' on without you",
+    "length": 277000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "recording",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "In My Room",
+    "length": 259000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "First Love",
+    "length": 257000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument arranger",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "programming",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "甘いワナ ~ Paint It, Black",
+    "length": 302000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "recording",
+     "recording",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "time will tell",
+    "length": 326000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "arranger",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "recording",
+     "recording",
+     "recording",
+     "recording",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Never Let Go",
+    "length": 237000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 1,
+    "title": "B&C -Album Version-",
+    "length": 260000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "arranger",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "programming",
+     "recording",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 2,
+    "title": "Another Chance",
+    "length": 321000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "arranger",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "programming",
+     "recording",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 3,
+    "title": "Interlude",
+    "length": 16000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "mix",
+     "producer",
+     "producer",
+     "recording",
+     "recording",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 4,
+    "title": "Give Me A Reason",
+    "length": 382000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "arranger",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "mix",
+     "producer",
+     "producer",
+     "programming",
+     "programming",
+     "recording",
+     "recording",
+     "vocal",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 5,
+    "title": "Automatic -Johnny Vicious Remix-",
+    "length": 277000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "remixer"
+    ]
+   },
+   {
+    "medium": 2,
+    "pos": 6,
+    "title": "First Love -John Luongo Remix-",
+    "length": 252000,
+    "artist": "宇多田ヒカル",
+    "rec_artist_rels": [
+     "remixer"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "name": "宇多田ヒカル",
+    "joinphrase": "",
+    "artist": {
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "country": "JP",
+     "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+     "name": "宇多田ヒカル",
+     "disambiguation": "Japanese-American singer-songwriter",
+     "type": "Person",
+     "sort-name": "Utada, Hikaru"
+    }
+   }
+  ],
+  "relations": [],
+  "why": "Non-Latin credit. The new albumArtist correction writes the original script; latinize() must still rewrite it for display without corrupting the stored value.",
+  "deezer_contributors": [
+   "Hikaru Utada"
+  ]
+ },
+ "selftitled-weezer94": {
+  "mbid": "1e477f68-c407-4eae-ad01-518528cedc2c",
+  "title": "Weezer",
+  "date": "1994-05-10",
+  "country": "US",
+  "credit": "Weezer",
+  "credit_parts": [
+   "Weezer"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {
+   "art direction": [
+    "Michael Golob"
+   ],
+   "design/illustration": [
+    "Karl Koch"
+   ],
+   "mastering": [
+    "George Marino"
+   ],
+   "photography": [
+    "Peter Gowland",
+    "Peter Orth"
+   ]
+  },
+  "mediums": 1,
+  "track_count": 10,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "My Name Is Jonas",
+    "length": 204466,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "No One Else",
+    "length": 184666,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "The World Has Turned and Left Me Here",
+    "length": 259266,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Buddy Holly",
+    "length": 159400,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Undone – The Sweater Song",
+    "length": 305400,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Surf Wax America",
+    "length": 186506,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Say It Ain’t So",
+    "length": 258800,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "In the Garage",
+    "length": 235760,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Holiday",
+    "length": 204866,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "Only in Dreams",
+    "length": 478440,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "engineer",
+     "engineer",
+     "engineer",
+     "engineer",
+     "instrument",
+     "instrument",
+     "instrument",
+     "instrument",
+     "performer",
+     "producer",
+     "vocal",
+     "vocal",
+     "vocal"
+    ]
+   }
+  ],
+  "artist-credit": [
+   {
+    "artist": {
+     "name": "Weezer",
+     "type": "Group",
+     "disambiguation": "American rock band",
+     "id": "6fe07aa5-fec0-4eca-a456-f29bff451b04",
+     "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+     "sort-name": "Weezer",
+     "country": "US"
+    },
+    "joinphrase": "",
+    "name": "Weezer"
+   }
+  ],
+  "relations": [
+   {
+    "attributes": [],
+    "artist": {
+     "name": "Michael Golob",
+     "type": "Person",
+     "disambiguation": "",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "5fc854a1-2d71-497e-a514-ecd40e56ea0b",
+     "sort-name": "Golob, Michael",
+     "country": "US"
+    },
+    "target-type": "artist",
+    "type-id": "f3b80a09-5ebf-4ad2-9c46-3e6bce971d1b",
+    "attribute-values": {},
+    "begin": null,
+    "target-credit": "",
+    "source-credit": "",
+    "attribute-ids": {},
+    "ended": false,
+    "direction": "backward",
+    "type": "art direction",
+    "end": null
+   },
+   {
+    "type": "design/illustration",
+    "end": null,
+    "direction": "backward",
+    "ended": false,
+    "attribute-ids": {},
+    "source-credit": "",
+    "target-credit": "",
+    "begin": null,
+    "attribute-values": {},
+    "type-id": "307e95dd-88b5-419b-8223-b146d4a0d439",
+    "target-type": "artist",
+    "artist": {
+     "type": "Person",
+     "name": "Karl Koch",
+     "disambiguation": "Weezer",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "58b2ef09-0344-4d91-b311-69d21a8d0ee8",
+     "sort-name": "Koch, Karl",
+     "country": null
+    },
+    "attributes": []
+   },
+   {
+    "target-credit": "",
+    "attribute-ids": {},
+    "source-credit": "",
+    "direction": "backward",
+    "ended": false,
+    "end": null,
+    "type": "mastering",
+    "artist": {
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "26a5dbc0-72f1-4e72-b5a2-40acd6aa84e5",
+     "sort-name": "Marino, George",
+     "country": "US",
+     "type": "Person",
+     "name": "George Marino",
+     "disambiguation": "mastering engineer"
+    },
+    "attributes": [],
+    "type-id": "84453d28-c3e8-4864-9aae-25aa968bcf9e",
+    "target-type": "artist",
+    "attribute-values": {},
+    "begin": null
+   },
+   {
+    "type": "photography",
+    "end": null,
+    "ended": false,
+    "direction": "backward",
+    "source-credit": "",
+    "attribute-ids": {},
+    "target-credit": "",
+    "begin": null,
+    "attribute-values": {},
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "target-type": "artist",
+    "attributes": [],
+    "artist": {
+     "disambiguation": "",
+     "type": "Person",
+     "name": "Peter Gowland",
+     "country": "US",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "1e42f759-082b-4de8-a810-edfa7ecdc7d0",
+     "sort-name": "Gowland, Peter"
+    }
+   },
+   {
+    "attribute-values": {},
+    "begin": null,
+    "attributes": [],
+    "artist": {
+     "name": "Peter Orth",
+     "type": "Person",
+     "disambiguation": "",
+     "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df",
+     "id": "1294d344-8fd9-45e0-854b-69a80c2d3040",
+     "sort-name": "Orth, Peter",
+     "country": "DE"
+    },
+    "target-type": "artist",
+    "type-id": "0b58dc9b-9c49-4b19-bb58-9c06d41c8fbf",
+    "direction": "backward",
+    "ended": false,
+    "type": "photography",
+    "end": null,
+    "target-credit": "",
+    "attribute-ids": {},
+    "source-credit": ""
+   }
+  ],
+  "why": "SEPARATION TRAP part 1. Self-titled, so album == artist. Paired with the 2001 album below, artist distance is IDENTICAL for both, and only the tracklist separates them. Guards against the fix creating false confidence.",
+  "deezer_contributors": [
+   "Weezer"
+  ]
+ },
+ "selftitled-weezer01": {
+  "mbid": "ca6577b7-21d4-441b-94ab-cf0f0a8d52f7",
+  "title": "Weezer",
+  "date": "2001-05-12",
+  "country": "JP",
+  "credit": "Weezer",
+  "credit_parts": [
+   "Weezer"
+  ],
+  "joinphrases": [
+   ""
+  ],
+  "has_composer_split": false,
+  "release_artist_rels": {},
+  "mediums": 1,
+  "track_count": 12,
+  "has_feat": false,
+  "per_track_artists": 1,
+  "tracks": [
+   {
+    "medium": 1,
+    "pos": 1,
+    "title": "Don’t Let Go",
+    "length": 179533,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 2,
+    "title": "Photograph",
+    "length": 139093,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 3,
+    "title": "Hash Pipe",
+    "length": 186573,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 4,
+    "title": "Island in the Sun",
+    "length": 200293,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 5,
+    "title": "Crab",
+    "length": 154573,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 6,
+    "title": "Knock‐Down Drag‐Out",
+    "length": 128466,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 7,
+    "title": "Smile",
+    "length": 158626,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 8,
+    "title": "Simple Pages",
+    "length": 176706,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 9,
+    "title": "Glorious Day",
+    "length": 160826,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 10,
+    "title": "O Girlfriend",
+    "length": 230466,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 11,
+    "title": "The Christmas Song",
+    "length": 188000,
+    "artist": "Weezer",
+    "rec_artist_rels": [
+     "mix",
+     "producer",
+     "recording"
+    ]
+   },
+   {
+    "medium": 1,
+    "pos": 12,
+    "title": "I Do",
+    "length": 111840,
+    "artist": "Weezer",
+    "rec_artist_rels": []
+   }
+  ],
+  "artist-credit": [
+   {
+    "name": "Weezer",
+    "joinphrase": "",
+    "artist": {
+     "type": "Group",
+     "sort-name": "Weezer",
+     "country": "US",
+     "name": "Weezer",
+     "disambiguation": "American rock band",
+     "id": "6fe07aa5-fec0-4eca-a456-f29bff451b04",
+     "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b"
+    }
+   }
+  ],
+  "relations": [],
+  "why": "SEPARATION TRAP part 2. Same artist, same title, different tracklist. Must stay separated on tracks, not artist.",
+  "deezer_contributors": [
+   "Weezer"
+  ]
+ }
+}

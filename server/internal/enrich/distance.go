@@ -125,6 +125,10 @@ type candidate struct {
 	Distance       float64            `json:"distance"`
 	Why            map[string]float64 `json:"why,omitempty"`
 
+	// The credited artists as separate names, because the ALBUMARTIST tag names
+	// ONE of them and Artist above is all of them joined. See artistDist.
+	ArtistNames []string `json:"artistNames,omitempty"`
+
 	mb []mbTrack // populated by the verification fetch; not persisted
 }
 
@@ -197,6 +201,34 @@ func strDist(a, b string) float64 {
 	}
 	ra, rb := []rune(na), []rune(nb)
 	return float64(levenshtein(ra, rb)) / float64(max(len(ra), len(rb)))
+}
+
+// artistDist compares the ALBUMARTIST tag against a candidate's credit, taking
+// the best of the joined string and each credited artist on its own.
+//
+// The joined string alone is wrong for anything with more than one credit, and
+// classical is the case that proves it: MusicBrainz files a release as
+// "composers; performers", and a rip's ALBUMARTIST names ONE side — Picard
+// writes the composer, a streaming-shaped tagger writes the performer. Measured
+// on real data before this existed: tag "Ludwig van Beethoven" against credit
+// "Beethoven; Arturo Toscanini" scored 0.85 on a CORRECT match, which cost it
+// enough separation to fall out of `matched` into review. Comparing per artist
+// scores it 0, because the credit NAME is the short form "Beethoven" while the
+// artist name behind it is the full "Ludwig van Beethoven".
+//
+// The same shape covers "Artist feat. Other" tagged as plain "Artist", and
+// collaboration credits tagged with either partner.
+func artistDist(tag string, c *candidate) float64 {
+	best := strDist(tag, c.Artist)
+	for _, n := range c.ArtistNames {
+		if best == 0 {
+			return 0
+		}
+		if d := strDist(tag, n); d < best {
+			best = d
+		}
+	}
+	return best
 }
 
 // lengthPenalty is beets' track_length curve: free inside the grace window,
@@ -319,7 +351,7 @@ func scoreWith(la localAlbum, c *candidate, p *pairing) (float64, map[string]flo
 	// Artists" vs the first credited performer), so the field carries no signal
 	// there and is dropped rather than penalised.
 	if !isVarious(la.AlbumArtist) && !isVarious(c.Artist) {
-		pen("artist", wArtist, strDist(la.AlbumArtist, c.Artist))
+		pen("artist", wArtist, artistDist(la.AlbumArtist, c))
 	}
 	if y := yearOf(c.Date); la.Year > 0 && y > 0 {
 		pen("year", wYear, yearPenalty(la.Year, y))
