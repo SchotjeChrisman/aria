@@ -29,7 +29,13 @@ RUN set -eux; \
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/aria ./cmd/aria
+# VERSION is the release tag with its leading "v" stripped, passed by
+# release.yml. Linking it in beats a hand-bumped constant, which is exactly how
+# /api/status came to report 3.0.0 for three releases running. Unset (a plain
+# `docker build`) leaves main.version at its "dev" default.
+ARG VERSION
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w ${VERSION:+-X main.version=$VERSION}" -o /out/aria ./cmd/aria
 # distroless can't mkdir; pre-made dirs COPY'd in with nonroot ownership (65532)
 RUN mkdir -p /out/empty
 

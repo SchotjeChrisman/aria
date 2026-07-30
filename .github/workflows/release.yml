@@ -43,7 +43,7 @@ jobs:
         run: |
           IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker build -t "$IMAGE:$GITHUB_REF_NAME" .
+          docker build --build-arg "VERSION=${GITHUB_REF_NAME#v}" -t "$IMAGE:$GITHUB_REF_NAME" .
           docker push "$IMAGE:$GITHUB_REF_NAME"
           # ponytail: :latest only for real releases so a pre-release can't move it
           if [ "${{ github.event.release.prerelease }}" != "true" ]; then
