@@ -551,6 +551,41 @@ class _ArtistShelf extends ConsumerWidget {
   }
 }
 
+/// Listening seconds (play-log times * each track's tagged duration) bucketed
+/// into the current calendar week plus the three before it. Index 0 is the
+/// current week, 3 the oldest; `dayGrid` splits each week into its weekdays for
+/// the dot column, weekday 0 = Monday.
+///
+/// Weeks are Monday-start calendar weeks, not rolling 7-day windows, so the
+/// current week is always its own row even when only a day or two into it.
+/// [now] is local; a calendar week holds one of each weekday, so no collisions.
+({List<double> weekSecs, List<List<double>> dayGrid}) bucketListening(
+  Iterable<PlayRef> hist,
+  Map<String, Track> byId,
+  DateTime now,
+) {
+  final weekSecs = List<double>.filled(4, 0);
+  final dayGrid = List.generate(4, (_) => List<double>.filled(7, 0));
+  // Date arithmetic in UTC so a DST jump can't shift a play into the
+  // neighbouring day — the dates fed in are still the viewer's local ones.
+  final weekStart = DateTime.utc(now.year, now.month, now.day)
+      .subtract(Duration(days: now.weekday - 1));
+  for (final p in hist) {
+    final d = DateTime.tryParse(p.at)?.toLocal();
+    if (d == null) continue;
+    final offset =
+        DateTime.utc(d.year, d.month, d.day).difference(weekStart).inDays;
+    if (offset >= 7) continue; // dated past this week (clock skew)
+    // 0 for this week, then one bucket per whole week before it.
+    final w = offset >= 0 ? 0 : (-offset - 1) ~/ 7 + 1;
+    if (w >= 4) continue;
+    final secs = byId[p.id]?.duration ?? 0;
+    weekSecs[w] += secs;
+    dayGrid[w][d.weekday - 1] += secs;
+  }
+  return (weekSecs: weekSecs, dayGrid: dayGrid);
+}
+
 /// Legacy buildListening: 30-day charts + top artists/tracks mini-lists.
 class _Listening extends ConsumerWidget {
   const _Listening({required this.stats});
@@ -564,23 +599,9 @@ class _Listening extends ConsumerWidget {
     final byId = ref.watch(trackByIdProvider);
 
     // Bucket in the viewer's timezone — the server hands raw timestamps.
-    final now = DateTime.now();
-
-    // Listening time (seconds) per week for the last 4 weeks, from the
-    // play-log times * each track's tagged duration. dayGrid also splits each
-    // week into its 7 weekdays for the dot column — a rolling 7-day window
-    // holds exactly one of each weekday, so no collisions.
-    final weekSecs = List<double>.filled(4, 0);
-    final dayGrid = List.generate(4, (_) => List<double>.filled(7, 0));
-    for (final p in hist) {
-      final d = DateTime.tryParse(p.at)?.toLocal();
-      if (d == null) continue;
-      final daysAgo = now.difference(d).inDays;
-      if (daysAgo < 0 || daysAgo >= 28) continue;
-      final secs = byId[p.id]?.duration ?? 0;
-      weekSecs[daysAgo ~/ 7] += secs;
-      dayGrid[daysAgo ~/ 7][d.weekday - 1] += secs;
-    }
+    final buckets = bucketListening(hist, byId, DateTime.now());
+    final weekSecs = buckets.weekSecs;
+    final dayGrid = buckets.dayGrid;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AriaSpace.s6),
@@ -850,7 +871,7 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
 class _WeeklyTimeBox extends StatelessWidget {
   const _WeeklyTimeBox({required this.weekSecs, required this.dayGrid});
 
-  /// Index 0 = current 7 days, 1 = prior week, up to 4 weeks back.
+  /// Index 0 = the current calendar week (partial), 1 = last week, back to 3.
   final List<double> weekSecs;
 
   /// [week][weekday] listening seconds, week 0 = current, weekday 0 = Monday.
