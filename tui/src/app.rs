@@ -310,11 +310,109 @@ impl App {
         self.save_config();
     }
 
-    pub fn persist_server(&mut self, server: String) {
-        self.cfg.server = server.clone();
-        self.cfg.normalize();
-        self.saved.server = self.cfg.server.clone();
+    /// Points the client at a different server and stores the choice, so it is
+    /// the one used from the next run onwards.
+    ///
+    /// Everything on screen belongs to the old server — track ids, playlist
+    /// ids, profile ids, stream URLs — so the state is dropped rather than
+    /// blended. Replacing the message channel is what retires the requests
+    /// already in flight: their threads find the receiver gone, so a slow
+    /// answer from the old server cannot land on top of the new library.
+    pub fn switch_server(&mut self, server: String) {
+        // Checked before normalising, not after: `normalize_base` answers the
+        // default URL for empty input, so an emptied prompt would otherwise
+        // read as "switch me to localhost:3000" and drop the session.
+        let typed = server.trim();
+        if typed.is_empty() {
+            self.toast("no server URL given");
+            return;
+        }
+        let next = crate::api::normalize_base(typed);
+        if next == self.cfg.server {
+            self.toast("already connected to that server");
+            return;
+        }
+
+        self.cfg.server = next.clone();
+        self.saved.server = next.clone();
+        // The profile belongs to the server that issued it, so it cannot carry
+        // over; `ensure_profile` picks or asks again once the new list lands.
+        self.cfg.profile_id.clear();
+        self.cfg.profile_name.clear();
+        self.saved.profile_id.clear();
+        self.saved.profile_name.clear();
         self.save_config();
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.tx = tx;
+        self.rx = rx;
+        self.client = Arc::new(Client::new(&next));
+
+        // The queue holds URLs on the old host, so it is stopped rather than
+        // left playing something the visible library no longer describes.
+        self.player.stop();
+        self.queue.clear();
+        self.lib = Library::default();
+        self.playlists.clear();
+        self.playlist_tracks.clear();
+        self.tags.clear();
+        self.profiles.clear();
+        self.stats = None;
+        self.status = None;
+        self.progress = None;
+        self.detail = Detail::None;
+        self.reported = None;
+        self.last_track_id = None;
+        self.pending_pos = None;
+        self.error = None;
+        self.rerun_search();
+
+        self.spawn_event_stream();
+        self.load_library();
+        self.load_status();
+        self.load_profiles();
+        self.load_tags();
+        self.toast(format!("connected to {next}"));
+    }
+
+    /// Subscribes to the server's progress stream, reconnecting for as long as
+    /// the channel lives. Scan and enrichment passes rewrite the merged track
+    /// view, so this is how the client learns its library went stale.
+    ///
+    /// Respawned on a server switch; the previous thread retires itself when
+    /// its send fails against the replaced channel.
+    pub fn spawn_event_stream(&self) {
+        use std::time::{Duration, Instant};
+
+        let tx = self.sender();
+        let base = self.client.base_url().to_string();
+        std::thread::spawn(move || {
+            let client = Client::new(&base);
+            let base_delay = Duration::from_secs(1);
+            let mut backoff = base_delay;
+            loop {
+                let started = Instant::now();
+                let tx2 = tx.clone();
+                let result = client.events(move |ev| {
+                    let _ = tx2.send(Msg::Sse(ev));
+                });
+                if tx.send(Msg::SseLost).is_err() {
+                    return; // the app is gone, or this server is no longer ours
+                }
+                let _ = result;
+                // A stream that stayed up was healthy, so the next drop starts
+                // from a short delay again — otherwise one bad patch would
+                // leave the client on a minute-long reconnect for the rest of
+                // the run.
+                if started.elapsed() >= Duration::from_secs(30) {
+                    backoff = base_delay;
+                }
+                // A drop is normal (server restart, proxy timeout); back off up
+                // to a minute rather than hammering.
+                std::thread::sleep(backoff);
+                backoff = (backoff * 2).min(Duration::from_secs(60));
+            }
+        });
     }
 
     pub fn sender(&self) -> Sender<Msg> {
@@ -678,7 +776,7 @@ impl App {
                 self.tracks_list.clamp(self.lib.tracks.len());
                 self.rerun_search();
                 self.error = None;
-                self.toast(format!("{n} tracks"));
+                self.toast(format!("{n} track{}", if n == 1 { "" } else { "s" }));
             }
             Msg::Library(Err(e)) => {
                 self.loading = false;
@@ -1218,6 +1316,125 @@ mod tests {
             "the hand-written URL must survive a one-off flag"
         );
         assert_eq!(reloaded.tier, "original", "and so must the stored tier");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn switching_servers_in_the_app_stores_the_new_url() {
+        let dir = std::env::temp_dir().join(format!("aria-tui-switch-{}", std::process::id()));
+        let path = dir.join("config.toml");
+        let on_disk = Config {
+            server: "http://nas.local:3000".into(),
+            profile_id: "p-1".into(),
+            profile_name: "Alex".into(),
+            ..Default::default()
+        };
+        on_disk.save(&path).unwrap();
+
+        let mut app = App::with_saved(on_disk.clone(), on_disk, path.clone(), Player::disabled());
+        app.lib = Library::new(vec![Track {
+            id: "t1".into(),
+            album_id: "al1".into(),
+            ..Default::default()
+        }]);
+        app.play_tracks(vec!["t1".into()], 0);
+
+        // Typed without a scheme, the way a user would.
+        app.switch_server("box:3001".into());
+
+        assert_eq!(app.cfg.server, "http://box:3001");
+        assert_eq!(app.client.base_url(), "http://box:3001");
+        assert!(
+            app.lib.tracks.is_empty() && app.queue.is_empty(),
+            "the old server's library and queue must not survive the switch"
+        );
+        assert!(
+            app.cfg.profile_id.is_empty(),
+            "a profile id is scoped to the server that issued it"
+        );
+
+        let reloaded = Config::load(&path).unwrap();
+        assert_eq!(reloaded.server, "http://box:3001");
+        assert!(reloaded.profile_id.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_switch_to_the_same_server_is_a_no_op() {
+        // Opening the prompt and pressing Enter must not clear the library and
+        // drop the profile for nothing.
+        let dir = std::env::temp_dir().join(format!("aria-tui-noswitch-{}", std::process::id()));
+        let cfg = Config {
+            server: "http://nas.local:3000".into(),
+            profile_id: "p-1".into(),
+            ..Default::default()
+        };
+        let mut app = App::new(cfg, dir.join("config.toml"), Player::disabled());
+        app.lib = Library::new(vec![Track {
+            id: "t1".into(),
+            album_id: "al1".into(),
+            ..Default::default()
+        }]);
+
+        // Same URL, spelled with the trailing slash `normalize_base` strips.
+        app.switch_server("http://nas.local:3000/".into());
+
+        assert_eq!(app.lib.tracks.len(), 1, "nothing should have been dropped");
+        assert_eq!(app.cfg.profile_id, "p-1");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_emptied_server_prompt_changes_nothing() {
+        // Ctrl-U then Enter. `normalize_base("")` answers the default URL, so
+        // taking it at face value would have switched the user to
+        // localhost:3000 and thrown away their library and profile.
+        let dir = std::env::temp_dir().join(format!("aria-tui-blank-{}", std::process::id()));
+        let cfg = Config {
+            server: "http://nas.local:3000".into(),
+            profile_id: "p-1".into(),
+            ..Default::default()
+        };
+        let mut app = App::new(cfg, dir.join("config.toml"), Player::disabled());
+        app.lib = Library::new(vec![Track {
+            id: "t1".into(),
+            album_id: "al1".into(),
+            ..Default::default()
+        }]);
+
+        app.switch_server("   ".into());
+
+        assert_eq!(app.cfg.server, "http://nas.local:3000");
+        assert_eq!(app.cfg.profile_id, "p-1");
+        assert_eq!(app.lib.tracks.len(), 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_reply_from_the_old_server_cannot_land_on_the_new_one() {
+        // A slow /api/tracks against the previous host must not repopulate the
+        // library after the switch. The retired channel is what stops it.
+        let dir = std::env::temp_dir().join(format!("aria-tui-stale-{}", std::process::id()));
+        let cfg = Config {
+            server: "http://nas.local:3000".into(),
+            ..Default::default()
+        };
+        let mut app = App::new(cfg, dir.join("config.toml"), Player::disabled());
+        let old_tx = app.sender();
+
+        app.switch_server("http://box:3001".into());
+
+        let sent = old_tx.send(Msg::Library(Ok(vec![Track {
+            id: "ghost".into(),
+            album_id: "al1".into(),
+            ..Default::default()
+        }])));
+        assert!(sent.is_err(), "the old channel must be closed");
+        app.tick();
+        assert!(
+            app.lib.track("ghost").is_none(),
+            "a stale reply must not reach the new session"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

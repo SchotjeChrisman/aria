@@ -11,9 +11,8 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use aria_tui::api::Client;
-use aria_tui::app::{App, Modal, Msg};
-use aria_tui::config::{parse_args, Config, USAGE};
+use aria_tui::app::{App, Modal};
+use aria_tui::config::{apply_env, parse_args, resolve, Config, Resolved, USAGE};
 use aria_tui::keys::handle_key;
 use aria_tui::player::{Player, PlayerError};
 use aria_tui::ui;
@@ -21,13 +20,14 @@ use aria_tui::ui;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> io::Result<()> {
-    let args = match parse_args(std::env::args().skip(1)) {
+    let mut args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("aria-tui: {e}\n\n{USAGE}");
             std::process::exit(2);
         }
     };
+    apply_env(&mut args, |k| std::env::var(k).ok());
     if args.help {
         println!("{USAGE}");
         return Ok(());
@@ -41,17 +41,32 @@ fn main() -> io::Result<()> {
         .config_path
         .clone()
         .unwrap_or_else(Config::default_path);
-    let mut cfg = match Config::load(&cfg_path) {
+    let cfg = match Config::load(&cfg_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("aria-tui: {e}");
             std::process::exit(1);
         }
     };
-    // Kept before the CLI overrides are folded in: flags apply to this run,
-    // not to the user's file.
-    let saved_cfg = cfg.clone();
-    cfg.apply(&args);
+    let resolved = resolve(cfg, &args, cfg_path.exists());
+    let mut config_note = None;
+    if resolved.write_now {
+        match resolved.stored.save(&cfg_path) {
+            // A first run says nothing: storing the server is the expected
+            // behaviour, not an event. An explicit --save confirms, because it
+            // was asked for.
+            Ok(()) if args.save => {
+                config_note = Some(format!("saved to {}", cfg_path.display()));
+            }
+            Ok(()) => {}
+            Err(e) => config_note = Some(format!("could not save config: {e}")),
+        }
+    }
+    let Resolved {
+        effective: cfg,
+        stored: saved_cfg,
+        ..
+    } = resolved;
 
     // Start mpv before taking over the terminal, so a failure prints plainly.
     let (player, player_note) = if args.no_player {
@@ -81,7 +96,8 @@ fn main() -> io::Result<()> {
     };
 
     let mut app = App::with_saved(cfg, saved_cfg, cfg_path, player);
-    if let Some(note) = player_note {
+    // The player note is the more urgent of the two, so it wins the one line.
+    if let Some(note) = player_note.or_else(|| config_note.take()) {
         app.toast(note);
     }
 
@@ -91,7 +107,7 @@ fn main() -> io::Result<()> {
     app.load_status();
     app.load_profiles();
     app.load_tags();
-    spawn_event_stream(&app);
+    app.spawn_event_stream();
 
     // A profile named on the command line is resolved once the list arrives.
     let wanted_profile = args.profile.clone();
@@ -129,40 +145,6 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Re
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()
-}
-
-/// Subscribes to the server's progress stream, reconnecting for as long as the
-/// app runs. Scan and enrichment passes rewrite the merged track view, so this
-/// is how the client knows its library went stale.
-fn spawn_event_stream(app: &App) {
-    let tx = app.sender();
-    let base = app.client.base_url().to_string();
-    std::thread::spawn(move || {
-        let client = Client::new(&base);
-        let base_delay = Duration::from_secs(1);
-        let mut backoff = base_delay;
-        loop {
-            let started = Instant::now();
-            let tx2 = tx.clone();
-            let result = client.events(move |ev| {
-                let _ = tx2.send(Msg::Sse(ev));
-            });
-            if tx.send(Msg::SseLost).is_err() {
-                return; // the app is gone
-            }
-            let _ = result;
-            // A stream that stayed up was healthy, so the next drop starts
-            // from a short delay again — otherwise one bad patch would leave
-            // the client on a minute-long reconnect for the rest of the run.
-            if started.elapsed() >= Duration::from_secs(30) {
-                backoff = base_delay;
-            }
-            // A drop is normal (server restart, proxy timeout); back off up to
-            // a minute rather than hammering.
-            std::thread::sleep(backoff);
-            backoff = (backoff * 2).min(Duration::from_secs(60));
-        }
-    });
 }
 
 fn run(

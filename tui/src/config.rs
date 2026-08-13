@@ -106,7 +106,8 @@ impl Config {
     }
 }
 
-/// Parsed command line. Flags win over the config file for this run only.
+/// Parsed command line. Flags win over the config file for this run only,
+/// unless [`Args::save`] is set or the config file does not exist yet.
 #[derive(Debug, Default)]
 pub struct Args {
     pub server: Option<String>,
@@ -114,6 +115,7 @@ pub struct Args {
     pub profile: Option<String>,
     pub tier: Option<String>,
     pub no_player: bool,
+    pub save: bool,
     pub help: bool,
     pub version: bool,
 }
@@ -129,9 +131,17 @@ OPTIONS:
     -c, --config <PATH>    Config file to use
     -p, --profile <NAME>   Profile to use, by name
     -t, --tier <TIER>      Stream tier: original | high | low
+        --save             Store --server and --tier as the new defaults
         --no-player        Browse only; do not start mpv
     -h, --help             Show this help
     -V, --version          Show the version
+
+The server is remembered. On a first run it is written to the config file, so
+`aria-tui -s http://box:3001` once is enough and plain `aria-tui` connects
+there afterwards. Later, change it with `o` inside the app or with --save.
+
+ENVIRONMENT:
+    ARIA_SERVER            Server base URL, when no --server is given
 ";
 
 /// Hand-rolled because the whole surface is seven flags, and a dependency for
@@ -147,6 +157,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(argv: I) -> std::result::Resul
             "-h" | "--help" => args.help = true,
             "-V" | "--version" => args.version = true,
             "--no-player" => args.no_player = true,
+            "--save" => args.save = true,
             "-s" | "--server" => args.server = Some(take("--server")?),
             "-c" | "--config" => args.config_path = Some(PathBuf::from(take("--config")?)),
             "-p" | "--profile" => args.profile = Some(take("--profile")?),
@@ -164,6 +175,70 @@ pub fn parse_args<I: IntoIterator<Item = String>>(argv: I) -> std::result::Resul
         }
     }
     Ok(args)
+}
+
+/// Folds `$ARIA_SERVER` in as a lower-priority `--server`.
+///
+/// One export in a shell profile, a container `-e`, or an ssh `SendEnv` then
+/// declares the server for every invocation. An explicit flag still wins, and
+/// a blank value is treated as unset so `ARIA_SERVER= aria-tui` falls back to
+/// the config file rather than to an empty URL.
+///
+/// Takes the lookup as an argument because the process environment is global
+/// state, and a test that set it would race every other test in the binary.
+pub fn apply_env<F>(args: &mut Args, get: F)
+where
+    F: Fn(&str) -> Option<String>,
+{
+    if args.server.is_none() {
+        if let Some(v) = get("ARIA_SERVER") {
+            if !v.trim().is_empty() {
+                args.server = Some(v);
+            }
+        }
+    }
+}
+
+/// What this run uses, and what the config file should end up holding.
+#[derive(Debug)]
+pub struct Resolved {
+    /// The config for this run: the file with the flags folded in.
+    pub effective: Config,
+    /// The config the file should hold. Fields the app changes from the inside
+    /// are written on top of this one.
+    pub stored: Config,
+    /// Whether `stored` still has to be written out.
+    pub write_now: bool,
+}
+
+/// Decides whether this run's flags are a one-off or the new default.
+///
+/// A flag is normally for this run only — a one-off `-s` must not silently
+/// replace a hand-written server URL. Two cases invert that:
+///
+///   * there is no config file yet, so there is nothing to protect and the
+///     flags are simply how the user is configuring the client for the first
+///     time; and
+///   * `--save`, which asks for exactly this on a later run.
+///
+/// Either way the file is written immediately rather than at quit, so a first
+/// run that is killed instead of quit still leaves its server behind.
+pub fn resolve(on_disk: Config, args: &Args, config_exists: bool) -> Resolved {
+    let mut effective = on_disk.clone();
+    effective.apply(args);
+    if config_exists && !args.save {
+        Resolved {
+            effective,
+            stored: on_disk,
+            write_now: false,
+        }
+    } else {
+        Resolved {
+            stored: effective.clone(),
+            effective,
+            write_now: true,
+        }
+    }
 }
 
 impl Config {
@@ -284,6 +359,82 @@ mod tests {
     #[test]
     fn unknown_flags_are_rejected() {
         assert!(parse_args(argv(&["--wat"])).is_err());
+    }
+
+    #[test]
+    fn a_first_run_stores_the_server_it_was_given() {
+        // The whole point: `-s` once, then a bare `aria-tui` for ever after.
+        let args = parse_args(argv(&["-s", "http://box:3001", "-t", "high"])).unwrap();
+        let r = resolve(Config::default(), &args, false);
+        assert!(r.write_now, "a first run must write the file");
+        assert_eq!(r.stored.server, "http://box:3001");
+        assert_eq!(r.stored.tier, "high");
+        assert_eq!(r.effective.server, r.stored.server);
+    }
+
+    #[test]
+    fn a_later_run_keeps_its_flags_out_of_the_file() {
+        let on_disk = Config {
+            server: "http://nas.local:3000".into(),
+            ..Default::default()
+        };
+        let args = parse_args(argv(&["-s", "http://laptop:3000"])).unwrap();
+        let r = resolve(on_disk, &args, true);
+        assert!(!r.write_now);
+        assert_eq!(r.effective.server, "http://laptop:3000", "for this run");
+        assert_eq!(r.stored.server, "http://nas.local:3000", "but not stored");
+    }
+
+    #[test]
+    fn save_promotes_this_runs_flags_to_the_defaults() {
+        let on_disk = Config {
+            server: "http://nas.local:3000".into(),
+            ..Default::default()
+        };
+        let args = parse_args(argv(&["-s", "http://laptop:3000", "--save"])).unwrap();
+        let r = resolve(on_disk, &args, true);
+        assert!(r.write_now);
+        assert_eq!(r.stored.server, "http://laptop:3000");
+    }
+
+    #[test]
+    fn save_without_flags_does_not_wipe_the_stored_config() {
+        // `--save` on its own means "keep what I have", not "reset me".
+        let on_disk = Config {
+            server: "http://nas.local:3000".into(),
+            profile_id: "p-1".into(),
+            volume: 63.0,
+            ..Default::default()
+        };
+        let args = parse_args(argv(&["--save"])).unwrap();
+        let r = resolve(on_disk, &args, true);
+        assert_eq!(r.stored.server, "http://nas.local:3000");
+        assert_eq!(r.stored.profile_id, "p-1");
+        assert_eq!(r.stored.volume, 63.0);
+    }
+
+    #[test]
+    fn the_env_var_stands_in_for_a_missing_server_flag() {
+        let mut args = parse_args(argv(&[])).unwrap();
+        apply_env(&mut args, |k| {
+            (k == "ARIA_SERVER").then(|| "http://box:3001".to_string())
+        });
+        assert_eq!(args.server.as_deref(), Some("http://box:3001"));
+    }
+
+    #[test]
+    fn an_explicit_server_flag_beats_the_env_var() {
+        let mut args = parse_args(argv(&["-s", "http://flag:3000"])).unwrap();
+        apply_env(&mut args, |_| Some("http://env:3000".to_string()));
+        assert_eq!(args.server.as_deref(), Some("http://flag:3000"));
+    }
+
+    #[test]
+    fn a_blank_env_var_is_treated_as_unset() {
+        // `ARIA_SERVER= aria-tui` must fall back to the file, not to "".
+        let mut args = parse_args(argv(&[])).unwrap();
+        apply_env(&mut args, |_| Some("  ".to_string()));
+        assert!(args.server.is_none());
     }
 
     #[test]

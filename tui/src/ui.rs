@@ -824,6 +824,7 @@ const HELP: &[(&str, &str)] = &[
     ("R", "reload library"),
     ("S", "rescan the server library"),
     ("U", "switch profile"),
+    ("o", "change server (saved)"),
     ("?", "this help"),
     ("q", "quit"),
 ];

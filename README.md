@@ -137,6 +137,10 @@ cargo build --release
 ./target/release/aria-tui --server http://localhost:3001
 ```
 
+The server is only named once: a first run stores it, so `aria-tui` on its own
+connects there afterwards. Change it later with `o` in the app, `--save`, or
+`$ARIA_SERVER`.
+
 It plays through **mpv**, launched as a child process and driven over its JSON
 IPC socket: gapless, and bit-perfect on the original tier like the Flutter app.
 Without mpv installed it still browses the library and edits playlists, and

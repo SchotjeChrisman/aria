@@ -232,6 +232,15 @@ fn handle_global(app: &mut App, key: KeyEvent) {
                 action: ConfirmAction::Rescan,
             };
         }
+        // Pre-filled with the current URL: changing a port or a hostname is
+        // the common case, and retyping the whole thing to do it is not.
+        KeyCode::Char('o') => {
+            app.modal = Modal::Prompt {
+                kind: PromptKind::ServerUrl,
+                label: "Server URL".into(),
+                input: app.cfg.server.clone(),
+            };
+        }
         KeyCode::Char('U') => {
             if app.profiles.is_empty() {
                 app.load_profiles();
@@ -567,10 +576,7 @@ fn handle_modal(app: &mut App, key: KeyEvent) {
                             let _ = tx.send(Msg::ProfileCreated(r));
                         });
                     }
-                    PromptKind::ServerUrl => {
-                        app.persist_server(text);
-                        app.toast("server changed — restart to reconnect");
-                    }
+                    PromptKind::ServerUrl => app.switch_server(text),
                 }
                 app.modal = Modal::None;
             }

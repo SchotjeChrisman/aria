@@ -44,6 +44,14 @@ Point it at the server and pick a profile:
 aria-tui -s http://your-box:3001
 ```
 
+You only do that once. A first run has no settings to protect, so the flags it
+is given become the stored config — from then on a bare `aria-tui` connects to
+the same server:
+
+```sh
+aria-tui
+```
+
 Aria seeds one profile, so with a single-user server there is nothing to
 choose; with several the client asks. The choice is saved, along with the
 server URL, volume and stream tier, to
@@ -52,17 +60,41 @@ server URL, volume and stream tier, to
 The profile is not cosmetic: Aria scopes playlists, listen-later, stats and
 play history to it, and `POST /api/plays` refuses a report without one.
 
+### Changing the server later
+
+Once the config file exists, `-s` is a one-off: it applies to that run and is
+not written back, so a quick look at another box cannot silently replace the
+URL you configured. To change the stored one:
+
+* press `o` in the app, edit the URL and press Enter — it reconnects
+  immediately and remembers; or
+* run `aria-tui -s http://other-box:3001 --save`.
+
+Switching servers clears the library, queue and profile: track ids, playlist
+ids and profile ids are issued by one server and mean nothing on another.
+
+`$ARIA_SERVER` is honoured when no `--server` is given, which is the easier
+answer for a container or an ssh session:
+
+```sh
+export ARIA_SERVER=http://your-box:3001
+```
+
 ## Options
 
 ```
--s, --server <URL>     Server base URL (default: http://localhost:3000)
+-s, --server <URL>     Server base URL (default: from config, else http://localhost:3000)
 -c, --config <PATH>    Config file to use
 -p, --profile <NAME>   Profile to use, by name
 -t, --tier <TIER>      Stream tier: original | high | low
+    --save             Store --server and --tier as the new defaults
     --no-player        Browse only; do not start mpv
 -h, --help             Show this help
 -V, --version          Show the version
 ```
+
+Precedence is flag, then `$ARIA_SERVER`, then the config file, then
+`http://localhost:3000`.
 
 ## Keys
 
@@ -86,6 +118,7 @@ play history to it, and `POST /api/plays` refuses a report without one.
 | `P` | Add to a playlist |
 | `d` | Remove from the queue or a playlist |
 | `/` | Search |
+| `o` | Change the server, and remember it |
 | `t` | Cycle the stream tier |
 | `R` | Reload the library |
 | `S` | Rescan the server's library |
