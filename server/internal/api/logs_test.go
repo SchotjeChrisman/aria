@@ -29,9 +29,16 @@ func TestLogsRoundTrip(t *testing.T) {
 	deps := logsDeps(t)
 	h := New(deps)
 
-	body := `{"device":"linux-a1b2c3","entries":[
-		{"ts":"2026-07-08T10:00:00.000Z","level":"info","tag":"app","msg":"start","extra":{"platform":"linux"}},
-		{"ts":"2026-07-08T10:00:01.000Z","level":"error","tag":"playback","msg":"boom"}]}`
+	// Relative to now, not a fixed date: POST prunes anything older than 30
+	// days, so hardcoded timestamps make this test pass until it silently
+	// ages out and then fails for ever.
+	stamp := func(d time.Duration) string {
+		return time.Now().UTC().Add(d).Format("2006-01-02T15:04:05.000Z")
+	}
+	body := fmt.Sprintf(`{"device":"linux-a1b2c3","entries":[
+		{"ts":%q,"level":"info","tag":"app","msg":"start","extra":{"platform":"linux"}},
+		{"ts":%q,"level":"error","tag":"playback","msg":"boom"}]}`,
+		stamp(-time.Hour), stamp(-time.Hour+time.Second))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/logs", strings.NewReader(body)))
 	if rec.Code != 200 {
