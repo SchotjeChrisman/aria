@@ -122,6 +122,27 @@ lyrics, metadata editing, radio and new-release shelves. Also opt-in ReplayGain
 gain inside the player, which is DSP: the output is no longer bit-perfect, and
 the Now Playing signal path says so.
 
+## Terminal client (`tui/`)
+
+A Rust/ratatui client for people who live in a terminal — see
+[`tui/README.md`](tui/README.md).
+
+Every release carries `aria-tui-linux-x64.tar.gz` and `aria-tui-macos.zip`
+(universal, Intel and Apple silicon). Unpack, put it on your `PATH`, and
+install mpv. Or build it:
+
+```sh
+cd tui
+cargo build --release
+./target/release/aria-tui --server http://localhost:3001
+```
+
+It plays through **mpv**, launched as a child process and driven over its JSON
+IPC socket: gapless, and bit-perfect on the original tier like the Flutter app.
+Without mpv installed it still browses the library and edits playlists, and
+says so instead of failing. Covers albums/artists/tracks, local search,
+queue, playlists, tags, stats, favourites, and play reporting.
+
 ## API
 
 Full spec: [`server/openapi.yaml`](server/openapi.yaml). Same `/api` paths and

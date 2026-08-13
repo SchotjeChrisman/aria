@@ -14,6 +14,10 @@ app_flutter/packages/*/.dart_tool/
 app_flutter/packages/*/build/
 app_flutter/*.iml
 server/aria
+tui/target/
+tui/aria-tui-*.tar.gz
+tui/aria-tui-*.zip
+tui/aria-tui
 
 # local env
 .env

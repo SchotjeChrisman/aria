@@ -31,6 +31,41 @@ jobs:
           cache: true
       - name: Flutter tests
         run: flutter test
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tui
+      - name: TUI tests
+        working-directory: tui
+        # Unit and rendering tests; the live ones below need a server and skip
+        # themselves without ARIA_TEST_SERVER. No lint gate here, matching the
+        # Go and Flutter steps — a new clippy lint must not block a release.
+        run: cargo test
+      - name: TUI tests against a live server
+        working-directory: .
+        # The one class of bug the offline tests cannot catch is the client and
+        # the server disagreeing about the API. Both are in this repo, so the
+        # real server is built and answered against: response shapes, the
+        # playlist round-trip, and the play-timestamp layout the server parses
+        # strictly.
+        run: |
+          set -euo pipefail
+          (cd server && go build -o "$RUNNER_TEMP/aria-server" ./cmd/aria)
+          MUSIC_DIR="$PWD/test-music" DATA_DIR="$RUNNER_TEMP/aria-data" PORT=3999 \
+            "$RUNNER_TEMP/aria-server" &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 60); do
+            if curl -fsS http://127.0.0.1:3999/healthz >/dev/null 2>&1; then
+              ready=1; break
+            fi
+            sleep 0.5
+          done
+          if [ "${ready:-}" != 1 ]; then
+            echo "aria server did not become ready on :3999" >&2
+            exit 1
+          fi
+          cd tui && ARIA_TEST_SERVER=http://127.0.0.1:3999 cargo test --test live
 
   docker:
     if: github.event_name == 'release'
@@ -293,3 +328,65 @@ jobs:
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk aria-android.apk
           gh release upload "$GITHUB_REF_NAME" aria-android.apk --clobber
+
+  # The terminal client. A self-contained Rust binary: it needs no libmpv at
+  # build time (mpv is launched as a child process at runtime), so unlike the
+  # Flutter jobs this one installs nothing beyond the toolchain.
+  #
+  # Unix only — playback talks to mpv over a unix socket, so there is no
+  # Windows target to build.
+  tui:
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      # One platform failing should not deny the other its artifact.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            asset: aria-tui-linux-x64.tar.gz
+            targets: ""
+          - runner: macos-latest
+            asset: aria-tui-macos.zip
+            # Built for both architectures and merged, so one download serves
+            # Intel and Apple silicon.
+            targets: x86_64-apple-darwin,aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tui
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        working-directory: tui
+        run: |
+          set -euo pipefail
+          cargo build --release
+          ./target/release/aria-tui --version
+          tar -C target/release -czf "${{ matrix.asset }}" aria-tui
+      - name: Build (macOS universal)
+        if: runner.os == 'macOS'
+        working-directory: tui
+        run: |
+          set -euo pipefail
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          lipo -create -output aria-tui \
+            target/x86_64-apple-darwin/release/aria-tui \
+            target/aarch64-apple-darwin/release/aria-tui
+          # Confirms the merged binary runs on the runner's own architecture;
+          # `lipo -info` covers that the other slice is present at all.
+          ./aria-tui --version
+          lipo -info aria-tui
+          zip -q "${{ matrix.asset }}" aria-tui
+      - name: Upload to release
+        if: github.event_name == 'release'
+        working-directory: tui
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "${{ matrix.asset }}" --clobber
