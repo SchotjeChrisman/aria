@@ -13,10 +13,13 @@ use std::sync::Arc;
 use crate::api::models::{Playlist, Profile, Status, Tag, Tier, Track};
 use crate::api::{ApiError, Client, SseEvent};
 use crate::config::Config;
-use crate::library::Library;
+use crate::library::{Library, ListKind, Sort, SortField};
 use crate::player::Player;
 use crate::queue::{Queue, Repeat};
 use crate::timefmt;
+
+/// The three lists whose order the user chooses.
+const SORTABLE: [ListKind; 3] = [ListKind::Albums, ListKind::Artists, ListKind::Tracks];
 
 /// Which pane is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +56,19 @@ impl View {
             View::Playlists => "Playlists",
             View::Tags => "Tags",
             View::Stats => "Stats",
+        }
+    }
+
+    /// The library list this view shows, if it is one that can be re-sorted.
+    /// The queue is a hand-built order and a playlist is the order it was
+    /// saved in, so neither is sortable; search results are ranked by how well
+    /// they match, which is the only useful order for them.
+    pub fn list_kind(self) -> Option<ListKind> {
+        match self {
+            View::Albums => Some(ListKind::Albums),
+            View::Artists => Some(ListKind::Artists),
+            View::Tracks => Some(ListKind::Tracks),
+            _ => None,
         }
     }
 }
@@ -117,6 +133,7 @@ pub enum Msg {
     PlaylistTracks(String, Result<Vec<Track>, ApiError>),
     Tags(Result<Vec<Tag>, ApiError>),
     Stats(Result<serde_json::Value, ApiError>),
+    PlayCounts(Result<std::collections::HashMap<String, u32>, ApiError>),
     Favourite(String, Result<bool, ApiError>),
     ProfileCreated(Result<Profile, ApiError>),
     PlaylistChanged(Result<Playlist, ApiError>),
@@ -204,6 +221,12 @@ pub struct App {
     pub tags: Vec<Tag>,
     pub stats: Option<serde_json::Value>,
     pub status: Option<Status>,
+    /// Per-track play counts for the active profile, `None` until a list is
+    /// sorted by them. Held here as well as in the library because a rescan
+    /// rebuilds the library, and re-fetching on every rescan would undo the
+    /// laziness this is fetched with.
+    pub play_counts: Option<std::collections::HashMap<String, u32>>,
+    counts_in_flight: bool,
 
     /// Transient message on the status line, with the tick it expires at.
     pub toast: Option<(String, u64)>,
@@ -274,6 +297,8 @@ impl App {
             tags: Vec::new(),
             stats: None,
             status: None,
+            play_counts: None,
+            counts_in_flight: false,
             toast: None,
             error: None,
             loading: false,
@@ -300,6 +325,107 @@ impl App {
         if let Err(e) = self.saved.save(&self.cfg_path) {
             self.error = Some(format!("could not save config: {e}"));
         }
+    }
+
+    /// Hands the stored row orders to a freshly loaded library. Sorting lives
+    /// in the library because that is where the rows are, but the choice is
+    /// the user's and outlives any one load.
+    fn apply_sorts(&mut self) {
+        let sorts = self.cfg.sorts();
+        self.lib.set_sorts(sorts);
+        if let Some(counts) = self.play_counts.clone() {
+            self.lib.set_play_counts(counts);
+        }
+    }
+
+    /// The library items each list's cursor is on, so a re-order can put the
+    /// cursors back on them rather than leaving them pointing at a row number.
+    fn held_rows(&self) -> [Option<usize>; 3] {
+        SORTABLE.map(|k| self.lib.row(k, self.list_state(k).selected))
+    }
+
+    fn restore_rows(&mut self, held: [Option<usize>; 3]) {
+        for (kind, item) in SORTABLE.into_iter().zip(held) {
+            if let Some(row) = item.and_then(|i| self.lib.row_of(kind, i)) {
+                self.list_state_mut(kind).selected = row;
+            }
+        }
+    }
+
+    fn list_state_mut(&mut self, kind: ListKind) -> &mut ListState {
+        match kind {
+            ListKind::Albums => &mut self.albums_list,
+            ListKind::Artists => &mut self.artists_list,
+            ListKind::Tracks => &mut self.tracks_list,
+        }
+    }
+
+    pub fn list_state(&self, kind: ListKind) -> &ListState {
+        match kind {
+            ListKind::Albums => &self.albums_list,
+            ListKind::Artists => &self.artists_list,
+            ListKind::Tracks => &self.tracks_list,
+        }
+    }
+
+    /// The list the sort keys act on: only a top-level library view, since a
+    /// drill-down shows an album in disc order and a playlist in the order it
+    /// was saved.
+    pub fn sortable(&self) -> Option<ListKind> {
+        if self.detail == Detail::None {
+            self.view.list_kind()
+        } else {
+            None
+        }
+    }
+
+    pub fn cycle_sort(&mut self) {
+        let Some(kind) = self.sortable() else {
+            self.toast("this view has a fixed order");
+            return;
+        };
+        let next = self.lib.sort(kind).next(kind);
+        self.set_sort(kind, next);
+    }
+
+    pub fn reverse_sort(&mut self) {
+        let Some(kind) = self.sortable() else {
+            self.toast("this view has a fixed order");
+            return;
+        };
+        let next = self.lib.sort(kind).reversed();
+        self.set_sort(kind, next);
+    }
+
+    fn set_sort(&mut self, kind: ListKind, sort: Sort) {
+        // The row under the cursor is remembered across the re-sort. Losing
+        // your place in a list long enough to need sorting is the very thing
+        // sorting is being reached for, and `g` is one key away when the top
+        // is what was wanted.
+        let held = self.held_rows();
+
+        let mut sorts = self.lib.sorts();
+        sorts.set(kind, sort);
+        self.lib.set_sorts(sorts);
+        self.cfg.set_sorts(sorts);
+        self.saved.set_sorts(sorts);
+        self.save_config();
+        self.restore_rows(held);
+
+        // Play counts are not part of the library document, so asking for
+        // this order is what goes and gets them.
+        if sort.field == SortField::Plays && self.play_counts.is_none() {
+            if self.cfg.profile_id.is_empty() {
+                // Plays are recorded against a profile, so without one there
+                // is nothing to rank by — say that rather than counting to 0.
+                self.toast("sorted by plays — but no profile is chosen");
+                return;
+            }
+            self.ensure_play_counts();
+            self.toast("sorted by plays — counting…");
+            return;
+        }
+        self.toast(format!("sorted by {}", sort.label()));
     }
 
     /// Records an in-app change to a field that a CLI flag can also set. The
@@ -359,6 +485,8 @@ impl App {
         self.profiles.clear();
         self.stats = None;
         self.status = None;
+        self.play_counts = None;
+        self.counts_in_flight = false;
         self.progress = None;
         self.detail = Detail::None;
         self.reported = None;
@@ -757,6 +885,7 @@ impl App {
                 let _ = tx.send(Msg::Toast(format!("play not recorded: {e}")));
             }
         });
+        self.refresh_play_counts();
     }
 
     fn drain_messages(&mut self) {
@@ -771,6 +900,11 @@ impl App {
                 self.loading = false;
                 let n = tracks.len();
                 self.lib = Library::new(tracks);
+                self.apply_sorts();
+                // Also here, not only when the profile is settled: the two
+                // arrive in whichever order the server answers, and until the
+                // library exists there is no sort to notice plays in.
+                self.ensure_play_counts();
                 self.albums_list.clamp(self.lib.albums.len());
                 self.artists_list.clamp(self.lib.artists.len());
                 self.tracks_list.clamp(self.lib.tracks.len());
@@ -781,6 +915,20 @@ impl App {
             Msg::Library(Err(e)) => {
                 self.loading = false;
                 self.error = Some(format!("library: {e}"));
+            }
+            Msg::PlayCounts(Ok(counts)) => {
+                self.counts_in_flight = false;
+                // Preserved across the re-order for the same reason an
+                // explicit sort change is: the row being looked at should not
+                // move out from under the cursor.
+                let held = self.held_rows();
+                self.play_counts = Some(counts.clone());
+                self.lib.set_play_counts(counts);
+                self.restore_rows(held);
+            }
+            Msg::PlayCounts(Err(e)) => {
+                self.counts_in_flight = false;
+                self.error = Some(format!("play counts: {e}"));
             }
             Msg::Status(Ok(s)) => self.status = Some(s),
             Msg::Status(Err(e)) => self.error = Some(format!("status: {e}")),
@@ -927,6 +1075,51 @@ impl App {
     fn after_profile_selected(&mut self) {
         self.load_playlists();
         self.load_stats();
+        // Plays belong to the profile that made them, so the counts on hand
+        // are now the wrong listener's. Drop them, and fetch again only if a
+        // list is actually ranked by them.
+        self.play_counts = None;
+        self.lib.clear_play_counts();
+        self.ensure_play_counts();
+    }
+
+    /// Fetches the per-track play counts, but only when a list is sorted by
+    /// them and they are not already loaded. The map is one row per played
+    /// track, and a listener who never sorts by plays should never pay for it
+    /// — the same laziness the Flutter app applies.
+    pub fn ensure_play_counts(&mut self) {
+        if self.play_counts.is_some() || !self.sorting_by_plays() {
+            return;
+        }
+        self.fetch_play_counts();
+    }
+
+    fn fetch_play_counts(&mut self) {
+        if self.counts_in_flight || self.cfg.profile_id.is_empty() {
+            return;
+        }
+        self.counts_in_flight = true;
+        let pid = self.cfg.profile_id.clone();
+        self.spawn(move |c, tx| {
+            let _ = tx.send(Msg::PlayCounts(c.play_counts(&pid)));
+        });
+    }
+
+    pub fn sorting_by_plays(&self) -> bool {
+        [ListKind::Albums, ListKind::Artists, ListKind::Tracks]
+            .iter()
+            .any(|&k| self.lib.sort(k).field == SortField::Plays)
+    }
+
+    /// Re-fetches the counts after a play is recorded, so a list ranked by
+    /// plays reflects what was just listened to. Only when they are already
+    /// loaded, which by the laziness above means only when they are on screen.
+    /// The old counts stay in place until the new ones land, so the list is
+    /// re-ordered once rather than collapsing to all-zeros in between.
+    fn refresh_play_counts(&mut self) {
+        if self.play_counts.is_some() && self.sorting_by_plays() {
+            self.fetch_play_counts();
+        }
     }
 
     // ---- navigation helpers ---------------------------------------------
@@ -992,22 +1185,19 @@ impl App {
                 .cloned()
                 .into_iter()
                 .collect(),
+            // Through the display order, not straight into the library: the
+            // cursor counts rows on screen, and the rows are sorted.
             (Detail::None, View::Albums) => self
-                .lib
-                .albums
-                .get(self.albums_list.selected)
+                .album_at(self.albums_list.selected)
                 .map(|a| a.track_ids.clone())
                 .unwrap_or_default(),
             (Detail::None, View::Artists) => self
-                .lib
-                .artists
-                .get(self.artists_list.selected)
-                .map(|a| self.artist_tracks(&a.name))
+                .artist_at(self.artists_list.selected)
+                .map(|a| a.name.clone())
+                .map(|name| self.artist_tracks(&name))
                 .unwrap_or_default(),
             (Detail::None, View::Tracks) => self
-                .lib
-                .tracks
-                .get(self.tracks_list.selected)
+                .track_at(self.tracks_list.selected)
                 .map(|t| vec![t.id.clone()])
                 .unwrap_or_default(),
             (Detail::None, View::Search) => self
@@ -1030,6 +1220,26 @@ impl App {
                 .unwrap_or_default(),
             _ => Vec::new(),
         }
+    }
+
+    /// The item shown on a display row. Rows are what the cursor and the
+    /// renderer count; the library vectors keep their own load order.
+    pub fn album_at(&self, row: usize) -> Option<&crate::api::models::Album> {
+        self.lib
+            .row(ListKind::Albums, row)
+            .and_then(|i| self.lib.albums.get(i))
+    }
+
+    pub fn artist_at(&self, row: usize) -> Option<&crate::library::Artist> {
+        self.lib
+            .row(ListKind::Artists, row)
+            .and_then(|i| self.lib.artists.get(i))
+    }
+
+    pub fn track_at(&self, row: usize) -> Option<&Track> {
+        self.lib
+            .row(ListKind::Tracks, row)
+            .and_then(|i| self.lib.tracks.get(i))
     }
 
     pub fn artist_tracks(&self, name: &str) -> Vec<String> {
@@ -1484,5 +1694,339 @@ mod tests {
             assert!(!v.title().is_empty());
         }
         assert_eq!(View::ALL.len(), 8);
+    }
+
+    // ---- sorting --------------------------------------------------------
+
+    use crate::library::SortField;
+    use std::collections::HashMap;
+
+    fn sort_track(id: &str, artist: &str, album: &str, album_id: &str, year: i64) -> Track {
+        Track {
+            id: id.into(),
+            title: format!("Track {id}"),
+            artist: artist.into(),
+            album_artist: artist.into(),
+            album: album.into(),
+            album_id: album_id.into(),
+            year: Some(year),
+            track_no: Some(1),
+            duration: Some(180.0),
+            ..Default::default()
+        }
+    }
+
+    fn sorting_app(name: &str) -> (App, PathBuf) {
+        let path = std::env::temp_dir()
+            .join(format!("aria-tui-sort-{}-{name}", std::process::id()))
+            .join("config.toml");
+        let mut a = App::new(Config::default(), path.clone(), Player::disabled());
+        a.handle(Msg::Library(Ok(vec![
+            sort_track("a", "Zebra", "Later", "al1", 1999),
+            sort_track("b", "Mango", "Middle", "al2", 1970),
+            sort_track("c", "Apple", "Early", "al3", 1955),
+        ])));
+        (a, path)
+    }
+
+    fn album_titles(a: &App) -> Vec<String> {
+        (0..a.lib.albums.len())
+            .filter_map(|row| a.album_at(row))
+            .map(|al| al.title.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_sort_key_cycles_the_current_view_only() {
+        let (mut a, _) = sorting_app("cycle");
+        a.view = View::Albums;
+        assert_eq!(a.lib.sort(ListKind::Albums).field, SortField::Artist);
+
+        a.cycle_sort();
+        assert_eq!(a.lib.sort(ListKind::Albums).field, SortField::Title);
+        assert_eq!(
+            a.lib.sort(ListKind::Tracks).field,
+            SortField::Artist,
+            "the other lists keep their own order"
+        );
+        assert_eq!(album_titles(&a), vec!["Early", "Later", "Middle"]);
+    }
+
+    #[test]
+    fn the_reverse_key_flips_the_direction_without_changing_the_field() {
+        let (mut a, _) = sorting_app("reverse");
+        a.view = View::Albums;
+        a.reverse_sort();
+        let s = a.lib.sort(ListKind::Albums);
+        assert_eq!(s.field, SortField::Artist);
+        assert!(s.desc);
+        assert_eq!(album_titles(&a), vec!["Later", "Middle", "Early"]);
+    }
+
+    #[test]
+    fn a_re_sort_keeps_the_cursor_on_the_row_it_was_on() {
+        let (mut a, _) = sorting_app("cursor");
+        a.view = View::Albums;
+        a.albums_list.selected = 2; // by artist: Apple, Mango, Zebra -> "Later"
+        assert_eq!(a.album_at(2).unwrap().title, "Later");
+
+        a.reverse_sort();
+        assert_eq!(
+            a.album_at(a.albums_list.selected).unwrap().title,
+            "Later",
+            "the album under the cursor must not change identity"
+        );
+        assert_eq!(a.albums_list.selected, 0, "and it moved to the top");
+    }
+
+    #[test]
+    fn the_selection_reads_the_sorted_row_not_the_library_row() {
+        let (mut a, _) = sorting_app("selection");
+        a.view = View::Albums;
+        a.albums_list.selected = 0;
+        assert_eq!(a.selection(), vec!["c".to_string()], "Apple sorts first");
+
+        a.reverse_sort();
+        assert_eq!(
+            a.selection(),
+            vec!["c".to_string()],
+            "the cursor followed its album down the list"
+        );
+
+        a.albums_list.selected = 0;
+        assert_eq!(
+            a.selection(),
+            vec!["a".to_string()],
+            "and row 0 is now Zebra's album, not the library's first"
+        );
+    }
+
+    #[test]
+    fn a_chosen_sort_survives_a_library_reload() {
+        let (mut a, _) = sorting_app("reload");
+        a.view = View::Tracks;
+        a.cycle_sort(); // artist -> title
+        a.reverse_sort();
+
+        a.handle(Msg::Library(Ok(vec![
+            sort_track("a", "Zebra", "Later", "al1", 1999),
+            sort_track("b", "Mango", "Middle", "al2", 1970),
+        ])));
+
+        let s = a.lib.sort(ListKind::Tracks);
+        assert_eq!(s.field, SortField::Title);
+        assert!(s.desc, "a rescan must not quietly reset the order");
+        assert_eq!(a.track_at(0).unwrap().id, "b");
+    }
+
+    #[test]
+    fn a_sort_is_written_to_the_config() {
+        let (mut a, path) = sorting_app("persist");
+        a.view = View::Tracks;
+        a.cycle_sort(); // artist -> title
+
+        let reloaded = Config::load(&path).unwrap();
+        assert_eq!(reloaded.sort_tracks, "title");
+        assert_eq!(
+            reloaded.sorts().tracks.field,
+            SortField::Title,
+            "and it reads back as the same order next run"
+        );
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn play_counts_are_not_fetched_until_a_list_is_ranked_by_them() {
+        let (mut a, _) = sorting_app("lazy");
+        a.cfg.profile_id = "p1".into();
+        a.view = View::Albums;
+
+        // Every other order is answered from the library document alone.
+        for _ in 0..4 {
+            a.cycle_sort();
+            assert!(!a.counts_in_flight, "{:?}", a.lib.sort(ListKind::Albums));
+        }
+        assert_eq!(a.lib.sort(ListKind::Albums).field, SortField::Tracks);
+
+        a.cycle_sort(); // -> plays
+        assert_eq!(a.lib.sort(ListKind::Albums).field, SortField::Plays);
+        assert!(a.counts_in_flight, "asking for plays is what fetches them");
+    }
+
+    #[test]
+    fn a_stored_plays_sort_fetches_the_counts_on_startup() {
+        // The library and the profile list arrive in whichever order the
+        // server answers, so either one landing last must set this off.
+        for library_first in [true, false] {
+            let path = std::env::temp_dir()
+                .join(format!("aria-tui-sort-{}-boot", std::process::id()))
+                .join("config.toml");
+            let cfg = Config {
+                sort_tracks: "-plays".into(),
+                profile_id: "p1".into(),
+                ..Default::default()
+            };
+            let mut a = App::new(cfg, path, Player::disabled());
+            let tracks = vec![sort_track("a", "Zebra", "Later", "al1", 1999)];
+            let profiles = vec![Profile {
+                id: "p1".into(),
+                name: "Listener".into(),
+                ..Default::default()
+            }];
+            if library_first {
+                a.handle(Msg::Library(Ok(tracks)));
+                a.handle(Msg::Profiles(Ok(profiles)));
+            } else {
+                a.handle(Msg::Profiles(Ok(profiles)));
+                a.handle(Msg::Library(Ok(tracks)));
+            }
+            assert!(a.counts_in_flight, "library_first = {library_first}");
+        }
+    }
+
+    #[test]
+    fn arriving_counts_rank_the_list_and_keep_the_cursor() {
+        let (mut a, _) = sorting_app("counts");
+        a.cfg.profile_id = "p1".into();
+        a.view = View::Albums;
+        let mut s = a.lib.sorts();
+        s.set(ListKind::Albums, Sort::new(SortField::Plays));
+        a.lib.set_sorts(s);
+        a.albums_list.selected = 0; // by artist: Apple's "Early"
+        assert_eq!(a.album_at(0).unwrap().title, "Early");
+
+        a.handle(Msg::PlayCounts(Ok(HashMap::from([("a".into(), 12)]))));
+
+        assert_eq!(
+            a.album_at(0).unwrap().title,
+            "Later",
+            "the played album leads"
+        );
+        assert_eq!(
+            a.album_at(a.albums_list.selected).unwrap().title,
+            "Early",
+            "and the cursor stayed on the album it was on"
+        );
+        assert!(!a.counts_in_flight);
+        assert_eq!(a.play_counts.as_ref().unwrap()["a"], 12);
+    }
+
+    #[test]
+    fn a_rescan_does_not_re_fetch_the_counts_it_already_has() {
+        let (mut a, _) = sorting_app("rescan");
+        a.cfg.profile_id = "p1".into();
+        a.handle(Msg::PlayCounts(Ok(HashMap::from([("a".into(), 3)]))));
+
+        a.handle(Msg::Library(Ok(vec![
+            sort_track("a", "Zebra", "Later", "al1", 1999),
+            sort_track("b", "Mango", "Middle", "al2", 1970),
+        ])));
+
+        assert!(!a.counts_in_flight, "the counts survive the reload");
+        assert_eq!(
+            a.lib.plays("a"),
+            3,
+            "and are re-folded onto the rebuilt library"
+        );
+    }
+
+    #[test]
+    fn a_profile_change_drops_the_previous_listeners_counts() {
+        let (mut a, _) = sorting_app("profile");
+        a.cfg.profile_id = "p1".into();
+        a.handle(Msg::PlayCounts(Ok(HashMap::from([("a".into(), 99)]))));
+        assert_eq!(a.lib.plays("a"), 99);
+
+        a.set_profile(&Profile {
+            id: "p2".into(),
+            name: "Someone else".into(),
+            ..Default::default()
+        });
+
+        assert!(a.play_counts.is_none(), "plays belong to a profile");
+        assert_eq!(a.lib.plays("a"), 0);
+        assert!(
+            !a.counts_in_flight,
+            "and nothing is fetched while no list is ranked by them"
+        );
+    }
+
+    #[test]
+    fn a_profile_change_refetches_while_a_list_is_ranked_by_plays() {
+        let (mut a, _) = sorting_app("profile-plays");
+        a.cfg.profile_id = "p1".into();
+        let mut s = a.lib.sorts();
+        s.set(ListKind::Tracks, Sort::new(SortField::Plays));
+        a.lib.set_sorts(s);
+        a.handle(Msg::PlayCounts(Ok(HashMap::from([("a".into(), 99)]))));
+
+        a.set_profile(&Profile {
+            id: "p2".into(),
+            name: "Someone else".into(),
+            ..Default::default()
+        });
+        assert!(a.counts_in_flight, "the new listener's counts are wanted");
+    }
+
+    #[test]
+    fn sorting_by_plays_without_a_profile_says_so_instead_of_counting_to_zero() {
+        let (mut a, _) = sorting_app("noprofile");
+        a.cfg.profile_id.clear();
+        a.view = View::Tracks;
+        let mut s = a.lib.sorts();
+        s.set(ListKind::Tracks, Sort::new(SortField::Length));
+        a.lib.set_sorts(s);
+
+        a.cycle_sort(); // length -> plays
+        assert_eq!(a.lib.sort(ListKind::Tracks).field, SortField::Plays);
+        assert!(!a.counts_in_flight);
+        assert!(a.toast.unwrap().0.contains("no profile"));
+    }
+
+    #[test]
+    fn a_recorded_play_refreshes_the_counts_it_just_changed() {
+        let mut a = reporting_app();
+        let mut s = a.lib.sorts();
+        s.set(ListKind::Tracks, Sort::new(SortField::Plays));
+        a.lib.set_sorts(s);
+        a.handle(Msg::PlayCounts(Ok(HashMap::from([("t1".into(), 1)]))));
+        assert!(!a.counts_in_flight);
+
+        a.apply_playback_state(&playing(0, 31.0));
+        assert_eq!(a.reports_sent, 1);
+        assert!(
+            a.counts_in_flight,
+            "a most-played list must not stay one play behind"
+        );
+    }
+
+    #[test]
+    fn a_recorded_play_costs_nothing_when_nothing_is_ranked_by_plays() {
+        let mut a = reporting_app();
+        a.apply_playback_state(&playing(0, 31.0));
+        assert_eq!(a.reports_sent, 1);
+        assert!(
+            !a.counts_in_flight,
+            "the counts were never wanted, so they are never fetched"
+        );
+    }
+
+    #[test]
+    fn views_with_an_order_of_their_own_refuse_to_be_sorted() {
+        let (mut a, _) = sorting_app("fixed");
+        for view in [View::Queue, View::Search, View::Playlists, View::Stats] {
+            a.view = view;
+            assert_eq!(a.sortable(), None, "{}", view.title());
+        }
+
+        // Nor inside a drill-down, where the order belongs to the collection.
+        a.view = View::Albums;
+        a.detail = Detail::Album("al1".into());
+        assert_eq!(a.sortable(), None);
+
+        let before = a.lib.sorts();
+        a.cycle_sort();
+        assert_eq!(a.lib.sorts(), before, "and the keys change nothing");
+        assert!(a.toast.is_some(), "but they do say why");
     }
 }

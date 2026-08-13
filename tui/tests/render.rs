@@ -11,9 +11,10 @@ use ratatui::Terminal;
 use aria_tui::api::models::{Playlist, Profile, Track};
 use aria_tui::app::{App, Detail, Modal, View};
 use aria_tui::config::Config;
-use aria_tui::library::Library;
+use aria_tui::library::{Library, ListKind, Sort, SortField};
 use aria_tui::player::Player;
 use aria_tui::ui;
+use std::collections::HashMap;
 
 fn track(id: &str, title: &str, artist: &str, album: &str, album_id: &str, no: i64) -> Track {
     Track {
@@ -152,7 +153,20 @@ fn the_help_modal_lists_the_bindings() {
     let out = render(&mut a, 100, 40);
     assert!(out.contains("Keys"), "{out}");
     assert!(out.contains("play / pause"), "{out}");
+    assert!(out.contains("cycle sort field"), "{out}");
     assert!(out.contains("quit"), "{out}");
+}
+
+#[test]
+fn the_help_modal_folds_to_two_columns_rather_than_cutting_off() {
+    let mut a = app();
+    a.modal = Modal::Help;
+    // A 30-row terminal is too short for one column of bindings. The last
+    // ones must still be on screen — they are the ones nobody has memorised.
+    let out = render(&mut a, 100, 30);
+    assert!(out.contains("switch view"), "the first binding: {out}");
+    assert!(out.contains("quit"), "and the last one: {out}");
+    assert!(out.contains("reverse the sort"), "{out}");
 }
 
 #[test]
@@ -344,4 +358,71 @@ fn long_metadata_does_not_overflow_the_columns() {
             "a row overflowed its width:\n{line}"
         );
     }
+}
+
+#[test]
+fn a_list_header_names_the_order_it_is_in() {
+    let mut a = app();
+    a.view = View::Albums;
+    let out = render(&mut a, 100, 30);
+    assert!(
+        out.contains("Albums (2) — by artist ↑"),
+        "the sort must be readable off the screen, not only from the help: {out}"
+    );
+
+    // Cycling is visible in the header the moment it happens.
+    a.cycle_sort();
+    a.cycle_sort();
+    let out = render(&mut a, 100, 30);
+    assert!(out.contains("by year ↑"), "{out}");
+
+    a.reverse_sort();
+    let out = render(&mut a, 100, 30);
+    assert!(out.contains("by year ↓"), "{out}");
+}
+
+#[test]
+fn the_album_list_redraws_in_the_chosen_order() {
+    let mut a = app();
+    a.view = View::Albums;
+    let by_artist = render(&mut a, 100, 30);
+    let brubeck = by_artist.find("Time Out").unwrap();
+    let miles = by_artist.find("Kind of Blue").unwrap();
+    assert!(brubeck < miles, "Dave files before Miles: {by_artist}");
+
+    a.reverse_sort();
+    let reversed = render(&mut a, 100, 30);
+    assert!(
+        reversed.find("Kind of Blue").unwrap() < reversed.find("Time Out").unwrap(),
+        "{reversed}"
+    );
+}
+
+#[test]
+fn the_plays_column_appears_only_where_the_list_is_ranked_by_it() {
+    let mut a = app();
+    a.view = View::Tracks;
+    let mut s = a.lib.sorts();
+    s.set(ListKind::Tracks, Sort::new(SortField::Plays));
+    a.lib.set_sorts(s);
+
+    // Counts not fetched yet: the column says so rather than claiming zero.
+    let waiting = render(&mut a, 100, 30);
+    assert!(waiting.contains("by plays ↓"), "{waiting}");
+    assert!(waiting.contains('?'), "{waiting}");
+
+    a.play_counts = Some(HashMap::from([("t3".to_string(), 12u32)]));
+    a.lib
+        .set_play_counts(HashMap::from([("t3".to_string(), 12u32)]));
+    let out = render(&mut a, 100, 30);
+    let take_five = out.find("Take Five").unwrap();
+    let so_what = out.find("So What").unwrap();
+    assert!(take_five < so_what, "the played track leads: {out}");
+    assert!(out.contains("12"), "and its count is on the row: {out}");
+
+    // The queue is not ranked by plays, so it carries no count column.
+    a.view = View::Queue;
+    a.queue.set(vec!["t3".into()], 0);
+    let queue = render(&mut a, 100, 30);
+    assert!(!queue.contains("12"), "{queue}");
 }

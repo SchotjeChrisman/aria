@@ -100,6 +100,10 @@ pub struct Album {
     pub title: String,
     pub album_artist: String,
     pub year: Option<i64>,
+    /// The album's most recent addition, so a release that gained a missing
+    /// track floats back up a "recently added" list. Empty when no track
+    /// carried a timestamp.
+    pub added_at: String,
     pub release_type: String,
     pub track_count: usize,
     pub duration: f64,

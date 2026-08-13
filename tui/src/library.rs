@@ -4,9 +4,175 @@
 //! artist or search endpoint — grouping and searching are the client's job. So
 //! the library is folded once on load and every view reads from these indexes.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::api::models::{Album, Track};
+
+/// Which library list a sort applies to. The three are kept apart because they
+/// are browsed for different reasons: albums by year, tracks by length, and
+/// remembering one choice for all three would make each of them wrong.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListKind {
+    Albums,
+    Artists,
+    Tracks,
+}
+
+impl ListKind {
+    /// The fields this list can be sorted by, in cycle order. The first is the
+    /// default, and is the order the list had before sorting was settable.
+    pub fn fields(self) -> &'static [SortField] {
+        use SortField::*;
+        match self {
+            ListKind::Albums => &[Artist, Title, Year, Added, Tracks, Plays],
+            ListKind::Artists => &[Artist, Tracks, Plays],
+            ListKind::Tracks => &[Artist, Title, Album, Year, Added, Length, Plays],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortField {
+    Artist,
+    Title,
+    Album,
+    Year,
+    Added,
+    Length,
+    Tracks,
+    Plays,
+}
+
+impl SortField {
+    pub fn label(self) -> &'static str {
+        match self {
+            SortField::Artist => "artist",
+            SortField::Title => "title",
+            SortField::Album => "album",
+            SortField::Year => "year",
+            SortField::Added => "added",
+            SortField::Length => "length",
+            SortField::Tracks => "tracks",
+            SortField::Plays => "plays",
+        }
+    }
+
+    /// The direction the field is normally wanted in. Reaching for "recently
+    /// added" and landing on the oldest imports is never the intent, so a date
+    /// or a count starts descending; a name starts at A.
+    pub fn wants_desc(self) -> bool {
+        matches!(
+            self,
+            SortField::Added | SortField::Length | SortField::Tracks | SortField::Plays
+        )
+    }
+
+    fn parse(s: &str) -> Option<SortField> {
+        use SortField::*;
+        [Artist, Title, Album, Year, Added, Length, Tracks, Plays]
+            .into_iter()
+            .find(|f| f.label() == s)
+    }
+}
+
+/// A field and a direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sort {
+    pub field: SortField,
+    pub desc: bool,
+}
+
+impl Default for Sort {
+    fn default() -> Self {
+        Sort::new(SortField::Artist)
+    }
+}
+
+impl Sort {
+    pub fn new(field: SortField) -> Self {
+        Sort {
+            field,
+            desc: field.wants_desc(),
+        }
+    }
+
+    /// The next field this list offers, wrapping. A field the list does not
+    /// offer counts as "before the first", so cycling from a stale config
+    /// value lands on the default rather than going nowhere.
+    pub fn next(self, kind: ListKind) -> Sort {
+        let fields = kind.fields();
+        let i = fields.iter().position(|f| *f == self.field);
+        Sort::new(fields[i.map_or(0, |i| (i + 1) % fields.len())])
+    }
+
+    /// Falls back to the list's default when the field is not one it offers,
+    /// so a hand-edited config cannot label a list with an order it is not in.
+    pub fn valid_for(self, kind: ListKind) -> Sort {
+        if kind.fields().contains(&self.field) {
+            self
+        } else {
+            Sort::new(kind.fields()[0])
+        }
+    }
+
+    pub fn reversed(self) -> Sort {
+        Sort {
+            desc: !self.desc,
+            ..self
+        }
+    }
+
+    /// How the order reads in a list header: "artist ↑".
+    pub fn label(self) -> String {
+        format!(
+            "{} {}",
+            self.field.label(),
+            if self.desc { "↓" } else { "↑" }
+        )
+    }
+
+    /// The config-file form. A leading `-` is descending, so the whole setting
+    /// is one readable word.
+    pub fn as_str(self) -> String {
+        format!("{}{}", if self.desc { "-" } else { "" }, self.field.label())
+    }
+
+    pub fn parse(s: &str) -> Option<Sort> {
+        let s = s.trim();
+        let (desc, name) = match s.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, s),
+        };
+        SortField::parse(name).map(|field| Sort { field, desc })
+    }
+}
+
+/// The sort in force for each list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Sorts {
+    pub albums: Sort,
+    pub artists: Sort,
+    pub tracks: Sort,
+}
+
+impl Sorts {
+    pub fn get(&self, kind: ListKind) -> Sort {
+        match kind {
+            ListKind::Albums => self.albums,
+            ListKind::Artists => self.artists,
+            ListKind::Tracks => self.tracks,
+        }
+    }
+
+    pub fn set(&mut self, kind: ListKind, sort: Sort) {
+        match kind {
+            ListKind::Albums => self.albums = sort,
+            ListKind::Artists => self.artists = sort,
+            ListKind::Tracks => self.tracks = sort,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Artist {
@@ -25,6 +191,28 @@ pub struct Library {
     /// Lowercased, de-accented haystack per track, built once so that typing
     /// in the search box does not re-normalise the library on every keystroke.
     search_keys: Vec<String>,
+
+    sorts: Sorts,
+    /// Display order per list, as indexes into the vectors above. Sorting is
+    /// layered rather than applied in place because `by_track_id`, the album
+    /// track lists and the search hits all hold positions into those vectors —
+    /// reordering them underneath would silently point every one of them at
+    /// the wrong row.
+    album_order: Vec<usize>,
+    artist_order: Vec<usize>,
+    track_order: Vec<usize>,
+
+    /// Plays per track for the current profile, empty until something asks to
+    /// sort by them. A track that has never been played is absent, not zero —
+    /// the server sends one row per played track and the library keeps that
+    /// shape rather than materialising a zero for every track it owns.
+    play_counts: HashMap<String, u32>,
+    /// Plays folded up to the album and the artist, parallel to `albums` and
+    /// `artists`. Precomputed because summing an album inside the comparator
+    /// would redo that work on every one of the O(n log n) comparisons.
+    track_plays: Vec<u32>,
+    album_plays: Vec<u32>,
+    artist_plays: Vec<u32>,
 }
 
 impl Library {
@@ -48,6 +236,133 @@ impl Library {
 
     pub fn track_index(&self, id: &str) -> Option<usize> {
         self.by_track_id.get(id).copied()
+    }
+
+    pub fn sorts(&self) -> Sorts {
+        self.sorts
+    }
+
+    pub fn sort(&self, kind: ListKind) -> Sort {
+        self.sorts.get(kind)
+    }
+
+    /// Row order for a list: indexes into `albums`, `artists` or `tracks`.
+    pub fn order(&self, kind: ListKind) -> &[usize] {
+        match kind {
+            ListKind::Albums => &self.album_order,
+            ListKind::Artists => &self.artist_order,
+            ListKind::Tracks => &self.track_order,
+        }
+    }
+
+    /// The item at a display row, as an index into the underlying vector.
+    pub fn row(&self, kind: ListKind, row: usize) -> Option<usize> {
+        self.order(kind).get(row).copied()
+    }
+
+    /// Where an item sits now, so a re-sort can put the cursor back on it.
+    pub fn row_of(&self, kind: ListKind, index: usize) -> Option<usize> {
+        self.order(kind).iter().position(|&i| i == index)
+    }
+
+    pub fn set_sorts(&mut self, sorts: Sorts) {
+        self.sorts = sorts;
+        self.resort();
+    }
+
+    /// Plays for one track, for the play-count column.
+    pub fn plays(&self, track_id: &str) -> u32 {
+        self.play_counts.get(track_id).copied().unwrap_or(0)
+    }
+
+    pub fn album_plays(&self, index: usize) -> u32 {
+        self.album_plays.get(index).copied().unwrap_or(0)
+    }
+
+    pub fn artist_plays(&self, index: usize) -> u32 {
+        self.artist_plays.get(index).copied().unwrap_or(0)
+    }
+
+    pub fn set_play_counts(&mut self, counts: HashMap<String, u32>) {
+        self.play_counts = counts;
+        self.fold_plays();
+        self.resort();
+    }
+
+    /// Drops the counts, for a profile change: plays belong to the profile
+    /// that made them, so keeping them would rank the new listener's library
+    /// by the old listener's history.
+    pub fn clear_play_counts(&mut self) {
+        self.play_counts.clear();
+        self.fold_plays();
+        self.resort();
+    }
+
+    fn fold_plays(&mut self) {
+        let track_plays: Vec<u32> = self.tracks.iter().map(|t| self.plays(&t.id)).collect();
+        let album_plays: Vec<u32> = self
+            .albums
+            .iter()
+            .map(|a| a.track_ids.iter().map(|id| self.plays(id)).sum())
+            .collect();
+        // An artist's plays come through their albums rather than through the
+        // track artist, because that is how this list defines an artist in the
+        // first place — a guest credit belongs to the album that carries it.
+        let artist_plays: Vec<u32> = self
+            .artists
+            .iter()
+            .map(|artist| {
+                artist
+                    .album_ids
+                    .iter()
+                    .filter_map(|id| self.by_album_id.get(id))
+                    .map(|&i| album_plays.get(i).copied().unwrap_or(0))
+                    .sum()
+            })
+            .collect();
+        self.track_plays = track_plays;
+        self.album_plays = album_plays;
+        self.artist_plays = artist_plays;
+    }
+
+    fn resort(&mut self) {
+        // Plays are passed in per pair rather than looked up in the
+        // comparator: the fold is done once, and a comparison stays a
+        // comparison instead of a hash lookup repeated n log n times.
+        let plays = |v: &[u32], i: usize| v.get(i).copied().unwrap_or(0);
+
+        self.album_order = (0..self.albums.len()).collect();
+        let s = self.sorts.albums;
+        self.album_order.sort_by(|&a, &b| {
+            cmp_albums(
+                &self.albums[a],
+                &self.albums[b],
+                s,
+                (plays(&self.album_plays, a), plays(&self.album_plays, b)),
+            )
+        });
+
+        self.artist_order = (0..self.artists.len()).collect();
+        let s = self.sorts.artists;
+        self.artist_order.sort_by(|&a, &b| {
+            cmp_artists(
+                &self.artists[a],
+                &self.artists[b],
+                s,
+                (plays(&self.artist_plays, a), plays(&self.artist_plays, b)),
+            )
+        });
+
+        self.track_order = (0..self.tracks.len()).collect();
+        let s = self.sorts.tracks;
+        self.track_order.sort_by(|&a, &b| {
+            cmp_tracks(
+                &self.tracks[a],
+                &self.tracks[b],
+                s,
+                (plays(&self.track_plays, a), plays(&self.track_plays, b)),
+            )
+        });
     }
 
     pub fn album(&self, id: &str) -> Option<&Album> {
@@ -87,7 +402,7 @@ impl Library {
             .into_iter()
             .map(|id| {
                 let mut idx = grouped.remove(&id).unwrap_or_default();
-                idx.sort_by(|&a, &b| track_order(&self.tracks[a], &self.tracks[b]));
+                idx.sort_by(|&a, &b| disc_track_order(&self.tracks[a], &self.tracks[b]));
                 let first = &self.tracks[idx[0]];
                 let mut genres: Vec<String> = Vec::new();
                 for i in &idx {
@@ -108,6 +423,12 @@ impl Library {
                     // Albums are routinely tagged with a per-track year; the
                     // earliest is the release, later ones are reissue noise.
                     year: idx.iter().filter_map(|&i| self.tracks[i].year).min(),
+                    added_at: idx
+                        .iter()
+                        .map(|&i| self.tracks[i].added_at.as_str())
+                        .max()
+                        .unwrap_or_default()
+                        .to_string(),
                     release_type: first.release_type.clone(),
                     track_count: idx.len(),
                     duration: idx.iter().map(|&i| self.tracks[i].duration_secs()).sum(),
@@ -144,6 +465,9 @@ impl Library {
         }
         self.artists = artists.into_values().collect();
         self.artists.sort_by_key(|a| sort_key(&a.name));
+
+        self.fold_plays();
+        self.resort();
     }
 
     /// Track indexes matching `query`, best first.
@@ -170,9 +494,112 @@ impl Library {
     }
 }
 
+fn dir(o: Ordering, desc: bool) -> Ordering {
+    if desc {
+        o.reverse()
+    } else {
+        o
+    }
+}
+
+/// Orders a value that may be missing. Unknowns sort last in *both*
+/// directions: a track with no year is not the oldest one, and reversing the
+/// list should not park a wall of blanks at the top.
+fn opt<T: Ord>(a: Option<T>, b: Option<T>, desc: bool) -> Ordering {
+    match (a, b) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(x), Some(y)) => dir(x.cmp(&y), desc),
+    }
+}
+
+/// Aria writes `addedAt` as an RFC 3339 timestamp, which compares correctly as
+/// text. An empty one means the server never recorded it.
+fn added(s: &str) -> Option<&str> {
+    Some(s).filter(|s| !s.is_empty())
+}
+
+/// Every comparator falls through to a stable tiebreak, so two albums released
+/// the same year keep a fixed order instead of shuffling on each redraw. Only
+/// the leading term takes the direction: reversing "by artist" reverses the
+/// artists, not the track order inside each of their albums.
+fn cmp_albums(a: &Album, b: &Album, sort: Sort, plays: (u32, u32)) -> Ordering {
+    let d = sort.desc;
+    let by_artist = || sort_key(&a.album_artist).cmp(&sort_key(&b.album_artist));
+    let by_title = || sort_key(&a.title).cmp(&sort_key(&b.title));
+    match sort.field {
+        // The default, and the order albums had before this was settable.
+        SortField::Artist => dir(by_artist(), d)
+            .then_with(|| a.year.cmp(&b.year))
+            .then_with(by_title),
+        SortField::Title => dir(by_title(), d).then_with(by_artist),
+        SortField::Year => opt(a.year, b.year, d)
+            .then_with(by_artist)
+            .then_with(by_title),
+        SortField::Added => opt(added(&a.added_at), added(&b.added_at), d)
+            .then_with(by_artist)
+            .then_with(by_title),
+        SortField::Tracks => dir(a.track_count.cmp(&b.track_count), d)
+            .then_with(by_artist)
+            .then_with(by_title),
+        SortField::Plays => dir(plays.0.cmp(&plays.1), d)
+            .then_with(by_artist)
+            .then_with(by_title),
+        // Not offered for albums; hold the default rather than inventing one.
+        SortField::Album | SortField::Length => {
+            cmp_albums(a, b, Sort::new(SortField::Artist), plays)
+        }
+    }
+}
+
+fn cmp_artists(a: &Artist, b: &Artist, sort: Sort, plays: (u32, u32)) -> Ordering {
+    let by_name = || sort_key(&a.name).cmp(&sort_key(&b.name));
+    match sort.field {
+        SortField::Tracks => dir(a.track_count.cmp(&b.track_count), sort.desc).then_with(by_name),
+        SortField::Plays => dir(plays.0.cmp(&plays.1), sort.desc).then_with(by_name),
+        _ => dir(by_name(), sort.desc),
+    }
+}
+
+fn cmp_tracks(a: &Track, b: &Track, sort: Sort, plays: (u32, u32)) -> Ordering {
+    let d = sort.desc;
+    let by_artist = || sort_key(a.display_artist()).cmp(&sort_key(b.display_artist()));
+    let by_album = || sort_key(&a.album).cmp(&sort_key(&b.album));
+    let by_title = || sort_key(&a.title).cmp(&sort_key(&b.title));
+    match sort.field {
+        SortField::Artist => dir(by_artist(), d)
+            .then_with(by_album)
+            .then_with(|| disc_track_order(a, b)),
+        SortField::Title => dir(by_title(), d).then_with(by_artist),
+        SortField::Album => dir(by_album(), d).then_with(|| disc_track_order(a, b)),
+        SortField::Year => opt(a.year, b.year, d)
+            .then_with(by_artist)
+            .then_with(by_album)
+            .then_with(|| disc_track_order(a, b)),
+        SortField::Added => opt(added(&a.added_at), added(&b.added_at), d)
+            .then_with(by_artist)
+            .then_with(by_title),
+        // A missing duration is unknown, not zero, so it sorts with the other
+        // unknowns rather than heading a "shortest first" list.
+        SortField::Length => match (a.duration, b.duration) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(x), Some(y)) => dir(x.total_cmp(&y), d),
+        }
+        .then_with(by_artist)
+        .then_with(by_title),
+        SortField::Plays => dir(plays.0.cmp(&plays.1), d)
+            .then_with(by_artist)
+            .then_with(by_title),
+        SortField::Tracks => cmp_tracks(a, b, Sort::new(SortField::Artist), plays),
+    }
+}
+
 /// Disc, then track number, then title. Tracks with no number sort last
 /// rather than first, so an untagged bonus track does not head the album.
-fn track_order(a: &Track, b: &Track) -> std::cmp::Ordering {
+fn disc_track_order(a: &Track, b: &Track) -> std::cmp::Ordering {
     a.disc_no
         .unwrap_or(1)
         .cmp(&b.disc_no.unwrap_or(1))
@@ -444,5 +871,319 @@ mod tests {
         assert!(lib.albums.is_empty());
         assert!(lib.artists.is_empty());
         assert!(lib.search("anything").is_empty());
+        assert!(lib.order(ListKind::Albums).is_empty());
+        assert!(lib.row(ListKind::Tracks, 0).is_none());
+    }
+
+    // ---- sorting --------------------------------------------------------
+
+    /// Track titles in the order the Tracks view would draw them.
+    fn track_titles(lib: &Library) -> Vec<&str> {
+        lib.order(ListKind::Tracks)
+            .iter()
+            .map(|&i| lib.tracks[i].title.as_str())
+            .collect()
+    }
+
+    fn album_titles(lib: &Library) -> Vec<&str> {
+        lib.order(ListKind::Albums)
+            .iter()
+            .map(|&i| lib.albums[i].title.as_str())
+            .collect()
+    }
+
+    fn sorted(lib: &mut Library, kind: ListKind, field: SortField, desc: bool) {
+        let mut s = lib.sorts();
+        s.set(kind, Sort { field, desc });
+        lib.set_sorts(s);
+    }
+
+    #[test]
+    fn tracks_default_to_artist_then_album_then_disc_order() {
+        let lib = sample();
+        assert_eq!(
+            track_titles(&lib),
+            // Brubeck files under D, and each album keeps its own track order.
+            vec![
+                "Take Five",
+                "So What",
+                "Freddie Freeloader",
+                "Blue in Green"
+            ]
+        );
+    }
+
+    #[test]
+    fn sorting_by_title_ignores_the_leading_article() {
+        let mut lib = Library::new(vec![
+            t("1", "Zulu", "X", "Alb", "al", 1),
+            t("2", "The Ballad", "X", "Alb", "al", 2),
+        ]);
+        sorted(&mut lib, ListKind::Tracks, SortField::Title, false);
+        assert_eq!(track_titles(&lib), vec!["The Ballad", "Zulu"]);
+
+        sorted(&mut lib, ListKind::Tracks, SortField::Title, true);
+        assert_eq!(track_titles(&lib), vec!["Zulu", "The Ballad"]);
+    }
+
+    #[test]
+    fn a_missing_year_sorts_last_in_both_directions() {
+        let mut a = t("a", "Dated", "X", "Alb", "al1", 1);
+        a.year = Some(1970);
+        let b = t("b", "Untagged", "X", "Other", "al2", 1); // year: None
+        let mut c = t("c", "Newer", "X", "Third", "al3", 1);
+        c.year = Some(1999);
+        let mut lib = Library::new(vec![b, a, c]);
+
+        sorted(&mut lib, ListKind::Tracks, SortField::Year, false);
+        assert_eq!(track_titles(&lib), vec!["Dated", "Newer", "Untagged"]);
+
+        sorted(&mut lib, ListKind::Tracks, SortField::Year, true);
+        assert_eq!(
+            track_titles(&lib),
+            vec!["Newer", "Dated", "Untagged"],
+            "reversing must not float the unknowns to the top"
+        );
+    }
+
+    #[test]
+    fn a_missing_duration_is_unknown_rather_than_zero() {
+        let mut short = t("a", "Short", "X", "Alb", "al", 1);
+        short.duration = Some(60.0);
+        let mut none = t("b", "Untimed", "X", "Alb", "al", 2);
+        none.duration = None;
+        let mut lib = Library::new(vec![none, short]);
+
+        sorted(&mut lib, ListKind::Tracks, SortField::Length, false);
+        assert_eq!(
+            track_titles(&lib),
+            vec!["Short", "Untimed"],
+            "an untimed track is not the shortest one"
+        );
+    }
+
+    #[test]
+    fn reversing_by_artist_reverses_the_artists_not_the_albums() {
+        let mut lib = sample();
+        sorted(&mut lib, ListKind::Tracks, SortField::Artist, true);
+        assert_eq!(
+            track_titles(&lib),
+            // Miles now leads, but his album still plays 1, 2, 3.
+            vec![
+                "So What",
+                "Freddie Freeloader",
+                "Blue in Green",
+                "Take Five"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_albums_added_date_is_its_most_recent_track() {
+        let mut early = t("a", "First", "X", "Alb", "al", 1);
+        early.added_at = "2024-01-01T00:00:00Z".into();
+        let mut late = t("b", "Filled in later", "X", "Alb", "al", 2);
+        late.added_at = "2026-05-01T00:00:00Z".into();
+        let lib = Library::new(vec![early, late]);
+        assert_eq!(lib.album("al").unwrap().added_at, "2026-05-01T00:00:00Z");
+    }
+
+    #[test]
+    fn albums_sort_newest_first_when_asked_for_by_added() {
+        let mut old = t("a", "Track", "X", "Old", "al1", 1);
+        old.added_at = "2020-03-04T00:00:00Z".into();
+        let mut new = t("b", "Track", "Y", "New", "al2", 1);
+        new.added_at = "2026-08-01T00:00:00Z".into();
+        let unknown = t("c", "Track", "Z", "Undated", "al3", 1); // added_at: ""
+        let mut lib = Library::new(vec![old, new, unknown]);
+
+        // `Sort::new` picks the direction, which for a date is newest first.
+        let mut s = lib.sorts();
+        s.set(ListKind::Albums, Sort::new(SortField::Added));
+        lib.set_sorts(s);
+        assert_eq!(album_titles(&lib), vec!["New", "Old", "Undated"]);
+    }
+
+    #[test]
+    fn albums_can_be_ordered_by_size() {
+        let mut lib = Library::new(vec![
+            t("a", "One", "X", "Single", "al1", 1),
+            t("b", "One", "Y", "Long", "al2", 1),
+            t("c", "Two", "Y", "Long", "al2", 2),
+        ]);
+        sorted(&mut lib, ListKind::Albums, SortField::Tracks, true);
+        assert_eq!(album_titles(&lib), vec!["Long", "Single"]);
+    }
+
+    #[test]
+    fn sorting_leaves_the_id_lookups_and_album_track_order_alone() {
+        let mut lib = sample();
+        sorted(&mut lib, ListKind::Albums, SortField::Title, true);
+        sorted(&mut lib, ListKind::Tracks, SortField::Title, true);
+
+        // This is what sorting by index protects: ids still resolve, and an
+        // album still plays in disc order however its list is shown.
+        assert_eq!(lib.track("2").unwrap().title, "Freddie Freeloader");
+        assert_eq!(lib.album("al1").unwrap().title, "Kind of Blue");
+        assert_eq!(lib.album("al1").unwrap().track_ids, vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn a_row_maps_back_to_the_item_it_shows() {
+        let mut lib = sample();
+        sorted(&mut lib, ListKind::Tracks, SortField::Title, false);
+        let row = lib.row_of(ListKind::Tracks, lib.track_index("9").unwrap());
+        // "Take Five" is last of the four by title.
+        assert_eq!(row, Some(3));
+        assert_eq!(lib.row(ListKind::Tracks, 3), lib.track_index("9"));
+    }
+
+    #[test]
+    fn cycling_wraps_through_the_fields_a_list_offers() {
+        let fields = ListKind::Artists.fields();
+        assert_eq!(
+            fields,
+            [SortField::Artist, SortField::Tracks, SortField::Plays]
+        );
+
+        let mut s = Sort::new(SortField::Artist);
+        for expected in [SortField::Tracks, SortField::Plays, SortField::Artist] {
+            s = s.next(ListKind::Artists);
+            assert_eq!(s.field, expected);
+        }
+    }
+
+    #[test]
+    fn cycling_from_a_field_the_list_does_not_offer_lands_on_its_default() {
+        // `length` is a track field; the Albums list has never offered it.
+        let s = Sort::new(SortField::Length).next(ListKind::Albums);
+        assert_eq!(s.field, SortField::Artist);
+        assert_eq!(
+            Sort::new(SortField::Length)
+                .valid_for(ListKind::Albums)
+                .field,
+            SortField::Artist
+        );
+        assert_eq!(
+            Sort::new(SortField::Year).valid_for(ListKind::Albums).field,
+            SortField::Year,
+            "a field it does offer is left alone"
+        );
+    }
+
+    #[test]
+    fn a_date_or_a_count_starts_descending_and_a_name_starts_at_a() {
+        assert!(Sort::new(SortField::Added).desc);
+        assert!(Sort::new(SortField::Tracks).desc);
+        assert!(Sort::new(SortField::Length).desc);
+        assert!(!Sort::new(SortField::Artist).desc);
+        assert!(!Sort::new(SortField::Title).desc);
+        assert!(!Sort::new(SortField::Year).desc);
+    }
+
+    #[test]
+    fn a_sort_round_trips_through_its_config_form() {
+        for field in [
+            SortField::Artist,
+            SortField::Title,
+            SortField::Album,
+            SortField::Year,
+            SortField::Added,
+            SortField::Length,
+            SortField::Tracks,
+        ] {
+            for desc in [false, true] {
+                let s = Sort { field, desc };
+                assert_eq!(Sort::parse(&s.as_str()), Some(s), "{}", s.as_str());
+            }
+        }
+        assert_eq!(Sort::parse("-added").unwrap().field, SortField::Added);
+        assert!(Sort::parse("-added").unwrap().desc);
+        assert!(!Sort::parse("  year  ").unwrap().desc);
+        assert_eq!(Sort::parse("sideways"), None);
+        assert_eq!(Sort::parse(""), None);
+    }
+
+    #[test]
+    fn plays_rank_tracks_albums_and_artists() {
+        let mut lib = Library::new(vec![
+            t("a", "Hit", "Zebra", "Popular", "al1", 1),
+            t("b", "Deep cut", "Zebra", "Popular", "al1", 2),
+            t("c", "Only track", "Apple", "Ignored", "al2", 1),
+        ]);
+        lib.set_play_counts(HashMap::from([("a".into(), 40), ("c".into(), 7)]));
+
+        // Counts alone change nothing; the lists are still ranked by artist.
+        assert_eq!(album_titles(&lib), vec!["Ignored", "Popular"]);
+
+        let mut s = lib.sorts();
+        s.set(ListKind::Albums, Sort::new(SortField::Plays));
+        s.set(ListKind::Tracks, Sort::new(SortField::Plays));
+        s.set(ListKind::Artists, Sort::new(SortField::Plays));
+        lib.set_sorts(s);
+        // Album plays are the sum of their tracks: Popular has 40, Ignored 7.
+        assert_eq!(album_titles(&lib), vec!["Popular", "Ignored"]);
+        assert_eq!(track_titles(&lib)[0], "Hit", "most played track leads");
+        assert_eq!(
+            lib.order(ListKind::Artists)
+                .iter()
+                .map(|&i| lib.artists[i].name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Zebra", "Apple"],
+            "an artist's plays come through their albums"
+        );
+        assert_eq!(track_titles(&lib), vec!["Hit", "Only track", "Deep cut"]);
+    }
+
+    #[test]
+    fn an_unplayed_track_counts_as_zero_rather_than_unknown() {
+        let mut lib = Library::new(vec![
+            t("a", "Played", "X", "Alb", "al", 1),
+            t("b", "Never", "X", "Alb", "al", 2),
+        ]);
+        lib.set_play_counts(HashMap::from([("a".into(), 3)]));
+        sorted(&mut lib, ListKind::Tracks, SortField::Plays, false);
+        assert_eq!(
+            track_titles(&lib),
+            vec!["Never", "Played"],
+            "ascending puts the never-played first: zero is a real count, \
+             unlike a missing year"
+        );
+        assert_eq!(lib.plays("b"), 0);
+        assert_eq!(lib.plays("gone"), 0);
+    }
+
+    #[test]
+    fn dropping_the_counts_leaves_the_list_ranked_by_nothing_but_names() {
+        let mut lib = Library::new(vec![
+            t("a", "Zed", "X", "Alb", "al", 1),
+            t("b", "Alpha", "X", "Alb", "al", 2),
+        ]);
+        lib.set_play_counts(HashMap::from([("a".into(), 9)]));
+        sorted(&mut lib, ListKind::Tracks, SortField::Plays, true);
+        assert_eq!(track_titles(&lib), vec!["Zed", "Alpha"]);
+
+        // A profile change: the counts are the other listener's.
+        lib.clear_play_counts();
+        assert_eq!(lib.plays("a"), 0);
+        assert_eq!(
+            track_titles(&lib),
+            vec!["Alpha", "Zed"],
+            "with every count equal the tiebreak decides, in title order"
+        );
+    }
+
+    #[test]
+    fn a_reindex_refolds_the_plays_it_already_holds() {
+        let mut lib = Library::new(vec![t("a", "One", "X", "Alb", "al", 1)]);
+        lib.set_play_counts(HashMap::from([("a".into(), 5)]));
+        assert_eq!(lib.album_plays(0), 5);
+        assert_eq!(lib.artist_plays(0), 5);
+    }
+
+    #[test]
+    fn the_label_names_the_field_and_the_direction() {
+        assert_eq!(Sort::new(SortField::Year).label(), "year ↑");
+        assert_eq!(Sort::new(SortField::Year).reversed().label(), "year ↓");
     }
 }

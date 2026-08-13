@@ -145,7 +145,10 @@ It plays through **mpv**, launched as a child process and driven over its JSON
 IPC socket: gapless, and bit-perfect on the original tier like the Flutter app.
 Without mpv installed it still browses the library and edits playlists, and
 says so instead of failing. Covers albums/artists/tracks, local search,
-queue, playlists, tags, stats, favourites, and play reporting.
+queue, playlists, tags, stats, favourites, and play reporting. Long lists sort
+on `,` and reverse on `.` — by year, by length, by what arrived most recently,
+or by most played as in the Flutter app — and each list remembers its own
+order.
 
 ## API
 

@@ -117,6 +117,7 @@ Precedence is flag, then `$ARIA_SERVER`, then the config file, then
 | `f` | Favourite |
 | `P` | Add to a playlist |
 | `d` | Remove from the queue or a playlist |
+| `,` / `.` | Cycle the sort field / reverse it |
 | `/` | Search |
 | `o` | Change the server, and remember it |
 | `t` | Cycle the stream tier |
@@ -135,6 +136,51 @@ Aria serves the whole merged track view from `/api/tracks` and has no album,
 artist or search endpoint, so grouping, sorting and searching all happen here.
 Albums group by `albumId` (Aria derives album identity from the directory), and
 sorting ignores case, accents and a leading article.
+
+### Sorting
+
+`,` cycles the field the current list is sorted by and `.` reverses it. The
+header names the order in force — `Albums (412) — by year ↑` — so the list
+always says what it is doing.
+
+| List | Fields |
+| --- | --- |
+| Albums | artist, title, year, added, tracks, plays |
+| Artists | artist, tracks, plays |
+| Tracks | artist, title, album, year, added, length, plays |
+
+Dates and counts start at the big end: reaching for `added` and landing on the
+oldest imports is never what was meant. A missing value — an untagged year, a
+track with no duration — sorts last in *both* directions, since an untagged
+album is not the oldest one. Zero plays is not missing, though: a track nobody
+has reached ranks last descending and first ascending, which is how you find
+what you have never listened to.
+
+#### Most played
+
+`plays` matches the "Most played" sort in the Flutter app, and reads the same
+history: `GET /api/plays/counts`, all time, scoped to your profile. While a
+list is ranked by it the count is shown in its own column, so the ranking is
+legible rather than asserted.
+
+The counts are not part of `/api/tracks`, so they are fetched on demand — the
+first time a list is ranked by them, and never if you don't use the sort. Until
+they land the column reads `?`. An album's plays are the sum of its tracks',
+and an artist's the sum of their albums'.
+
+They belong to a profile, so switching profiles drops them; and they are
+re-fetched when a play is recorded, so a most-played list stays true while you
+listen. Without a profile there is nothing to count and the app says so.
+
+The row under the cursor keeps its place across a re-sort, so the list moves
+around what you were looking at rather than under it. `g` jumps to the top when
+the top is the point.
+
+Each list remembers its own order, in the config file, because one order that
+suited all three would suit none of them. The Queue, Playlists and drill-down
+views are not sortable: a queue is a hand-built order, a playlist is the order
+it was saved in, and an album plays in disc order. Search results are ranked by
+how well they match, which is the only order worth having there.
 
 **Search** filters as you type, across title, artist, album, composer and
 genre, ignoring accents — "bjork" finds Björk. Every term must match, so extra
@@ -179,6 +225,9 @@ exclusive_audio = false
 mpv_args = []              # extra mpv flags, appended last
 scrobble_at = 0.5          # fraction of a track before a play is reported
 theme = "dark"             # dark | light
+sort_albums = "artist"     # a leading "-" is descending, e.g. "-added"
+sort_artists = "artist"
+sort_tracks = "artist"
 ```
 
 `mpv_args` is for the things only you know about your setup — pick a specific

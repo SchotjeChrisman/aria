@@ -8,6 +8,7 @@ use ratatui::widgets::{Block, BorderType, Clear, Gauge, List, ListItem, Paragrap
 use ratatui::Frame;
 
 use crate::app::{App, Detail, Modal, View};
+use crate::library::{ListKind, SortField};
 use crate::theme::Theme;
 use crate::timefmt::{hms, human_duration};
 
@@ -191,57 +192,102 @@ fn pad(s: &str, width: usize) -> String {
     }
 }
 
+/// A list header that names both the size of the list and the order it is in,
+/// so the sort keys never leave the view in a state the user cannot read off
+/// the screen.
+fn sorted_title(app: &App, name: &str, count: usize, kind: ListKind) -> String {
+    format!("{name} ({count}) — by {}", app.lib.sort(kind).label())
+}
+
+/// A play-count cell, shown only while the list is actually ranked by plays.
+/// Ranking a list by a number the user cannot see would leave them no way to
+/// tell a working sort from a broken one.
+fn plays_cell(app: &App, kind: ListKind, plays: u32) -> String {
+    if plays_width(app, kind) == 0 {
+        return String::new();
+    }
+    if app.play_counts.is_none() {
+        // Ranked by a number that has not arrived yet. Saying so beats
+        // printing a column of zeroes that would read as "never played".
+        return "    ?".into();
+    }
+    format!("{plays:>5}")
+}
+
+/// Columns the play count takes, so the other columns can give them up rather
+/// than push the count off the end of the row.
+fn plays_width(app: &App, kind: ListKind) -> usize {
+    if app.lib.sort(kind).field == SortField::Plays {
+        5
+    } else {
+        0
+    }
+}
+
 fn draw_albums(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect) {
     let w = area.width as usize;
     let artist_w = (w / 4).clamp(12, 30);
-    let title_w = w.saturating_sub(artist_w + 30).max(12);
+    let title_w = w
+        .saturating_sub(artist_w + 30 + plays_width(app, ListKind::Albums))
+        .max(12);
     let playing_album = app.current_track().map(|t| t.album_id.clone());
-    let rows: Vec<Line> = app
-        .lib
-        .albums
-        .iter()
-        .enumerate()
-        .map(|(i, a)| {
+    let rows: Vec<Line> = (0..app.lib.albums.len())
+        .filter_map(|row| app.album_at(row).map(|a| (row, a)))
+        .map(|(row, a)| {
             let playing = playing_album.as_deref() == Some(a.id.as_str());
+            let plays = app
+                .lib
+                .row(ListKind::Albums, row)
+                .map(|i| app.lib.album_plays(i))
+                .unwrap_or(0);
             Line::styled(
                 format!(
-                    "{} {} {} {:>4}  {:>3} tk  {}",
+                    "{} {} {} {:>4}  {:>3} tk  {}{}",
                     if playing { "▶" } else { " " },
                     pad(&a.album_artist, artist_w),
                     pad(&a.title, title_w),
                     a.year.map(|y| y.to_string()).unwrap_or_default(),
                     a.track_count,
                     a.release_type,
+                    plays_cell(app, ListKind::Albums, plays),
                 ),
-                row_style(theme, i == app.albums_list.selected, playing),
+                row_style(theme, row == app.albums_list.selected, playing),
             )
         })
         .collect();
-    let title = format!("Albums ({})", app.lib.albums.len());
+    let title = sorted_title(app, "Albums", app.lib.albums.len(), ListKind::Albums);
     let mut state = app.albums_list.clone();
     render_rows(f, theme, area, title, rows, &mut state);
     app.albums_list = state;
 }
 
 fn draw_artists(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect) {
-    let rows: Vec<Line> = app
-        .lib
-        .artists
-        .iter()
-        .enumerate()
-        .map(|(i, a)| {
+    let rows: Vec<Line> = (0..app.lib.artists.len())
+        .filter_map(|row| app.artist_at(row).map(|a| (row, a)))
+        .map(|(row, a)| {
+            let plays = app
+                .lib
+                .row(ListKind::Artists, row)
+                .map(|i| app.lib.artist_plays(i))
+                .unwrap_or(0);
             Line::styled(
                 format!(
-                    "  {}  {:>3} albums  {:>4} tracks",
-                    pad(&a.name, (area.width as usize).saturating_sub(30).max(10)),
+                    "  {}  {:>3} albums  {:>4} tracks{}",
+                    pad(
+                        &a.name,
+                        (area.width as usize)
+                            .saturating_sub(30 + plays_width(app, ListKind::Artists))
+                            .max(10)
+                    ),
                     a.album_ids.len(),
-                    a.track_count
+                    a.track_count,
+                    plays_cell(app, ListKind::Artists, plays),
                 ),
-                row_style(theme, i == app.artists_list.selected, false),
+                row_style(theme, row == app.artists_list.selected, false),
             )
         })
         .collect();
-    let title = format!("Artists ({})", app.lib.artists.len());
+    let title = sorted_title(app, "Artists", app.lib.artists.len(), ListKind::Artists);
     let mut state = app.artists_list.clone();
     render_rows(f, theme, area, title, rows, &mut state);
     app.artists_list = state;
@@ -255,12 +301,20 @@ fn track_line(
     selected: bool,
     width: usize,
     show_album: bool,
+    // Only the Tracks view: the queue and the drill-downs are not ranked by
+    // plays, so a count there would be a number with no meaning attached.
+    show_plays: bool,
 ) -> Line<'static> {
     let playing = app.current_track().map(|c| c.id.as_str()) == Some(t.id.as_str());
     let fav = if t.favourite { "♥" } else { " " };
     let dur = hms(t.duration_secs());
     let cols = if show_album { 3 } else { 2 };
-    let text_w = width.saturating_sub(18).max(12);
+    let plays_w = if show_plays {
+        plays_width(app, ListKind::Tracks)
+    } else {
+        0
+    };
+    let text_w = width.saturating_sub(18 + plays_w).max(12);
     let each = text_w / cols;
     let mut s = format!(
         "{} {} {}",
@@ -273,20 +327,20 @@ fn track_line(
         s.push_str(&format!(" {}", pad(&t.album, each)));
     }
     s.push_str(&format!(" {dur:>7}"));
+    if show_plays {
+        s.push_str(&plays_cell(app, ListKind::Tracks, app.lib.plays(&t.id)));
+    }
     Line::styled(s, row_style(theme, selected, playing))
 }
 
 fn draw_tracks(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect) {
     let w = area.width as usize;
     let sel = app.tracks_list.selected;
-    let rows: Vec<Line> = app
-        .lib
-        .tracks
-        .iter()
-        .enumerate()
-        .map(|(i, t)| track_line(app, theme, t, i == sel, w, true))
+    let rows: Vec<Line> = (0..app.lib.tracks.len())
+        .filter_map(|row| app.track_at(row).map(|t| (row, t)))
+        .map(|(row, t)| track_line(app, theme, t, row == sel, w, true, true))
         .collect();
-    let title = format!("Tracks ({})", app.lib.tracks.len());
+    let title = sorted_title(app, "Tracks", app.lib.tracks.len(), ListKind::Tracks);
     let mut state = app.tracks_list.clone();
     render_rows(f, theme, area, title, rows, &mut state);
     app.tracks_list = state;
@@ -327,7 +381,7 @@ fn draw_search(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect) {
             app.lib
                 .tracks
                 .get(ti)
-                .map(|t| track_line(app, theme, t, i == sel, w, true))
+                .map(|t| track_line(app, theme, t, i == sel, w, true, false))
         })
         .collect();
     let title = if app.search_input.is_empty() {
@@ -358,7 +412,7 @@ fn draw_queue(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect) {
         .enumerate()
         .map(|(i, id)| match app.lib.track(id) {
             Some(t) => {
-                let mut line = track_line(app, theme, t, i == sel, w, true);
+                let mut line = track_line(app, theme, t, i == sel, w, true, false);
                 if Some(i) == pos {
                     line = line.patch_style(row_style(theme, i == sel, true));
                 }
@@ -601,7 +655,7 @@ fn draw_artist_detail(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect, n
         .filter_map(|(i, tid)| {
             app.lib
                 .track(tid)
-                .map(|t| track_line(app, theme, t, i == sel, w, true))
+                .map(|t| track_line(app, theme, t, i == sel, w, true, false))
         })
         .collect();
     let title = format!("{name} ({} tracks)", ids.len());
@@ -623,7 +677,7 @@ fn draw_playlist_detail(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect,
         .playlist_tracks
         .iter()
         .enumerate()
-        .map(|(i, t)| track_line(app, theme, t, i == sel, w, true))
+        .map(|(i, t)| track_line(app, theme, t, i == sel, w, true, false))
         .collect();
     let rows = if rows.is_empty() {
         vec![Line::styled("  empty — add tracks with P", theme.dimmed())]
@@ -646,7 +700,7 @@ fn draw_tag_detail(f: &mut Frame, app: &mut App, theme: &Theme, area: Rect, name
         .filter_map(|(i, tid)| {
             app.lib
                 .track(tid)
-                .map(|t| track_line(app, theme, t, i == sel, w, true))
+                .map(|t| track_line(app, theme, t, i == sel, w, true, false))
         })
         .collect();
     let title = format!("Tag: {name} ({} tracks)", ids.len());
@@ -818,6 +872,8 @@ const HELP: &[(&str, &str)] = &[
     ("P", "add to playlist"),
     ("d", "remove (queue or playlist)"),
     ("", ""),
+    (",", "cycle sort field"),
+    (".", "reverse the sort"),
     ("/", "search"),
     ("n (playlists)", "new playlist"),
     ("t", "cycle stream tier"),
@@ -829,22 +885,48 @@ const HELP: &[(&str, &str)] = &[
     ("q", "quit"),
 ];
 
+/// Width of one key/description column in the help modal.
+const HELP_COL: usize = 46;
+
+fn help_cell(theme: &Theme, (key, what): &(&str, &str)) -> Vec<Span<'static>> {
+    if key.is_empty() {
+        return vec![Span::raw(" ".repeat(HELP_COL))];
+    }
+    vec![
+        Span::styled(format!("  {key:>16}  "), Style::default().fg(theme.accent)),
+        Span::raw(format!("{what:<0$}", HELP_COL - 20)),
+    ]
+}
+
 fn draw_help(f: &mut Frame, theme: &Theme, area: Rect) {
-    let r = centered(area, 60, HELP.len() as u16 + 2);
-    f.render_widget(Clear, r);
-    let lines: Vec<Line> = HELP
-        .iter()
-        .map(|(k, v)| {
-            if k.is_empty() {
-                Line::raw("")
-            } else {
-                Line::from(vec![
-                    Span::styled(format!("  {:>16}  ", k), Style::default().fg(theme.accent)),
-                    Span::raw(*v),
-                ])
+    // Folds to two columns when one will not fit the terminal. A help screen
+    // that silently cuts off its last bindings is worse than a wide one, and
+    // the bindings it would cut off are the ones nobody has memorised.
+    let tall = HELP.len() as u16 + 2;
+    let two_col = tall > area.height && area.width as usize >= HELP_COL * 2 + 2;
+
+    let half = if two_col {
+        HELP.len().div_ceil(2)
+    } else {
+        HELP.len()
+    };
+    let lines: Vec<Line> = (0..half)
+        .map(|i| {
+            let mut spans = help_cell(theme, &HELP[i]);
+            if let Some(second) = HELP.get(i + half) {
+                spans.extend(help_cell(theme, second));
             }
+            Line::from(spans)
         })
         .collect();
+
+    let width = if two_col {
+        HELP_COL * 2 + 2
+    } else {
+        HELP_COL + 2
+    };
+    let r = centered(area, width as u16, lines.len() as u16 + 2);
+    f.render_widget(Clear, r);
     f.render_widget(Paragraph::new(lines).block(block(theme, "Keys".into())), r);
 }
 

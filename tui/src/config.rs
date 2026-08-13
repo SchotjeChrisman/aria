@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::api::Tier;
+use crate::library::{ListKind, Sort, Sorts};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -39,6 +40,12 @@ pub struct Config {
     pub scrobble_at: f64,
     /// Colour theme: "dark" or "light".
     pub theme: String,
+    /// Row order for the Albums, Artists and Tracks views: a field name, with
+    /// a leading `-` for descending — `year`, `-added`. Kept per list because
+    /// one order that suited all three would suit none of them.
+    pub sort_albums: String,
+    pub sort_artists: String,
+    pub sort_tracks: String,
 }
 
 impl Default for Config {
@@ -56,6 +63,9 @@ impl Default for Config {
             mpv_args: Vec::new(),
             scrobble_at: 0.5,
             theme: "dark".into(),
+            sort_albums: "artist".into(),
+            sort_artists: "artist".into(),
+            sort_tracks: "artist".into(),
         }
     }
 }
@@ -63,6 +73,27 @@ impl Default for Config {
 impl Config {
     pub fn tier(&self) -> Tier {
         Tier::parse(&self.tier).unwrap_or_default()
+    }
+
+    /// The stored row orders. An unreadable value falls back to the default
+    /// rather than refusing to start — a sort is a preference, not data.
+    pub fn sorts(&self) -> Sorts {
+        let pick = |s: &str, kind| {
+            Sort::parse(s)
+                .map(|sort| sort.valid_for(kind))
+                .unwrap_or_else(|| Sort::new(ListKind::fields(kind)[0]))
+        };
+        Sorts {
+            albums: pick(&self.sort_albums, ListKind::Albums),
+            artists: pick(&self.sort_artists, ListKind::Artists),
+            tracks: pick(&self.sort_tracks, ListKind::Tracks),
+        }
+    }
+
+    pub fn set_sorts(&mut self, s: Sorts) {
+        self.sort_albums = s.albums.as_str();
+        self.sort_artists = s.artists.as_str();
+        self.sort_tracks = s.tracks.as_str();
     }
 
     /// Where the config lives: `$XDG_CONFIG_HOME/aria-tui/config.toml`.
@@ -103,6 +134,10 @@ impl Config {
         if self.mpv_path.trim().is_empty() {
             self.mpv_path = "mpv".into();
         }
+        // Rewrites an unparseable or misplaced sort to the one actually in
+        // use, so the file never claims an order the app is not showing.
+        let sorts = self.sorts();
+        self.set_sorts(sorts);
     }
 }
 
@@ -447,5 +482,74 @@ mod tests {
         c.apply(&a);
         assert_eq!(c.server, "http://cli-host:9999");
         assert_eq!(c.tier(), Tier::Low);
+    }
+
+    #[test]
+    fn a_fresh_config_sorts_every_list_by_artist() {
+        let s = Config::default().sorts();
+        assert_eq!(s.albums, Sort::default());
+        assert_eq!(s.artists, Sort::default());
+        assert_eq!(s.tracks, Sort::default());
+    }
+
+    #[test]
+    fn a_stored_sort_comes_back_as_it_was_left() {
+        let mut c = Config::default();
+        c.set_sorts(Sorts {
+            albums: Sort::new(crate::library::SortField::Added),
+            ..Default::default()
+        });
+        assert_eq!(c.sort_albums, "-added", "descending is the leading dash");
+
+        let text = toml::to_string_pretty(&c).unwrap();
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(
+            back.sorts().albums,
+            Sort::new(crate::library::SortField::Added)
+        );
+    }
+
+    #[test]
+    fn a_config_predating_sorting_still_loads() {
+        // Every field is `#[serde(default)]`, so a file written by 0.2.0 has
+        // no sort keys at all and must not fail to parse.
+        let c: Config = toml::from_str("server = \"http://box:3001\"").unwrap();
+        assert_eq!(c.server, "http://box:3001");
+        assert_eq!(c.sorts().tracks, Sort::default());
+    }
+
+    #[test]
+    fn every_list_offers_most_played() {
+        use crate::library::{ListKind, SortField};
+        for kind in [ListKind::Albums, ListKind::Artists, ListKind::Tracks] {
+            assert!(
+                kind.fields().contains(&SortField::Plays),
+                "{kind:?} must offer it, as the Flutter app does"
+            );
+        }
+        let mut c = Config {
+            sort_tracks: "-plays".into(),
+            ..Default::default()
+        };
+        c.normalize();
+        assert_eq!(c.sorts().tracks.field, SortField::Plays);
+        assert!(c.sorts().tracks.desc);
+        assert_eq!(c.sort_tracks, "-plays", "and it survives normalising");
+    }
+
+    #[test]
+    fn a_nonsense_sort_is_rewritten_rather_than_obeyed() {
+        let mut c = Config {
+            sort_albums: "sideways".into(),
+            // A real field, but one the Artists list does not offer.
+            sort_artists: "-length".into(),
+            ..Default::default()
+        };
+        c.normalize();
+        assert_eq!(c.sort_albums, "artist");
+        assert_eq!(
+            c.sort_artists, "artist",
+            "the file must not claim an order the list is not in"
+        );
     }
 }

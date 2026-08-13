@@ -8,6 +8,7 @@
 
 pub mod models;
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::time::Duration;
 
@@ -275,12 +276,24 @@ impl Client {
         Ok(())
     }
 
-    /// Play counts keyed by track id.
-    pub fn play_counts(&self, profile_id: &str) -> Result<serde_json::Value> {
-        self.get_json(&format!(
+    /// All-time play counts for a profile, as `{trackId: plays}`.
+    ///
+    /// One row per *played* track, so a track nobody has reached is absent
+    /// rather than zero, and the map stays small next to the library. Omitting
+    /// `period` asks for all time, which is what "most played" means here.
+    pub fn play_counts(&self, profile_id: &str) -> Result<HashMap<String, u32>> {
+        let v: serde_json::Value = self.get_json(&format!(
             "/api/plays/counts?profileId={}",
             urlencode(profile_id)
-        ))
+        ))?;
+        Ok(v.get("counts")
+            .and_then(|c| c.as_object())
+            .map(|m| {
+                m.iter()
+                    .filter_map(|(id, n)| Some((id.clone(), n.as_u64()? as u32)))
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
     // ---- playlists -------------------------------------------------------

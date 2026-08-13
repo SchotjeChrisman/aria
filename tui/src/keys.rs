@@ -198,6 +198,13 @@ fn handle_global(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('d') => remove_selected(app),
 
+        // ---- sorting ----
+        // Adjacent keys for one idea: `,` picks the field, `.` flips it. The
+        // list header names the order in force, so neither key has to be
+        // remembered to know what the list is doing.
+        KeyCode::Char(',') => app.cycle_sort(),
+        KeyCode::Char('.') => app.reverse_sort(),
+
         // ---- search ----
         KeyCode::Char('/') => {
             app.view = View::Search;
@@ -293,14 +300,14 @@ fn activate(app: &mut App) {
         }
         Detail::None => match app.view {
             View::Albums => {
-                if let Some(a) = app.lib.albums.get(app.albums_list.selected) {
+                if let Some(a) = app.album_at(app.albums_list.selected) {
                     let id = a.id.clone();
                     app.detail = Detail::Album(id);
                     app.detail_list = Default::default();
                 }
             }
             View::Artists => {
-                if let Some(a) = app.lib.artists.get(app.artists_list.selected) {
+                if let Some(a) = app.artist_at(app.artists_list.selected) {
                     let name = a.name.clone();
                     app.detail = Detail::Artist(name);
                     app.detail_list = Default::default();
@@ -320,9 +327,13 @@ fn activate(app: &mut App) {
                 }
             }
             // In a flat track list, Enter plays that list from the cursor, so
-            // the rest of the view becomes the queue.
+            // the rest of the view becomes the queue — in the order it is
+            // shown in, not the order the library happens to hold.
             View::Tracks => {
-                let ids: Vec<String> = app.lib.tracks.iter().map(|t| t.id.clone()).collect();
+                let ids: Vec<String> = (0..app.lib.tracks.len())
+                    .filter_map(|row| app.track_at(row))
+                    .map(|t| t.id.clone())
+                    .collect();
                 let start = app.tracks_list.selected;
                 app.play_tracks(ids, start);
             }
@@ -1018,8 +1029,47 @@ mod tests {
             KeyCode::Char('d'),
             KeyCode::Char('j'),
             KeyCode::Char('G'),
+            KeyCode::Char(','),
+            KeyCode::Char('.'),
         ] {
             handle_key(&mut a, k(key));
         }
+    }
+
+    #[test]
+    fn the_sort_keys_cycle_the_field_and_flip_the_direction() {
+        use crate::library::{ListKind, SortField};
+        let mut a = app();
+        a.view = View::Tracks;
+
+        handle_key(&mut a, k(KeyCode::Char(',')));
+        assert_eq!(a.lib.sort(ListKind::Tracks).field, SortField::Title);
+        assert!(!a.lib.sort(ListKind::Tracks).desc);
+
+        handle_key(&mut a, k(KeyCode::Char('.')));
+        assert!(a.lib.sort(ListKind::Tracks).desc);
+        assert_eq!(
+            a.lib.sort(ListKind::Tracks).field,
+            SortField::Title,
+            "reversing does not move on to the next field"
+        );
+    }
+
+    #[test]
+    fn enter_plays_the_track_list_in_the_order_it_is_shown() {
+        use crate::library::{ListKind, Sort, SortField};
+        let mut a = app();
+        a.view = View::Tracks;
+        let mut s = a.lib.sorts();
+        s.set(ListKind::Tracks, Sort::new(SortField::Title).reversed());
+        a.lib.set_sorts(s);
+
+        handle_key(&mut a, k(KeyCode::Enter));
+        // Titles are One, Two, Three; reversed by title that is Two, Three, One.
+        assert_eq!(
+            a.queue.items(),
+            &["t2".to_string(), "t3".to_string(), "t1".to_string()],
+            "queueing a sorted list must follow the screen, not the load order"
+        );
     }
 }
