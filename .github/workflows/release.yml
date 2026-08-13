@@ -56,6 +56,13 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for _ in $(seq 60); do
+            # A dead server must fail here rather than let the loop run its
+            # full timeout — or, worse, let something else answering on the
+            # port look like readiness.
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "aria server exited before becoming ready" >&2
+              exit 1
+            fi
             if curl -fsS http://127.0.0.1:3999/healthz >/dev/null 2>&1; then
               ready=1; break
             fi
