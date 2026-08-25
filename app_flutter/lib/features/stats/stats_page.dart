@@ -87,12 +87,12 @@ class _StatsBody extends ConsumerWidget {
           spacing: AriaSpace.s3,
           runSpacing: AriaSpace.s3,
           children: [
-            _StatTile(num_: '${stats.totalPlays}', label: 'Total plays'),
-            _StatTile(
+            StatTile(num_: '${stats.totalPlays}', label: 'Total plays'),
+            StatTile(
               num_: formatListenTime(stats.totalSeconds),
               label: 'Listening time',
             ),
-            _StatTile(
+            StatTile(
               num_:
                   '${stats.uniqueTracks > 0 ? stats.uniqueTracks : stats.recent.length}',
               label: 'Tracks played',
@@ -336,8 +336,8 @@ class _StatsBody extends ConsumerWidget {
 }
 
 /// Legacy .stat-tile: big number over a dim label.
-class _StatTile extends StatelessWidget {
-  const _StatTile({required this.num_, required this.label});
+class StatTile extends StatelessWidget {
+  const StatTile({super.key, required this.num_, required this.label});
 
   final String num_;
   final String label;

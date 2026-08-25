@@ -11,7 +11,7 @@ import 'providers.dart';
 
 /// Signal-path quality tiers — Roon's exact colour grades. Ordered worst-last
 /// so `.index` ranks them and the overall dot is the worst stage in the chain.
-enum _Tier {
+enum SignalTier {
   bitPerfect(Color(0xFF7C4DFF), 'Lossless'), // purple
   enhanced(Color(0xFF2563EB), 'Enhanced'), // blue
   highQuality(Color(0xFF16A34A), 'High quality'), // green
@@ -21,7 +21,7 @@ enum _Tier {
   // stream is a transient event, not a state, so it would only flash).
   problem(Color(0xFFDC2626), 'Problem'); // red
 
-  const _Tier(this.color, this.label);
+  const SignalTier(this.color, this.label);
 
   final Color color;
   final String label;
@@ -29,18 +29,21 @@ enum _Tier {
 
 /// One node in the chain: [short] rides the compact inline view, [name]/[detail]
 /// the expanded sheet.
-typedef _Stage = ({String name, String detail, String short, _Tier tier});
+typedef SignalStage =
+    ({String name, String detail, String short, SignalTier tier});
 
 /// A resolved signal path: ordered stages, the overall (worst) tier, the
 /// compact one-line chain, and an honest platform caveat.
-typedef _Path = ({List<_Stage> stages, _Tier tier, String chain, String note});
+typedef _Path =
+    ({List<SignalStage> stages, SignalTier tier, String chain, String note});
 
 String _khz(int hz) => (hz / 1000).toString().replaceFirst(RegExp(r'\.0$'), '');
 
-/// Source → processing → output, graded per [_Tier]. The output leg reads
-/// mpv's `audio-out-params` (what it hands the OS), and on Android the whole
-/// path is downgraded because AudioFlinger mixes everything at 48 kHz — we
-/// cannot honestly claim bit-perfect there until a direct USB-DAC path exists.
+/// Source → processing → output, graded per [SignalTier]. The output leg
+/// reads mpv's `audio-out-params` (what it hands the OS), and on Android the
+/// whole path is downgraded because AudioFlinger mixes everything at 48 kHz
+/// — we cannot honestly claim bit-perfect there until a direct USB-DAC path
+/// exists.
 class SignalPath extends ConsumerWidget {
   const SignalPath({super.key});
 
@@ -58,7 +61,7 @@ class SignalPath extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _Dot(color: path.tier.color),
+            SignalDot(color: path.tier.color),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
@@ -107,7 +110,7 @@ class SignalPathDot extends ConsumerWidget {
               shape: BoxShape.circle,
               color: path.tier.color.withValues(alpha: 0.2),
             ),
-            child: _Dot(color: path.tier.color, size: 7),
+            child: SignalDot(color: path.tier.color, size: 7),
           ),
         ),
       ),
@@ -127,15 +130,15 @@ _Path? _resolvePath(WidgetRef ref) {
     // route. ponytail: lift this gate once a direct USB output path lands.
     final onAndroid = defaultTargetPlatform == TargetPlatform.android;
 
-    final stages = <_Stage>[];
-    var worst = _Tier.bitPerfect;
-    void bump(_Tier t) {
+    final stages = <SignalStage>[];
+    var worst = SignalTier.bitPerfect;
+    void bump(SignalTier t) {
       if (t.index > worst.index) worst = t;
     }
 
     if (radio != null) {
       final lossless = radio.url.toLowerCase().contains('flac');
-      final tier = lossless ? _Tier.bitPerfect : _Tier.lossy;
+      final tier = lossless ? SignalTier.bitPerfect : SignalTier.lossy;
       stages.add((
         name: 'Source',
         detail: lossless ? 'FLAC stream' : 'Streaming · lossy',
@@ -148,9 +151,9 @@ _Path? _resolvePath(WidgetRef ref) {
           name: 'EQ',
           detail: 'Parametric EQ',
           short: 'EQ',
-          tier: _Tier.enhanced,
+          tier: SignalTier.enhanced,
         ));
-        bump(_Tier.enhanced);
+        bump(SignalTier.enhanced);
       }
     } else {
       final t = track!;
@@ -159,7 +162,7 @@ _Path? _resolvePath(WidgetRef ref) {
         bitsPerSample: t.bitsPerSample,
         sampleRate: t.sampleRate,
       );
-      final tier = t.lossless ? _Tier.bitPerfect : _Tier.lossy;
+      final tier = t.lossless ? SignalTier.bitPerfect : SignalTier.lossy;
       stages.add((
         name: 'Source',
         detail: '${src.isEmpty ? 'Audio' : src} · ${t.lossless ? 'lossless' : 'lossy'}',
@@ -173,9 +176,9 @@ _Path? _resolvePath(WidgetRef ref) {
           name: 'EQ',
           detail: 'Parametric EQ',
           short: 'EQ',
-          tier: _Tier.enhanced,
+          tier: SignalTier.enhanced,
         ));
-        bump(_Tier.enhanced);
+        bump(SignalTier.enhanced);
       }
 
       // Keyed off the gain ACTUALLY on the chain, not off the setting: an
@@ -188,9 +191,9 @@ _Path? _resolvePath(WidgetRef ref) {
           name: 'Gain',
           detail: '${gain.toStringAsFixed(2)} dB · loudness normalisation',
           short: 'GAIN',
-          tier: _Tier.enhanced,
+          tier: SignalTier.enhanced,
         ));
-        bump(_Tier.enhanced);
+        bump(SignalTier.enhanced);
       }
 
       // mpv's `volume` is software gain in the same output chain, so anything
@@ -198,7 +201,7 @@ _Path? _resolvePath(WidgetRef ref) {
       // is not shown as a stage — the user set it deliberately and knows where
       // the slider is — but it must not be allowed to read as bit-perfect.
       if (ref.watch(volumeProvider) < 100) {
-        bump(_Tier.enhanced);
+        bump(SignalTier.enhanced);
       }
 
       // Resample: mpv's real output rate vs. the source rate.
@@ -209,9 +212,9 @@ _Path? _resolvePath(WidgetRef ref) {
           name: 'Resample',
           detail: '${_khz(srcRate)} → ${_khz(outRate)} kHz',
           short: '${_khz(outRate)}kHz',
-          tier: _Tier.highQuality,
+          tier: SignalTier.highQuality,
         ));
-        bump(_Tier.highQuality);
+        bump(SignalTier.highQuality);
       }
 
       // Requantise: mpv narrows the word length.
@@ -222,16 +225,18 @@ _Path? _resolvePath(WidgetRef ref) {
           name: 'Requantise',
           detail: '$srcBits → $outBits-bit',
           short: '${outBits}bit',
-          tier: _Tier.highQuality,
+          tier: SignalTier.highQuality,
         ));
-        bump(_Tier.highQuality);
+        bump(SignalTier.highQuality);
       }
     }
 
     final String note;
     if (onAndroid) {
       // Never claim bit-perfect through AudioFlinger's shared 48 kHz mixer.
-      if (worst.index < _Tier.highQuality.index) bump(_Tier.highQuality);
+      if (worst.index < SignalTier.highQuality.index) {
+        bump(SignalTier.highQuality);
+      }
       note = 'Android mixes all audio (typically at 48 kHz), so bit-perfect '
           'isn\'t guaranteed. A direct USB-DAC output path would remove this.';
     } else {
@@ -255,6 +260,7 @@ _Path? _resolvePath(WidgetRef ref) {
 
 void _showPathDetails(BuildContext context, _Path path) {
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       builder: (context) {
         final c = AriaColors.of(context);
@@ -272,12 +278,12 @@ void _showPathDetails(BuildContext context, _Path path) {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const Spacer(),
-                    _Chip(tier: path.tier),
+                    SignalTierChip(tier: path.tier),
                   ],
                 ),
                 const SizedBox(height: AriaSpace.s4),
                 for (final (i, s) in path.stages.indexed)
-                  _StageRow(
+                  SignalStageRow(
                     stage: s,
                     first: i == 0,
                     last: i == path.stages.length - 1,
@@ -295,11 +301,11 @@ void _showPathDetails(BuildContext context, _Path path) {
                   spacing: AriaSpace.s3,
                   runSpacing: AriaSpace.s2,
                   children: [
-                    for (final t in _Tier.values)
+                    for (final t in SignalTier.values)
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _Dot(color: t.color, size: 8),
+                          SignalDot(color: t.color, size: 8),
                           const SizedBox(width: 5),
                           Text(
                             t.label,
@@ -317,8 +323,8 @@ void _showPathDetails(BuildContext context, _Path path) {
     );
 }
 
-class _Dot extends StatelessWidget {
-  const _Dot({required this.color, this.size = 8});
+class SignalDot extends StatelessWidget {
+  const SignalDot({super.key, required this.color, this.size = 8});
 
   final Color color;
   final double size;
@@ -332,10 +338,15 @@ class _Dot extends StatelessWidget {
 }
 
 /// A vertical chain node: a rail (line · dot · line) beside name + detail.
-class _StageRow extends StatelessWidget {
-  const _StageRow({required this.stage, required this.first, required this.last});
+class SignalStageRow extends StatelessWidget {
+  const SignalStageRow({
+    super.key,
+    required this.stage,
+    required this.first,
+    required this.last,
+  });
 
-  final _Stage stage;
+  final SignalStage stage;
   final bool first;
   final bool last;
 
@@ -359,7 +370,7 @@ class _StageRow extends StatelessWidget {
             child: Column(
               children: [
                 rail(first),
-                _Dot(color: stage.tier.color, size: 11),
+                SignalDot(color: stage.tier.color, size: 11),
                 rail(last),
               ],
             ),
@@ -388,10 +399,10 @@ class _StageRow extends StatelessWidget {
 }
 
 /// The overall-quality pill (Roon's coloured label).
-class _Chip extends StatelessWidget {
-  const _Chip({required this.tier});
+class SignalTierChip extends StatelessWidget {
+  const SignalTierChip({super.key, required this.tier});
 
-  final _Tier tier;
+  final SignalTier tier;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -403,7 +414,7 @@ class _Chip extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _Dot(color: tier.color, size: 8),
+        SignalDot(color: tier.color, size: 8),
         const SizedBox(width: 6),
         Text(
           tier.label,

@@ -14,20 +14,24 @@ Future<void> showAlbumReidentify(
   Album album,
 ) => showDialog<void>(
   context: context,
-  builder: (_) => _ReidentifyDialog(ref: ref, album: album),
+  builder: (_) => AlbumReidentifyDialog(ref: ref, album: album),
 );
 
-class _ReidentifyDialog extends StatefulWidget {
-  const _ReidentifyDialog({required this.ref, required this.album});
+class AlbumReidentifyDialog extends StatefulWidget {
+  const AlbumReidentifyDialog({
+    super.key,
+    required this.ref,
+    required this.album,
+  });
 
   final WidgetRef ref;
   final Album album;
 
   @override
-  State<_ReidentifyDialog> createState() => _ReidentifyDialogState();
+  State<AlbumReidentifyDialog> createState() => AlbumReidentifyDialogState();
 }
 
-class _ReidentifyDialogState extends State<_ReidentifyDialog> {
+class AlbumReidentifyDialogState extends State<AlbumReidentifyDialog> {
   List<AlbumCandidate>? _candidates;
   String? _status = 'Searching MusicBrainz…';
 

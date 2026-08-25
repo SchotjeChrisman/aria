@@ -27,7 +27,7 @@ class _EqScreenState extends ConsumerState<EqScreen> {
   Future<void> _editCustom({EqProfile? preset, int? index}) async {
     final edited = await showDialog<EqProfile>(
       context: context,
-      builder: (_) => _CustomEqDialog(preset: preset),
+      builder: (_) => CustomEqDialog(preset: preset),
     );
     if (edited == null) return;
     final presets = List.of(ref.read(customEqPresetsProvider));
@@ -162,13 +162,13 @@ class _EqScreenState extends ConsumerState<EqScreen> {
 }
 
 /// Plain custom-EQ editor: name, preamp, band rows.
-class _CustomEqDialog extends StatefulWidget {
-  const _CustomEqDialog({this.preset});
+class CustomEqDialog extends StatefulWidget {
+  const CustomEqDialog({super.key, this.preset});
 
   final EqProfile? preset;
 
   @override
-  State<_CustomEqDialog> createState() => _CustomEqDialogState();
+  State<CustomEqDialog> createState() => CustomEqDialogState();
 }
 
 class _BandEdit {
@@ -190,7 +190,7 @@ class _BandEdit {
   }
 }
 
-class _CustomEqDialogState extends State<_CustomEqDialog> {
+class CustomEqDialogState extends State<CustomEqDialog> {
   static const _types = [
     'peak_dip',
     'low_shelf',

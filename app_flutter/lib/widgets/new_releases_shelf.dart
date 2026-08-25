@@ -51,13 +51,13 @@ class NewReleasesShelf extends ConsumerWidget {
       title: 'New Releases',
       height: 236,
       itemCount: items.length > 20 ? 20 : items.length,
-      itemBuilder: (context, i) => _NewReleaseCard(item: items[i]),
+      itemBuilder: (context, i) => NewReleaseCard(item: items[i]),
     );
   }
 }
 
-class _NewReleaseCard extends ConsumerWidget {
-  const _NewReleaseCard({required this.item});
+class NewReleaseCard extends ConsumerWidget {
+  const NewReleaseCard({super.key, required this.item});
 
   final NewRelease item;
 

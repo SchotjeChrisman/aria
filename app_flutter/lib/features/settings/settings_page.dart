@@ -28,31 +28,31 @@ class SettingsPage extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: AriaSpace.s6),
-                const _SettingsTile(
+                const SettingsTile(
                   icon: PhosphorIconsThin.playCircle,
                   title: 'Playback',
                   subtitle: 'Exclusive output, EQ',
                   slug: 'playback',
                 ),
-                const _SettingsTile(
+                const SettingsTile(
                   icon: PhosphorIconsRegular.chartDonut,
                   title: 'Data & Downloads',
                   subtitle: 'Network limits, streaming & download quality, offline tracks',
                   slug: 'data',
                 ),
-                const _SettingsTile(
+                const SettingsTile(
                   icon: PhosphorIconsRegular.musicNotes,
                   title: 'Library',
                   subtitle: 'Rescan and enrich metadata',
                   slug: 'library',
                 ),
-                const _SettingsTile(
+                const SettingsTile(
                   icon: PhosphorIconsRegular.userCircle,
                   title: 'Account',
                   subtitle: 'Server, scrobbling, profiles',
                   slug: 'account',
                 ),
-                const _SettingsTile(
+                const SettingsTile(
                   icon: PhosphorIconsRegular.info,
                   title: 'About',
                   subtitle: 'Version and diagnostics',
@@ -67,8 +67,9 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-class _SettingsTile extends StatelessWidget {
-  const _SettingsTile({
+class SettingsTile extends StatelessWidget {
+  const SettingsTile({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,

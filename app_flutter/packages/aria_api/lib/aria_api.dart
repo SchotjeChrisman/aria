@@ -2,6 +2,7 @@
 library;
 
 export 'src/client.dart' show AriaClient, unset;
+export 'src/compute.dart' show runOffThread;
 export 'src/exceptions.dart';
 export 'src/models/album.dart';
 export 'src/models/enrichment.dart';

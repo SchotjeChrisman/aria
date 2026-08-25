@@ -38,7 +38,7 @@ class _RadioPageState extends ConsumerState<RadioPage> {
                 ),
               )
             else
-              _StationForm(onDone: () => setState(() => _adding = false)),
+              StationForm(onDone: () => setState(() => _adding = false)),
             const SizedBox(height: AriaSpace.s5),
             switch (stations) {
               AsyncError() => const EmptyState(
@@ -49,7 +49,7 @@ class _RadioPageState extends ConsumerState<RadioPage> {
                 message: 'No stations.',
                 icon: PhosphorIconsRegular.radio,
               ),
-              AsyncData(:final value) => _StationGroups(stations: value),
+              AsyncData(:final value) => StationGroups(stations: value),
               _ => const Center(child: CircularProgressIndicator()),
             },
           ],
@@ -59,8 +59,8 @@ class _RadioPageState extends ConsumerState<RadioPage> {
   }
 }
 
-class _StationGroups extends StatelessWidget {
-  const _StationGroups({required this.stations});
+class StationGroups extends StatelessWidget {
+  const StationGroups({super.key, required this.stations});
 
   final List<RadioStation> stations;
 
@@ -103,7 +103,7 @@ class _StationGroups extends StatelessWidget {
               mainAxisExtent: 80,
             ),
             itemCount: groups[g]!.length,
-            itemBuilder: (context, i) => _RadioCard(station: groups[g]![i]),
+            itemBuilder: (context, i) => RadioCard(station: groups[g]![i]),
           ),
           const SizedBox(height: AriaSpace.s6),
         ],
@@ -112,8 +112,8 @@ class _StationGroups extends StatelessWidget {
   }
 }
 
-class _RadioCard extends ConsumerWidget {
-  const _RadioCard({required this.station});
+class RadioCard extends ConsumerWidget {
+  const RadioCard({super.key, required this.station});
 
   final RadioStation station;
 
@@ -200,16 +200,16 @@ class _RadioCard extends ConsumerWidget {
 }
 
 /// Legacy stationForm: name + URL + optional genre, Enter submits.
-class _StationForm extends ConsumerStatefulWidget {
-  const _StationForm({required this.onDone});
+class StationForm extends ConsumerStatefulWidget {
+  const StationForm({super.key, required this.onDone});
 
   final VoidCallback onDone;
 
   @override
-  ConsumerState<_StationForm> createState() => _StationFormState();
+  ConsumerState<StationForm> createState() => StationFormState();
 }
 
-class _StationFormState extends ConsumerState<_StationForm> {
+class StationFormState extends ConsumerState<StationForm> {
   final _name = TextEditingController();
   final _url = TextEditingController();
   final _genre = TextEditingController();

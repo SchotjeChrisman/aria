@@ -81,7 +81,7 @@ class ReviewScreen extends ConsumerWidget {
                   ),
                 ),
               if (undecided.isNotEmpty) ...[
-                _SectionHeader(
+                ReviewSectionHeader(
                   title: 'Needs review',
                   blurb:
                       'The matcher found releases for these but would not pick '
@@ -89,11 +89,11 @@ class ReviewScreen extends ConsumerWidget {
                   count: undecided.length,
                 ),
                 for (final d in undecided)
-                  _DecisionTile(decision: d, pageRef: ref),
+                  DecisionTile(decision: d, pageRef: ref),
                 const SizedBox(height: AriaSpace.s6),
               ],
               if (unfound.isNotEmpty) ...[
-                _SectionHeader(
+                ReviewSectionHeader(
                   title: 'No match found',
                   blurb:
                       'MusicBrainz had nothing for these. Your tags are being '
@@ -101,7 +101,7 @@ class ReviewScreen extends ConsumerWidget {
                   count: unfound.length,
                 ),
                 for (final d in unfound)
-                  _DecisionTile(decision: d, pageRef: ref),
+                  DecisionTile(decision: d, pageRef: ref),
               ],
             ],
           );
@@ -111,8 +111,9 @@ class ReviewScreen extends ConsumerWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
+class ReviewSectionHeader extends StatelessWidget {
+  const ReviewSectionHeader({
+    super.key,
     required this.title,
     required this.blurb,
     required this.count,
@@ -147,8 +148,12 @@ class _SectionHeader extends StatelessWidget {
 /// unmounts the row for any album that has just been resolved — taking a
 /// tile-scoped ref down with it while the dialog is still open. See
 /// [showMatchDetail].
-class _DecisionTile extends StatelessWidget {
-  const _DecisionTile({required this.decision, required this.pageRef});
+class DecisionTile extends StatelessWidget {
+  const DecisionTile({
+    super.key,
+    required this.decision,
+    required this.pageRef,
+  });
 
   final MatchDecision decision;
   final WidgetRef pageRef;

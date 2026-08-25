@@ -58,7 +58,7 @@ class ProfileMenuButton extends ConsumerWidget {
 
     return MenuAnchor(
       alignmentOffset: const Offset(0, 4),
-      menuChildren: [_ProfileMenuBody(anchorContext: context)],
+      menuChildren: [ProfileMenuBody(anchorContext: context)],
       builder: (context, controller, _) => InkWell(
         borderRadius: BorderRadius.circular(AriaRadius.pill),
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
@@ -80,8 +80,8 @@ class ProfileMenuButton extends ConsumerWidget {
   }
 }
 
-class _ProfileMenuBody extends ConsumerWidget {
-  const _ProfileMenuBody({required this.anchorContext});
+class ProfileMenuBody extends ConsumerWidget {
+  const ProfileMenuBody({super.key, required this.anchorContext});
 
   final BuildContext anchorContext;
 
@@ -99,7 +99,7 @@ class _ProfileMenuBody extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final p in profiles)
-            _ProfileRow(
+            ProfileRow(
               profile: p,
               isActive: p.id == active?.id,
               onTap: () => actions.switchTo(p.id),
@@ -122,8 +122,9 @@ class _ProfileMenuBody extends ConsumerWidget {
   }
 }
 
-class _ProfileRow extends StatelessWidget {
-  const _ProfileRow({
+class ProfileRow extends StatelessWidget {
+  const ProfileRow({
+    super.key,
     required this.profile,
     required this.isActive,
     required this.onTap,
@@ -188,7 +189,7 @@ Future<void> showProfileEditor(
   final actions = ref.read(profileActionsProvider);
   final result = await showDialog<({String name, String color})>(
     context: context,
-    builder: (_) => _ProfileEditorDialog(profile: profile),
+    builder: (_) => ProfileEditorDialog(profile: profile),
   );
   if (result == null) return;
   try {
@@ -237,16 +238,16 @@ Future<void> confirmDeleteProfile(
   }
 }
 
-class _ProfileEditorDialog extends StatefulWidget {
-  const _ProfileEditorDialog({this.profile});
+class ProfileEditorDialog extends StatefulWidget {
+  const ProfileEditorDialog({super.key, this.profile});
 
   final Profile? profile;
 
   @override
-  State<_ProfileEditorDialog> createState() => _ProfileEditorDialogState();
+  State<ProfileEditorDialog> createState() => ProfileEditorDialogState();
 }
 
-class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
+class ProfileEditorDialogState extends State<ProfileEditorDialog> {
   late final TextEditingController _name = TextEditingController(
     text: widget.profile?.name ?? '',
   );

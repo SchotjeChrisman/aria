@@ -184,7 +184,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   message: 'Nothing matches "$query".',
                   icon: PhosphorIconsRegular.magnifyingGlassMinus,
                 ),
-                AsyncValue(hasValue: true) => _ResultsList(results: results),
+                AsyncValue(hasValue: true) =>
+                  SearchResultsList(results: results),
                 _ => const Center(child: CircularProgressIndicator()),
               },
             ),
@@ -195,8 +196,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 }
 
-class _ResultsList extends ConsumerWidget {
-  const _ResultsList({required this.results});
+class SearchResultsList extends ConsumerWidget {
+  const SearchResultsList({super.key, required this.results});
 
   final SearchResults results;
 

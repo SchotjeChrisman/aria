@@ -14,44 +14,44 @@ import 'reidentify_dialog.dart';
 // one field. Save only PATCHes what actually differs from the current
 // override state. Files are never touched.
 
-enum _FieldKind { text, number, long, select }
+enum EditorFieldKind { text, number, long, select }
 
-class _Field {
-  const _Field(this.key, this.label, [this.kind = _FieldKind.text]);
+class EditorField {
+  const EditorField(this.key, this.label, [this.kind = EditorFieldKind.text]);
 
   final String key;
   final String label;
-  final _FieldKind kind;
+  final EditorFieldKind kind;
 }
 
 const _releaseTypes = ['Album', 'EP', 'Single', 'Live', 'Compilation'];
 
-const _albumFields = [
-  _Field('album', 'Album title'),
-  _Field('albumArtist', 'Album artist'),
-  _Field('genre', 'Genre'),
-  _Field('year', 'Year', _FieldKind.number),
-  _Field('releaseType', 'Release type', _FieldKind.select),
-  _Field('label', 'Label'),
-  _Field('date', 'Release date'),
-  _Field('country', 'Country'),
-  _Field('blurb', 'Description', _FieldKind.long),
+const albumEditorFields = [
+  EditorField('album', 'Album title'),
+  EditorField('albumArtist', 'Album artist'),
+  EditorField('genre', 'Genre'),
+  EditorField('year', 'Year', EditorFieldKind.number),
+  EditorField('releaseType', 'Release type', EditorFieldKind.select),
+  EditorField('label', 'Label'),
+  EditorField('date', 'Release date'),
+  EditorField('country', 'Country'),
+  EditorField('blurb', 'Description', EditorFieldKind.long),
 ];
 
-const _trackFields = [
-  _Field('title', 'Title'),
-  _Field('artist', 'Artist'),
-  _Field('album', 'Album'),
-  _Field('albumArtist', 'Album artist'),
-  _Field('genre', 'Genre'),
-  _Field('year', 'Year', _FieldKind.number),
-  _Field('trackNo', 'Track #', _FieldKind.number),
-  _Field('discNo', 'Disc #', _FieldKind.number),
-  _Field('composer', 'Composer'),
-  _Field('work', 'Work'),
-  _Field('movement', 'Movement'),
-  _Field('conductor', 'Conductor'),
-  _Field('orchestra', 'Orchestra'),
+const trackEditorFields = [
+  EditorField('title', 'Title'),
+  EditorField('artist', 'Artist'),
+  EditorField('album', 'Album'),
+  EditorField('albumArtist', 'Album artist'),
+  EditorField('genre', 'Genre'),
+  EditorField('year', 'Year', EditorFieldKind.number),
+  EditorField('trackNo', 'Track #', EditorFieldKind.number),
+  EditorField('discNo', 'Disc #', EditorFieldKind.number),
+  EditorField('composer', 'Composer'),
+  EditorField('work', 'Work'),
+  EditorField('movement', 'Movement'),
+  EditorField('conductor', 'Conductor'),
+  EditorField('orchestra', 'Orchestra'),
 ];
 
 Future<void> showAlbumEditor(
@@ -64,7 +64,7 @@ Future<void> showAlbumEditor(
   kind: 'album',
   key: album.id,
   title: 'Edit album — ${album.title}',
-  fields: _albumFields,
+  fields: albumEditorFields,
   patch: (body) => ref.read(albumApiProvider).patchAlbum(album.id, body),
   onSaved: () {
     ref.invalidate(albumTracksProvider);
@@ -86,7 +86,7 @@ Future<void> showTrackEditor(
   kind: 'track',
   key: track.id,
   title: 'Edit track — ${track.title ?? ''}',
-  fields: _trackFields,
+  fields: trackEditorFields,
   patch: (body) => ref.read(albumApiProvider).patchTrack(track.id, body),
   onSaved: () => ref.invalidate(albumTracksProvider),
 );
@@ -97,7 +97,7 @@ Future<void> _openEditor(
   required String kind,
   required String key,
   required String title,
-  required List<_Field> fields,
+  required List<EditorField> fields,
   required Future<Object?> Function(Map<String, dynamic> body) patch,
   required VoidCallback onSaved,
   void Function(BuildContext ctx)? onReidentify,
@@ -119,7 +119,7 @@ Future<void> _openEditor(
   if (!context.mounted) return;
   final saved = await showDialog<bool>(
     context: context,
-    builder: (_) => _EditorDialog(
+    builder: (_) => MetadataEditorDialog(
       title: title,
       fields: fields,
       original: original,
@@ -134,8 +134,9 @@ Future<void> _openEditor(
   if (saved == true) onSaved();
 }
 
-class _EditorDialog extends StatefulWidget {
-  const _EditorDialog({
+class MetadataEditorDialog extends StatefulWidget {
+  const MetadataEditorDialog({
+    super.key,
     required this.title,
     required this.fields,
     required this.original,
@@ -148,7 +149,7 @@ class _EditorDialog extends StatefulWidget {
   });
 
   final String title;
-  final List<_Field> fields;
+  final List<EditorField> fields;
   final Map<String, dynamic> original;
   final Map<String, dynamic> overrides;
 
@@ -163,10 +164,10 @@ class _EditorDialog extends StatefulWidget {
   final AriaClient? client;
 
   @override
-  State<_EditorDialog> createState() => _EditorDialogState();
+  State<MetadataEditorDialog> createState() => MetadataEditorDialogState();
 }
 
-class _EditorDialogState extends State<_EditorDialog> {
+class MetadataEditorDialogState extends State<MetadataEditorDialog> {
   late final Map<String, TextEditingController> _ctrls = {
     for (final f in widget.fields)
       f.key: TextEditingController(text: _initialText(f)),
@@ -203,11 +204,11 @@ class _EditorDialogState extends State<_EditorDialog> {
   }
 
   // Legacy: large remote text (blurb/bio) never prefills — override only.
-  String _initialText(_Field f) {
+  String _initialText(EditorField f) {
     final over = widget.overrides[f.key];
     final orig = widget.original[f.key];
-    if (f.kind == _FieldKind.long) return over?.toString() ?? '';
-    if (f.kind == _FieldKind.select) {
+    if (f.kind == EditorFieldKind.long) return over?.toString() ?? '';
+    if (f.kind == EditorFieldKind.select) {
       return (over ?? orig ?? 'Album').toString();
     }
     return (over ?? orig ?? '').toString();
@@ -249,7 +250,7 @@ class _EditorDialogState extends State<_EditorDialog> {
       Object? want;
       if (v.isEmpty || v == (orig?.toString() ?? '')) {
         want = null;
-      } else if (f.kind == _FieldKind.number) {
+      } else if (f.kind == EditorFieldKind.number) {
         if (!RegExp(r'^\d{1,4}$').hasMatch(v)) {
           setState(() => _error = '${f.label} must be a number.');
           return;
@@ -305,11 +306,12 @@ class _EditorDialogState extends State<_EditorDialog> {
     }
   }
 
-  void _reset(_Field f) {
+  void _reset(EditorField f) {
     final orig = widget.original[f.key];
-    _ctrls[f.key]!.text = f.kind == _FieldKind.long
+    _ctrls[f.key]!.text = f.kind == EditorFieldKind.long
         ? ''
-        : (orig?.toString() ?? (f.kind == _FieldKind.select ? 'Album' : ''));
+        : (orig?.toString() ??
+            (f.kind == EditorFieldKind.select ? 'Album' : ''));
     setState(() {});
   }
 
@@ -479,12 +481,12 @@ class _EditorDialogState extends State<_EditorDialog> {
     );
   }
 
-  Widget _fieldRow(BuildContext context, _Field f) {
+  Widget _fieldRow(BuildContext context, EditorField f) {
     final c = AriaColors.of(context);
     final orig = widget.original[f.key];
     final edited = widget.overrides.containsKey(f.key);
     // Large remote text: show size only, never the content (legacy).
-    final origLabel = f.kind == _FieldKind.long
+    final origLabel = f.kind == EditorFieldKind.long
         ? (orig != null
               ? 'fetched text, ${orig.toString().length} chars'
               : 'none')
@@ -493,7 +495,7 @@ class _EditorDialogState extends State<_EditorDialog> {
               : 'none');
 
     Widget input;
-    if (f.kind == _FieldKind.select) {
+    if (f.kind == EditorFieldKind.select) {
       input = DropdownButtonFormField<String>(
         initialValue: _releaseTypes.contains(_ctrls[f.key]!.text)
             ? _ctrls[f.key]!.text
@@ -507,8 +509,8 @@ class _EditorDialogState extends State<_EditorDialog> {
     } else {
       input = TextField(
         controller: _ctrls[f.key],
-        maxLines: f.kind == _FieldKind.long ? 4 : 1,
-        maxLength: f.kind == _FieldKind.long ? null : 300,
+        maxLines: f.kind == EditorFieldKind.long ? 4 : 1,
+        maxLength: f.kind == EditorFieldKind.long ? null : 300,
         buildCounter:
             (
               context, {
@@ -516,9 +518,10 @@ class _EditorDialogState extends State<_EditorDialog> {
               required isFocused,
               maxLength,
             }) => null,
-        keyboardType: f.kind == _FieldKind.number ? TextInputType.number : null,
+        keyboardType:
+            f.kind == EditorFieldKind.number ? TextInputType.number : null,
         decoration: InputDecoration(
-          hintText: f.kind == _FieldKind.long
+          hintText: f.kind == EditorFieldKind.long
               ? (orig != null ? 'Override the fetched text…' : 'Write one…')
               : null,
         ),
@@ -554,7 +557,7 @@ class _EditorDialogState extends State<_EditorDialog> {
               IconButton(
                 icon: const Icon(PhosphorIconsRegular.arrowCounterClockwise, size: 15),
                 visualDensity: VisualDensity.compact,
-                tooltip: f.kind == _FieldKind.long
+                tooltip: f.kind == EditorFieldKind.long
                     ? 'Drop the override, back to the fetched text'
                     : 'Reset this field to the original',
                 color: c.fgDim,

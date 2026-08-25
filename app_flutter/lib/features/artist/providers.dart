@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import '../../core/native/native.dart';
 
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

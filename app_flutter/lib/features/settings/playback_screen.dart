@@ -1,4 +1,4 @@
-import 'dart:io';
+import '../../core/native/native.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,18 +20,18 @@ class PlaybackScreen extends ConsumerWidget {
         children: [
           // Exclusive access is a desktop-only mpv option (Android's mixer and
           // iOS's audiounit ao both ignore it) — a dead switch just misleads.
-          if (!Platform.isAndroid && !Platform.isIOS) const _ExclusiveToggle(),
-          const _EqTile(),
+          if (!Platform.isAndroid && !Platform.isIOS) const ExclusiveToggle(),
+          const EqTile(),
           const Divider(height: 32),
-          const _LoudnessTile(),
+          const LoudnessTile(),
         ],
       ),
     );
   }
 }
 
-class _ExclusiveToggle extends ConsumerWidget {
-  const _ExclusiveToggle();
+class ExclusiveToggle extends ConsumerWidget {
+  const ExclusiveToggle({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,8 +57,8 @@ class _ExclusiveToggle extends ConsumerWidget {
 }
 
 /// Active headphone-EQ profile + on/off switch; the picker is /settings/eq.
-class _EqTile extends ConsumerWidget {
-  const _EqTile();
+class EqTile extends ConsumerWidget {
+  const EqTile({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -88,8 +88,8 @@ class _EqTile extends ConsumerWidget {
 /// Loudness normalisation. Off by default, and the cost of turning it on is
 /// stated in full whether it is on or off — a bit-perfect promise the user
 /// only discovers they've broken after the fact isn't a promise.
-class _LoudnessTile extends ConsumerWidget {
-  const _LoudnessTile();
+class LoudnessTile extends ConsumerWidget {
+  const LoudnessTile({super.key});
 
   static const _options = [
     (

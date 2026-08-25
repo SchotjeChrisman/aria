@@ -49,7 +49,7 @@ class LyricsView extends ConsumerWidget {
         }
         final c = AriaColors.of(context);
         final Widget body = d.lines != null
-            ? _SyncedLyrics(key: ValueKey(track.id), lines: d.lines!)
+            ? SyncedLyrics(key: ValueKey(track.id), lines: d.lines!)
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(AriaSpace.s5),
                 child: Text(
@@ -80,16 +80,16 @@ class LyricsView extends ConsumerWidget {
   }
 }
 
-class _SyncedLyrics extends ConsumerStatefulWidget {
-  const _SyncedLyrics({super.key, required this.lines});
+class SyncedLyrics extends ConsumerStatefulWidget {
+  const SyncedLyrics({super.key, required this.lines});
 
   final List<LrcLine> lines;
 
   @override
-  ConsumerState<_SyncedLyrics> createState() => _SyncedLyricsState();
+  ConsumerState<SyncedLyrics> createState() => SyncedLyricsState();
 }
 
-class _SyncedLyricsState extends ConsumerState<_SyncedLyrics> {
+class SyncedLyricsState extends ConsumerState<SyncedLyrics> {
   late List<GlobalKey> _keys;
   final _scroll = ScrollController();
   int _last = -2; // never a valid index, so the first line always scrolls

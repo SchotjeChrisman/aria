@@ -57,7 +57,7 @@ class ArtistAvatar extends ConsumerWidget {
         shape: BoxShape.circle,
       ),
       clipBehavior: Clip.antiAlias,
-      child: _ChainImage(
+      child: ChainImage(
         urls: urls,
         fallback: fallback,
         // Decode at display resolution — portraits can be huge.
@@ -69,8 +69,9 @@ class ArtistAvatar extends ConsumerWidget {
 
 /// Loads each URL in order, advancing on load error; shows [fallback] once all
 /// candidates fail.
-class _ChainImage extends StatefulWidget {
-  const _ChainImage({
+class ChainImage extends StatefulWidget {
+  const ChainImage({
+    super.key,
     required this.urls,
     required this.fallback,
     required this.cacheWidth,
@@ -81,17 +82,17 @@ class _ChainImage extends StatefulWidget {
   final int cacheWidth;
 
   @override
-  State<_ChainImage> createState() => _ChainImageState();
+  State<ChainImage> createState() => ChainImageState();
 }
 
-class _ChainImageState extends State<_ChainImage> {
+class ChainImageState extends State<ChainImage> {
   int _i = 0;
 
   @override
-  void didUpdateWidget(_ChainImage old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(ChainImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
     // Recycled tile (shelf/grid) points at a new person — restart the chain.
-    if (!listEquals(old.urls, widget.urls)) _i = 0;
+    if (!listEquals(oldWidget.urls, widget.urls)) _i = 0;
   }
 
   @override

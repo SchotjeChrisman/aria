@@ -75,7 +75,7 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
       children: [
         Text(name, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s4),
-        _ComposerHero(name: name),
+        ComposerHero(name: name),
         if (works.isNotEmpty) ...[
           const SizedBox(height: AriaSpace.s6),
           Text.rich(
@@ -274,8 +274,8 @@ class _ComposerPageState extends ConsumerState<ComposerPage> {
 
 /// Hero card from /api/composer/:name (Open Opus + Wikipedia): full name,
 /// epoch, dates, portrait, bio, link (legacy heroCard default variant).
-class _ComposerHero extends ConsumerWidget {
-  const _ComposerHero({required this.name});
+class ComposerHero extends ConsumerWidget {
+  const ComposerHero({super.key, required this.name});
 
   final String name;
 

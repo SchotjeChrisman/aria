@@ -27,10 +27,10 @@ class AccountScreen extends ConsumerWidget {
         padding: ariaPagePadding(context),
         children: [
           header('Server'),
-          const _ServerUrlField(),
+          const ServerUrlField(),
           const SizedBox(height: AriaSpace.s8),
           header('Scrobbling'),
-          const _ListenBrainzField(),
+          const ListenBrainzField(),
           const SizedBox(height: AriaSpace.s8),
           header('Profiles'),
           const ProfilesSection(),
@@ -42,14 +42,14 @@ class AccountScreen extends ConsumerWidget {
 
 /// Server URL — same normalize + probe flow as first-run setup; saving
 /// repoints every api-backed provider via serverUrlProvider.
-class _ServerUrlField extends ConsumerStatefulWidget {
-  const _ServerUrlField();
+class ServerUrlField extends ConsumerStatefulWidget {
+  const ServerUrlField({super.key});
 
   @override
-  ConsumerState<_ServerUrlField> createState() => _ServerUrlFieldState();
+  ConsumerState<ServerUrlField> createState() => ServerUrlFieldState();
 }
 
-class _ServerUrlFieldState extends ConsumerState<_ServerUrlField> {
+class ServerUrlFieldState extends ConsumerState<ServerUrlField> {
   late final TextEditingController _ctrl = TextEditingController(
     text: ref.read(serverUrlProvider) ?? kDefaultServerUrl,
   );
@@ -128,14 +128,14 @@ class _ServerUrlFieldState extends ConsumerState<_ServerUrlField> {
   }
 }
 
-class _ListenBrainzField extends ConsumerStatefulWidget {
-  const _ListenBrainzField();
+class ListenBrainzField extends ConsumerStatefulWidget {
+  const ListenBrainzField({super.key});
 
   @override
-  ConsumerState<_ListenBrainzField> createState() => _ListenBrainzFieldState();
+  ConsumerState<ListenBrainzField> createState() => ListenBrainzFieldState();
 }
 
-class _ListenBrainzFieldState extends ConsumerState<_ListenBrainzField> {
+class ListenBrainzFieldState extends ConsumerState<ListenBrainzField> {
   final _ctrl = TextEditingController();
   bool _loaded = false;
   bool _busy = false;

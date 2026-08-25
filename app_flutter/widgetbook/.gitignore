@@ -1,0 +1,7 @@
+# Flutter/Dart build output. Goldens under test/ are deliberately tracked —
+# they are the visual baseline this project exists to hold.
+.dart_tool/
+build/
+
+# Failed-golden diff artifacts, written by `flutter test` on a mismatch.
+test/failures/

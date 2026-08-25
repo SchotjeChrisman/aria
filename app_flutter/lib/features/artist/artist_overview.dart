@@ -62,10 +62,10 @@ class ArtistOverview extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _FactsHero(name: name, tracks: tracks, onMoreBio: onMoreBio),
-        _TopTracks(name: name),
+        ArtistFactsHero(name: name, tracks: tracks, onMoreBio: onMoreBio),
+        ArtistTopTracks(name: name),
         ..._albumShelves(context, ref, main),
-        _PeopleShelves(name: name, inLibrary: inLibrary),
+        ArtistPeopleShelves(name: name, inLibrary: inLibrary),
         if (works.isNotEmpty)
           Align(
             alignment: Alignment.centerLeft,
@@ -144,8 +144,13 @@ class ArtistOverview extends ConsumerWidget {
 
 /// Portrait + age/origin/genres only — the bio lives in the Info tab
 /// (legacy heroCard {facts:true}).
-class _FactsHero extends ConsumerWidget {
-  const _FactsHero({required this.name, required this.tracks, this.onMoreBio});
+class ArtistFactsHero extends ConsumerWidget {
+  const ArtistFactsHero({
+    super.key,
+    required this.name,
+    required this.tracks,
+    this.onMoreBio,
+  });
 
   final String name;
   final List<Track> tracks;
@@ -269,8 +274,8 @@ class _FactsHero extends ConsumerWidget {
 
 /// Top tracks for this artist from play stats (legacy: active profile's
 /// stats; GAP: unscoped until a shared activeProfileProvider exists).
-class _TopTracks extends ConsumerWidget {
-  const _TopTracks({required this.name});
+class ArtistTopTracks extends ConsumerWidget {
+  const ArtistTopTracks({super.key, required this.name});
 
   final String name;
 
@@ -365,8 +370,12 @@ class _TopTracks extends ConsumerWidget {
 }
 
 /// Band Members / Member Of / Similar Artists shelves (legacy people()).
-class _PeopleShelves extends ConsumerWidget {
-  const _PeopleShelves({required this.name, required this.inLibrary});
+class ArtistPeopleShelves extends ConsumerWidget {
+  const ArtistPeopleShelves({
+    super.key,
+    required this.name,
+    required this.inLibrary,
+  });
 
   final String name;
   final Set<String> inLibrary;

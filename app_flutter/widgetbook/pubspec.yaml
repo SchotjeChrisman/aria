@@ -1,0 +1,63 @@
+name: aria_widgetbook
+description: "Component catalogue for the Aria Flutter client — Widgetbook."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The app under catalogue. Everything on show is the real widget from
+  # ../lib — this project adds no components of its own, only use cases.
+  aria:
+    path: ../
+
+  # Riverpod + the API client are re-declared because main.dart overrides
+  # providers and builds an AriaClient directly; they arrive transitively via
+  # aria, but a direct import needs a direct dependency.
+  aria_api:
+    path: ../packages/aria_api
+  flutter_riverpod: ^3.0.0
+  go_router: ^16.0.0
+  shared_preferences: ^2.5.0
+
+  widgetbook: ^3.25.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+# Same swap ../pubspec.yaml makes: this project is the root package now, so
+# the app's dependency_overrides no longer apply and the pub.dev libmpv builds
+# (missing every ffmpeg filter but equalizer/overlay) would be linked instead.
+# The storybook never starts the engine, but the native link step still runs.
+dependency_overrides:
+  media_kit_libs_macos_audio:
+    path: ../third_party/media_kit_libs_macos_audio
+  media_kit_libs_ios_audio:
+    path: ../third_party/media_kit_libs_ios_audio
+
+flutter:
+  uses-material-design: true
+  # Re-declared: font assets resolve against the ROOT package's manifest, and
+  # a dependency's assets are only exposed as packages/<name>/... when they sit
+  # under that package's lib/ — ../assets/fonts is not reachable that way.
+  # widgetbook/assets is a symlink to ../assets, so these are byte-for-byte the
+  # files the app ships, not copies that can drift.
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito.ttf
+    - family: PhosphorThin
+      fonts:
+        - asset: assets/fonts/Phosphor-Thin.ttf
+    - family: PhosphorRegular
+      fonts:
+        - asset: assets/fonts/Phosphor.ttf
+    - family: PhosphorFill
+      fonts:
+        - asset: assets/fonts/Phosphor-Fill.ttf

@@ -77,7 +77,7 @@ class ArtistInfoTab extends ConsumerWidget {
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
-                          _Bio(name: name, summary: d.bio, url: d.url),
+                          ArtistBio(name: name, summary: d.bio, url: d.url),
                         ],
                       ),
                     ),
@@ -101,8 +101,8 @@ class ArtistInfoTab extends ConsumerWidget {
   }
 }
 
-class _Bio extends ConsumerWidget {
-  const _Bio({required this.name, this.summary, this.url});
+class ArtistBio extends ConsumerWidget {
+  const ArtistBio({super.key, required this.name, this.summary, this.url});
 
   final String name;
   final String? summary;

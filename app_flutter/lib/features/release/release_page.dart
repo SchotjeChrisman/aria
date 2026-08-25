@@ -127,7 +127,8 @@ class _Body extends ConsumerWidget {
         LayoutBuilder(
           builder: (context, box) {
             final wide = box.maxWidth >= 520;
-            final art = _Cover(album: album, ref_: ref_, size: wide ? 220 : 160);
+            final art =
+                ReleaseCover(album: album, ref_: ref_, size: wide ? 220 : 160);
             final text = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -248,8 +249,13 @@ class _Body extends ConsumerWidget {
 /// Cover via the server's caching proxy, falling back to the raw Deezer CDN
 /// URL — the same chain avatars use, so an evicted or expired cache entry
 /// degrades to a slower load instead of a blank square.
-class _Cover extends ConsumerWidget {
-  const _Cover({required this.album, required this.ref_, required this.size});
+class ReleaseCover extends ConsumerWidget {
+  const ReleaseCover({
+    super.key,
+    required this.album,
+    required this.ref_,
+    required this.size,
+  });
 
   final ExtAlbum album;
   final ReleaseRef ref_;

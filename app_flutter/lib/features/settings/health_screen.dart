@@ -68,7 +68,7 @@ class HealthScreen extends ConsumerWidget {
         data: (h) => ListView(
           padding: ariaPagePadding(context),
           children: [
-            _Counts(health: h),
+            HealthCounts(health: h),
             const SizedBox(height: AriaSpace.s4),
             if (h.clean)
               const Padding(
@@ -77,9 +77,9 @@ class HealthScreen extends ConsumerWidget {
                     'and every file has been analysed.'),
               ),
             for (final issue in h.issues)
-              if (issue.count > 0) _IssueTile(issue: issue),
+              if (issue.count > 0) IssueTile(issue: issue),
             const SizedBox(height: AriaSpace.s4),
-            const _Duplicates(),
+            const DuplicatesSection(),
           ],
         ),
       ),
@@ -87,8 +87,8 @@ class HealthScreen extends ConsumerWidget {
   }
 }
 
-class _Counts extends StatelessWidget {
-  const _Counts({required this.health});
+class HealthCounts extends StatelessWidget {
+  const HealthCounts({super.key, required this.health});
 
   final LibraryHealth health;
 
@@ -115,8 +115,8 @@ class _Counts extends StatelessWidget {
   }
 }
 
-class _IssueTile extends StatelessWidget {
-  const _IssueTile({required this.issue});
+class IssueTile extends StatelessWidget {
+  const IssueTile({super.key, required this.issue});
 
   final HealthIssue issue;
 
@@ -155,8 +155,8 @@ class _IssueTile extends StatelessWidget {
   }
 }
 
-class _Duplicates extends ConsumerWidget {
-  const _Duplicates();
+class DuplicatesSection extends ConsumerWidget {
+  const DuplicatesSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -181,7 +181,7 @@ class _Duplicates extends ConsumerWidget {
             style: theme.textTheme.bodySmall,
           ),
           children: [
-            for (final g in groups) _DupeGroupTile(group: g),
+            for (final g in groups) DupeGroupTile(group: g),
           ],
         );
       },
@@ -189,8 +189,8 @@ class _Duplicates extends ConsumerWidget {
   }
 }
 
-class _DupeGroupTile extends StatelessWidget {
-  const _DupeGroupTile({required this.group});
+class DupeGroupTile extends StatelessWidget {
+  const DupeGroupTile({super.key, required this.group});
 
   final DuplicateGroup group;
 

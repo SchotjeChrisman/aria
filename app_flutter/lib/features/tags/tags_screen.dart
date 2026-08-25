@@ -51,7 +51,7 @@ class TagsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final f in folders(value)) ...[
-                  _FolderRow(all: value, folder: f),
+                  FolderRow(all: value, folder: f),
                   const SizedBox(height: AriaSpace.s3),
                 ],
                 if (folders(value).isNotEmpty)
@@ -99,8 +99,8 @@ class TagsScreen extends ConsumerWidget {
 
 /// Folder as a navigable list row: name, tag count, delete. Tapping enters
 /// the folder (its tags aren't shown inline).
-class _FolderRow extends ConsumerWidget {
-  const _FolderRow({required this.all, required this.folder});
+class FolderRow extends ConsumerWidget {
+  const FolderRow({super.key, required this.all, required this.folder});
 
   final List<Tag> all;
   final Tag folder;

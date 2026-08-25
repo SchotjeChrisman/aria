@@ -53,12 +53,12 @@ class NowPlayingScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _Meta(
+                        NowPlayingMeta(
                           track: track,
                           artEdge: nowPlayingArtEdge(box.biggest),
                         ),
                         const SizedBox(height: AriaSpace.s8),
-                        const _Controls(),
+                        const NowPlayingControls(),
                       ],
                     ),
                   ),
@@ -76,8 +76,8 @@ class NowPlayingScreen extends ConsumerWidget {
 double nowPlayingArtEdge(Size body) =>
     math.min(body.width - AriaSpace.s5 * 2, body.height - 340).clamp(220, 560);
 
-class _Meta extends ConsumerWidget {
-  const _Meta({required this.track, required this.artEdge});
+class NowPlayingMeta extends ConsumerWidget {
+  const NowPlayingMeta({super.key, required this.track, required this.artEdge});
 
   final Track track;
   final double artEdge;
@@ -171,8 +171,8 @@ class _Meta extends ConsumerWidget {
 /// prev / big play / next, repeat, plus lyrics/queue links below (moved off
 /// the app bar so they sit thumb-reachable under the transport). The
 /// persistent bar stays on the shell; this replaces it here.
-class _Controls extends ConsumerWidget {
-  const _Controls();
+class NowPlayingControls extends ConsumerWidget {
+  const NowPlayingControls({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

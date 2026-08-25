@@ -1,6 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
+import 'native/native.dart';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';

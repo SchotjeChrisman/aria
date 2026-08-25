@@ -181,7 +181,7 @@ class TracksSection extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _HeaderRow(sort: sort),
+                    TrackHeaderRow(sort: sort),
                     Divider(height: 1, color: c.lineStrong),
                     Expanded(
                       child: list.isEmpty
@@ -200,7 +200,7 @@ class TracksSection extends ConsumerWidget {
                               itemBuilder: (context, i) => SelectionHighlight(
                                 kind: 'track',
                                 itemKey: list[i].id,
-                                child: _TrackTableRow(
+                                child: TrackTableRow(
                                   track: list[i],
                                   index: i,
                                   plays: counts?[list[i].id],
@@ -238,8 +238,8 @@ class TracksSection extends ConsumerWidget {
 }
 
 /// Column layout shared by the header and every row.
-class _Cells extends StatelessWidget {
-  const _Cells({required this.builder});
+class TrackCells extends StatelessWidget {
+  const TrackCells({super.key, required this.builder});
 
   final Widget Function(String key) builder;
 
@@ -265,8 +265,8 @@ class _Cells extends StatelessWidget {
   }
 }
 
-class _HeaderRow extends ConsumerWidget {
-  const _HeaderRow({required this.sort});
+class TrackHeaderRow extends ConsumerWidget {
+  const TrackHeaderRow({super.key, required this.sort});
 
   final TracksSort sort;
 
@@ -274,7 +274,7 @@ class _HeaderRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
     final labels = {for (final (k, l) in _cols) k: l};
-    return _Cells(
+    return TrackCells(
       builder: (key) {
         if (key == 'no') return const SizedBox.shrink();
         final active = sort.key == key;
@@ -299,8 +299,9 @@ class _HeaderRow extends ConsumerWidget {
   }
 }
 
-class _TrackTableRow extends StatelessWidget {
-  const _TrackTableRow({
+class TrackTableRow extends StatelessWidget {
+  const TrackTableRow({
+    super.key,
     required this.track,
     required this.index,
     required this.plays,
@@ -341,7 +342,7 @@ class _TrackTableRow extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           hoverColor: c.bgHover,
-          child: _Cells(
+          child: TrackCells(
             builder: (key) => switch (key) {
               'no' => txt(
                 isCurrent ? '▶' : '${index + 1}',

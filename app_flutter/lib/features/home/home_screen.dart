@@ -70,14 +70,14 @@ class _HomeBody extends ConsumerWidget {
       children: [
         Text('Home', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: AriaSpace.s4),
-        _StatStrip(tracks: tracks, albumCount: albums.length),
+        LibraryStatStrip(tracks: tracks, albumCount: albums.length),
         const SizedBox(height: AriaSpace.s6),
         const NewReleasesShelf(),
         const SizedBox(height: AriaSpace.s6),
         const ListenLaterShelf(),
         const SizedBox(height: AriaSpace.s6),
         if (added.isNotEmpty) ...[
-          _AlbumShelf(title: 'Recently Added', albums: added.take(20).toList()),
+          AlbumShelf(title: 'Recently Added', albums: added.take(20).toList()),
           const SizedBox(height: AriaSpace.s6),
         ],
         ..._playShelves(context, ref, stats),
@@ -145,20 +145,20 @@ class _HomeBody extends ConsumerWidget {
               ),
             )
           else ...[
-            _AlbumShelf(title: 'Recently Played', albums: recent),
+            AlbumShelf(title: 'Recently Played', albums: recent),
             const SizedBox(height: AriaSpace.s6),
             if (recentArtists.isNotEmpty) ...[
-              _ArtistShelf(
+              ArtistShelf(
                 title: 'Recently Listened Artists',
                 names: recentArtists,
               ),
               const SizedBox(height: AriaSpace.s6),
             ],
           ],
-          const _MixesShelf(),
-          _Listening(stats: value),
+          const MixesShelf(),
+          ListeningSection(stats: value),
           if (top.isNotEmpty) ...[
-            _AlbumShelf(
+            AlbumShelf(
               title: 'Most Played',
               albums: [for (final x in top) x.album],
               subFor: {
@@ -169,7 +169,7 @@ class _HomeBody extends ConsumerWidget {
             const SizedBox(height: AriaSpace.s6),
           ],
           if (topArtists.isNotEmpty) ...[
-            _ArtistShelf(
+            ArtistShelf(
               title: 'Most Listened Artists',
               names: [for (final a in topArtists) a.name],
               subFor: {
@@ -206,8 +206,12 @@ String? compositionKey(Track t) {
 
 /// Four equal-width tiles spanning the full width: Composers / Performers /
 /// Releases / Compositions. Counts derive from the loaded library cache.
-class _StatStrip extends StatelessWidget {
-  const _StatStrip({required this.tracks, required this.albumCount});
+class LibraryStatStrip extends StatelessWidget {
+  const LibraryStatStrip({
+    super.key,
+    required this.tracks,
+    required this.albumCount,
+  });
 
   final List<Track> tracks;
   final int albumCount;
@@ -319,8 +323,8 @@ class _StatStrip extends StatelessWidget {
   }
 }
 
-class _MixesShelf extends ConsumerWidget {
-  const _MixesShelf();
+class MixesShelf extends ConsumerWidget {
+  const MixesShelf({super.key});
 
   static const _looks = {
     'daily': (PhosphorIconsRegular.sun, Color(0xFF7C4DFF)),
@@ -363,7 +367,7 @@ class _MixesShelf extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(width: gap),
                 itemBuilder: (context, i) => SizedBox(
                   width: w,
-                  child: _MixBanner(
+                  child: MixBanner(
                     mix: mixes[i],
                     looks: _looks[mixes[i].id] ??
                         (PhosphorIconsRegular.queue, c.accent),
@@ -379,8 +383,8 @@ class _MixesShelf extends ConsumerWidget {
   }
 }
 
-class _MixBanner extends StatelessWidget {
-  const _MixBanner({required this.mix, required this.looks});
+class MixBanner extends StatelessWidget {
+  const MixBanner({super.key, required this.mix, required this.looks});
 
   final HomeMix mix;
   final (IconData, Color) looks;
@@ -444,8 +448,9 @@ class _MixBanner extends StatelessWidget {
   }
 }
 
-class _AlbumShelf extends StatelessWidget {
-  const _AlbumShelf({
+class AlbumShelf extends StatelessWidget {
+  const AlbumShelf({
+    super.key,
     required this.title,
     required this.albums,
     this.subFor = const {},
@@ -480,8 +485,9 @@ class _AlbumShelf extends StatelessWidget {
 
 /// Avatar shelf of artists (Recently / Most Listened), wired like the tag
 /// page's artist row: tap → artist page, secondary/long-press → menu.
-class _ArtistShelf extends ConsumerWidget {
-  const _ArtistShelf({
+class ArtistShelf extends ConsumerWidget {
+  const ArtistShelf({
+    super.key,
     required this.title,
     required this.names,
     this.subFor = const {},
@@ -552,8 +558,8 @@ class _ArtistShelf extends ConsumerWidget {
 }
 
 /// Legacy buildListening: 30-day charts + top artists/tracks mini-lists.
-class _Listening extends ConsumerWidget {
-  const _Listening({required this.stats});
+class ListeningSection extends ConsumerWidget {
+  const ListeningSection({super.key, required this.stats});
 
   final Stats stats;
 
@@ -595,11 +601,11 @@ class _Listening extends ConsumerWidget {
             onSeeAll: () => context.push('/stats'),
           ),
           const SizedBox(height: AriaSpace.s3),
-          _WeeklyTimeBox(weekSecs: weekSecs, dayGrid: dayGrid),
+          WeeklyTimeBox(weekSecs: weekSecs, dayGrid: dayGrid),
           const SizedBox(height: AriaSpace.s6),
           _shelfHeader(context, 'Ranks'),
           const SizedBox(height: AriaSpace.s3),
-          const _RanksCard(),
+          const RanksCard(),
         ],
       ),
     );
@@ -653,14 +659,14 @@ Widget _cardShelf(BuildContext context, List<Widget> cards) {
 /// Top genres / performers / releases by time listened over a selectable
 /// period. Play counts come windowed from the server; durations are local, so
 /// seconds = count × track.duration aggregated by genre, performer, album.
-class _RanksCard extends ConsumerStatefulWidget {
-  const _RanksCard();
+class RanksCard extends ConsumerStatefulWidget {
+  const RanksCard({super.key});
 
   @override
-  ConsumerState<_RanksCard> createState() => _RanksCardState();
+  ConsumerState<RanksCard> createState() => RanksCardState();
 }
 
-class _RanksCardState extends ConsumerState<_RanksCard> {
+class RanksCardState extends ConsumerState<RanksCard> {
   String _period = 'month';
 
   static const _periods = [
@@ -847,8 +853,12 @@ class _RanksCardState extends ConsumerState<_RanksCard> {
   }
 }
 
-class _WeeklyTimeBox extends StatelessWidget {
-  const _WeeklyTimeBox({required this.weekSecs, required this.dayGrid});
+class WeeklyTimeBox extends StatelessWidget {
+  const WeeklyTimeBox({
+    super.key,
+    required this.weekSecs,
+    required this.dayGrid,
+  });
 
   /// Index 0 = current 7 days, 1 = prior week, up to 4 weeks back.
   final List<double> weekSecs;

@@ -23,7 +23,7 @@ class DataScreen extends ConsumerWidget {
       body: ListView(
         padding: ariaPagePadding(context),
         children: [
-          const _DataUsageSection(),
+          const DataUsageSection(),
           const SizedBox(height: AriaSpace.s6),
           Text('Streaming quality', style: theme.textTheme.titleMedium),
           const SizedBox(height: AriaSpace.s2),
@@ -49,7 +49,7 @@ class DataScreen extends ConsumerWidget {
                 notifier.set(quality.copyWith(tierDownload: t)),
           ),
           const SizedBox(height: AriaSpace.s6),
-          const _DownloadsTile(),
+          const DownloadsTile(),
         ],
       ),
     );
@@ -58,8 +58,8 @@ class DataScreen extends ConsumerWidget {
 
 /// Per-network stream/download switches. Shown on every platform — a wifi
 /// only desktop just never hits the cellular rows.
-class _DataUsageSection extends ConsumerWidget {
-  const _DataUsageSection();
+class DataUsageSection extends ConsumerWidget {
+  const DataUsageSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -119,8 +119,8 @@ class _DataUsageSection extends ConsumerWidget {
 }
 
 /// Offline downloads entry; management lives on /settings/downloads.
-class _DownloadsTile extends ConsumerWidget {
-  const _DownloadsTile();
+class DownloadsTile extends ConsumerWidget {
+  const DownloadsTile({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

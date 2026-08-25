@@ -29,9 +29,12 @@ Future<void> showAriaContextMenu(
   Offset globalPosition,
   List<AriaMenuItem> items,
 ) async {
-  final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+  final overlay =
+      Overlay.of(context, rootOverlay: true).context.findRenderObject()!
+          as RenderBox;
   final c = AriaColors.of(context);
   final picked = await showMenu<AriaMenuItem>(
+    useRootNavigator: true,
     context: context,
     position: RelativeRect.fromRect(
       globalPosition & const Size(1, 1),

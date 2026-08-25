@@ -86,7 +86,7 @@ class PlaylistsScreen extends ConsumerWidget {
                     : 0.72,
               ),
               itemCount: value.length,
-              itemBuilder: (context, i) => _PlaylistTile(playlist: value[i]),
+              itemBuilder: (context, i) => PlaylistTile(playlist: value[i]),
             ),
             AsyncError() => const EmptyState(message: 'Playlists unavailable.'),
             _ => const Padding(
@@ -102,8 +102,8 @@ class PlaylistsScreen extends ConsumerWidget {
 
 /// Grid tile: 2×2 album-art collage (fewer arts fall back to one image or a
 /// placeholder icon), name + count/SMART underneath.
-class _PlaylistTile extends ConsumerWidget {
-  const _PlaylistTile({required this.playlist});
+class PlaylistTile extends ConsumerWidget {
+  const PlaylistTile({super.key, required this.playlist});
 
   final Playlist playlist;
 

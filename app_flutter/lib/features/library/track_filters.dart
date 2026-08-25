@@ -218,16 +218,19 @@ final trackFilterOptionsProvider = Provider.family<List<String>, String>((
 
 /// Legacy openFilterDialog: edit a draft, Apply/Clear/Cancel.
 Future<void> showTrackFilterDialog(BuildContext context) =>
-    showDialog<void>(context: context, builder: (_) => const _FilterDialog());
+    showDialog<void>(
+      context: context,
+      builder: (_) => const TrackFilterDialog(),
+    );
 
-class _FilterDialog extends ConsumerStatefulWidget {
-  const _FilterDialog();
+class TrackFilterDialog extends ConsumerStatefulWidget {
+  const TrackFilterDialog({super.key});
 
   @override
-  ConsumerState<_FilterDialog> createState() => _FilterDialogState();
+  ConsumerState<TrackFilterDialog> createState() => TrackFilterDialogState();
 }
 
-class _FilterDialogState extends ConsumerState<_FilterDialog> {
+class TrackFilterDialogState extends ConsumerState<TrackFilterDialog> {
   late final Map<String, MultiSelectState> _draft;
   late final TextEditingController _yearFrom;
   late final TextEditingController _yearTo;

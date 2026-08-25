@@ -1,4 +1,4 @@
-import 'dart:io';
+import '../../core/native/native.dart';
 
 /// Open a web link in the system browser. Desktop-only for now — GAP: add
 /// url_launcher to the app pubspec for Android support (dep additions are

@@ -84,7 +84,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
             )
           : Column(
               children: [
-                const _QueueLeftBanner(),
+                const QueueLeftBanner(),
                 Expanded(
                   child: ReorderableListView.builder(
                     buildDefaultDragHandles: false,
@@ -102,7 +102,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                       final dest = newIndex > oldIndex ? newIndex + 1 : newIndex;
                       ref.read(queueProvider.notifier).move([oldIndex], dest);
                     },
-                    itemBuilder: (context, i) => _QueueRow(
+                    itemBuilder: (context, i) => QueueRow(
                       // Same track can be queued twice; the index keeps keys
                       // unique.
                       key: ValueKey('q$i-${q.tracks[i].id}'),
@@ -171,8 +171,8 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
   }
 }
 
-class _QueueRow extends ConsumerWidget {
-  const _QueueRow({
+class QueueRow extends ConsumerWidget {
+  const QueueRow({
     super.key,
     required this.track,
     required this.index,
@@ -338,8 +338,8 @@ String _queueLeft(double secs) {
 }
 
 /// Thin non-scrolling banner: remainder of the current track + all upcoming.
-class _QueueLeftBanner extends ConsumerWidget {
-  const _QueueLeftBanner();
+class QueueLeftBanner extends ConsumerWidget {
+  const QueueLeftBanner({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);

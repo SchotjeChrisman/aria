@@ -21,7 +21,7 @@ class AboutScreen extends ConsumerWidget {
             title: Text('Aria'),
             subtitle: Text('Version $appVersion'),
           ),
-          _LogsTile(),
+          LogsTile(),
         ],
       ),
     );
@@ -29,8 +29,8 @@ class AboutScreen extends ConsumerWidget {
 }
 
 /// Debug log viewer entry; the list itself is /settings/logs.
-class _LogsTile extends StatelessWidget {
-  const _LogsTile();
+class LogsTile extends StatelessWidget {
+  const LogsTile({super.key});
 
   @override
   Widget build(BuildContext context) {

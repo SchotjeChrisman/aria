@@ -36,15 +36,15 @@ class TagGrid extends StatelessWidget {
             : 0.72,
       ),
       itemCount: tags.length,
-      itemBuilder: (context, i) => _TagTile(all: all, tag: tags[i]),
+      itemBuilder: (context, i) => TagTile(all: all, tag: tags[i]),
     );
   }
 }
 
 /// Grid tile modeled on playlists' _PlaylistTile: album-art collage from the
 /// tag's items (album/track), else a tag icon; name + item count underneath.
-class _TagTile extends ConsumerWidget {
-  const _TagTile({required this.all, required this.tag});
+class TagTile extends ConsumerWidget {
+  const TagTile({super.key, required this.all, required this.tag});
 
   final List<Tag> all;
   final Tag tag;
@@ -134,6 +134,7 @@ class _TagTile extends ConsumerWidget {
   /// Long-press / right-click sheet: rename, move to folder, delete.
   Future<void> _actions(BuildContext context, WidgetRef ref) =>
       showModalBottomSheet<void>(
+        useRootNavigator: true,
         context: context,
         builder: (sheet) => SafeArea(
           child: ListView(
@@ -206,6 +207,7 @@ class _TagTile extends ConsumerWidget {
     }
 
     await showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       builder: (sheet) => SafeArea(
         child: ListView(

@@ -41,23 +41,27 @@ Future<void> showMatchDetail(
   MatchDecision decision,
 ) => showDialog<void>(
   context: context,
-  builder: (_) => _MatchDetailDialog(ref: ref, decision: decision),
+  builder: (_) => MatchDetailDialog(ref: ref, decision: decision),
 );
 
 /// The injected ref must be the SCREEN's, never a list tile's — see the note on
 /// [showMatchDetail]. Invalidations fired from here have to land after this
 /// dialog pops AND after the list underneath it has rebuilt.
-class _MatchDetailDialog extends StatefulWidget {
-  const _MatchDetailDialog({required this.ref, required this.decision});
+class MatchDetailDialog extends StatefulWidget {
+  const MatchDetailDialog({
+    super.key,
+    required this.ref,
+    required this.decision,
+  });
 
   final WidgetRef ref;
   final MatchDecision decision;
 
   @override
-  State<_MatchDetailDialog> createState() => _MatchDetailDialogState();
+  State<MatchDetailDialog> createState() => MatchDetailDialogState();
 }
 
-class _MatchDetailDialogState extends State<_MatchDetailDialog> {
+class MatchDetailDialogState extends State<MatchDetailDialog> {
   late MatchDecision _d = widget.decision;
   String? _status;
   bool _busy = false;

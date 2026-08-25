@@ -48,8 +48,9 @@ const _pinnedBrands = [
 
 /// A searchable ListView scaffold; [builder] rebuilds rows from the query. When
 /// [pinned] is set, its rows show above a divider on the empty query only.
-class _SearchList extends StatefulWidget {
-  const _SearchList({
+class EqSearchList extends StatefulWidget {
+  const EqSearchList({
+    super.key,
     required this.title,
     required this.hint,
     required this.builder,
@@ -62,10 +63,10 @@ class _SearchList extends StatefulWidget {
   final List<Widget> Function()? pinned;
 
   @override
-  State<_SearchList> createState() => _SearchListState();
+  State<EqSearchList> createState() => EqSearchListState();
 }
 
-class _SearchListState extends State<_SearchList> {
+class EqSearchListState extends State<EqSearchList> {
   String _query = '';
 
   static const _maxRows = 50;
@@ -136,7 +137,7 @@ class EqBrandsScreen extends ConsumerWidget {
             ),
           ),
         );
-    return _SearchList(
+    return EqSearchList(
       title: 'Choose brand',
       hint: 'Search brands…',
       pinned: vendors == null
@@ -169,7 +170,7 @@ class EqHeadphonesScreen extends ConsumerWidget {
       data: (all) => [for (final p in all) if (p.vendor == vendor) p]
         ..sort((a, b) => a.product.compareTo(b.product)),
     );
-    return _SearchList(
+    return EqSearchList(
       title: vendor,
       hint: 'Search headphones…',
       builder: (query) => products == null
@@ -214,7 +215,7 @@ class EqCurvesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final favourites = ref.watch(favouriteEqProvider);
-    return _SearchList(
+    return EqSearchList(
       title: product.product,
       hint: 'Search authors…',
       builder: (query) => [

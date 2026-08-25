@@ -18,6 +18,7 @@ Future<void> showTagPicker(
   required String kind, // track | album | artist
   required String key,
 }) => showModalBottomSheet<void>(
+  useRootNavigator: true,
   context: context,
   builder: (_) => Consumer(
     builder: (context, ref, _) {
@@ -82,6 +83,7 @@ Future<void> showBulkTagMenu(
   BuildContext context, {
   required List<TagItem> items,
 }) => showModalBottomSheet<void>(
+  useRootNavigator: true,
   context: context,
   builder: (_) => Consumer(
     builder: (context, ref, _) {

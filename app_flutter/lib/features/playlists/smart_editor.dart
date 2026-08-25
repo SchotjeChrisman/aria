@@ -11,19 +11,19 @@ import 'smart_filter.dart';
 Future<void> showSmartEditor(BuildContext context, {Playlist? playlist}) =>
     showDialog(
       context: context,
-      builder: (_) => _SmartEditorDialog(playlist: playlist),
+      builder: (_) => SmartEditorDialog(playlist: playlist),
     );
 
-class _SmartEditorDialog extends ConsumerStatefulWidget {
-  const _SmartEditorDialog({this.playlist});
+class SmartEditorDialog extends ConsumerStatefulWidget {
+  const SmartEditorDialog({super.key, this.playlist});
 
   final Playlist? playlist;
 
   @override
-  ConsumerState<_SmartEditorDialog> createState() => _SmartEditorDialogState();
+  ConsumerState<SmartEditorDialog> createState() => SmartEditorDialogState();
 }
 
-class _SmartEditorDialogState extends ConsumerState<_SmartEditorDialog> {
+class SmartEditorDialogState extends ConsumerState<SmartEditorDialog> {
   late final SmartFilterState _st = rulesToState(widget.playlist?.rules);
   late final _name = TextEditingController(text: widget.playlist?.name ?? '');
   late final _yearFrom = TextEditingController(

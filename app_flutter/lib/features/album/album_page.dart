@@ -135,16 +135,16 @@ class _AlbumBody extends ConsumerWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (credited.isEmpty)
-                    _PersonLink(name: album.albumArtist)
+                    PersonLink(name: album.albumArtist)
                   else
                     for (final (i, name) in credited.indexed) ...[
                       if (i > 0) Text(' · ', style: dim),
-                      _PersonLink(name: name),
+                      PersonLink(name: name),
                     ],
                   if (album.year != null) Text(' · ${album.year}', style: dim),
                   if (ty != null && ty != 'Album') ...[
                     Text(' · ', style: dim),
-                    _RtBadge(type: ty),
+                    ReleaseTypeBadge(type: ty),
                   ],
                   Text(
                     ' · ${album.tracks.length} tracks'
@@ -250,6 +250,7 @@ class _AlbumBody extends ConsumerWidget {
       return;
     }
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       builder: (sheetCtx) => SafeArea(
         child: ListView(
@@ -349,7 +350,7 @@ class _AlbumBody extends ConsumerWidget {
       if (grouped && (t.work ?? '').isNotEmpty && t.work != curWork) {
         curWork = t.work;
         rows.add(
-          _WorkHeader(
+          WorkHeader(
             work: t.work!,
             composer: composerVaries ? t.composer : null,
           ),
@@ -432,7 +433,7 @@ class _AlbumBody extends ConsumerWidget {
             if (i > 0) Text(' · ', style: TextStyle(color: c.fgDim)),
             if (entry.$1.isNotEmpty)
               Text('${entry.$1} ', style: TextStyle(color: c.fgDim)),
-            _PersonLink(name: entry.$2),
+            PersonLink(name: entry.$2),
           ],
         ],
       ),
@@ -449,7 +450,7 @@ class _AlbumBody extends ConsumerWidget {
       }
     }
     if (roles.isEmpty) return const [];
-    return [const SizedBox(height: AriaSpace.s6), _CreditsShelf(roles: roles)];
+    return [const SizedBox(height: AriaSpace.s6), CreditsShelf(roles: roles)];
   }
 
   List<Widget> _relatedShelf(BuildContext context, WidgetRef ref) {
@@ -481,8 +482,8 @@ class _AlbumBody extends ConsumerWidget {
 // --------------------------------------------------------------- fragments
 
 /// Inline person link (legacy plink): tap → artist page.
-class _PersonLink extends StatelessWidget {
-  const _PersonLink({required this.name});
+class PersonLink extends StatelessWidget {
+  const PersonLink({super.key, required this.name});
 
   final String name;
 
@@ -497,8 +498,8 @@ class _PersonLink extends StatelessWidget {
 }
 
 /// Small release-type pill (legacy .rt-badge), only for non-Album types.
-class _RtBadge extends StatelessWidget {
-  const _RtBadge({required this.type});
+class ReleaseTypeBadge extends StatelessWidget {
+  const ReleaseTypeBadge({super.key, required this.type});
 
   final String type;
 
@@ -519,8 +520,8 @@ class _RtBadge extends StatelessWidget {
   }
 }
 
-class _WorkHeader extends StatelessWidget {
-  const _WorkHeader({required this.work, this.composer});
+class WorkHeader extends StatelessWidget {
+  const WorkHeader({super.key, required this.work, this.composer});
 
   final String work;
   final String? composer;
@@ -555,16 +556,16 @@ class _WorkHeader extends StatelessWidget {
 
 /// Credits shelf; asks the server to research faces still missing
 /// (legacy warmVisible) and refreshes the people map once.
-class _CreditsShelf extends ConsumerStatefulWidget {
-  const _CreditsShelf({required this.roles});
+class CreditsShelf extends ConsumerStatefulWidget {
+  const CreditsShelf({super.key, required this.roles});
 
   final Map<String, Set<String>> roles;
 
   @override
-  ConsumerState<_CreditsShelf> createState() => _CreditsShelfState();
+  ConsumerState<CreditsShelf> createState() => CreditsShelfState();
 }
 
-class _CreditsShelfState extends ConsumerState<_CreditsShelf> {
+class CreditsShelfState extends ConsumerState<CreditsShelf> {
   @override
   void initState() {
     super.initState();

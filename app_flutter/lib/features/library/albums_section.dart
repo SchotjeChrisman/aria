@@ -230,6 +230,7 @@ void _showMultiPicker(
 }) {
   final c = AriaColors.of(context);
   showModalBottomSheet<void>(
+    useRootNavigator: true,
     context: context,
     backgroundColor: c.bgRaised,
     shape: const RoundedRectangleBorder(
@@ -283,6 +284,7 @@ void _showMultiPicker(
 void _showDecadePicker(BuildContext context) {
   final c = AriaColors.of(context);
   showModalBottomSheet<void>(
+    useRootNavigator: true,
     context: context,
     backgroundColor: c.bgRaised,
     shape: const RoundedRectangleBorder(

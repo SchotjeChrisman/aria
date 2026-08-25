@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'compute.dart';
 import 'exceptions.dart';
 import 'json.dart';
 import 'models/enrichment.dart';
@@ -191,13 +191,13 @@ class AriaClient {
       asInt(asMap(await _post('/api/scan'))['tracks']) ?? 0;
 
   /// The whole-library payload (100k+ rows). Decode + Track mapping run in a
-  /// background isolate ([Isolate.run], pure Dart — fine on every non-web
+  /// background isolate ([runOffThread], pure Dart — fine on every non-web
   /// target) so the UI isolate never freezes; the tracks come back via
   /// isolate copy, which is much cheaper than parsing on the main thread.
   /// Small endpoints stay on the calling isolate.
   Future<List<Track>> tracks({int? limit, int? offset}) async {
     final bytes = await tracksBytes(limit: limit, offset: offset);
-    return Isolate.run(() => decodeTracks(bytes));
+    return runOffThread(() => decodeTracks(bytes));
   }
 
   /// Raw `/api/tracks` payload bytes — the app persists these for offline
@@ -214,7 +214,7 @@ class AriaClient {
     return r.bodyBytes;
   }
 
-  /// Decoder for a `/api/tracks` payload; static so [Isolate.run] closures
+  /// Decoder for a `/api/tracks` payload; static so [runOffThread] closures
   /// only capture the bytes.
   static List<Track> decodeTracks(List<int> bytes) =>
       _list(jsonDecode(utf8.decode(bytes)), Track.fromJson);

@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import 'mpv_constants.dart';
-import 'mpv_ffi.dart';
+// dart:ffi and dart:io enter the package only through this pair, so the
+// facade compiles for the web with the engine reporting itself unavailable.
+import 'mpv_host_io.dart' if (dart.library.js_interop) 'mpv_host_web.dart';
 import 'mpv_raw.dart';
 
 enum PlaybackState { stopped, playing, paused }
@@ -95,7 +96,7 @@ class AriaPlayer {
     MpvRaw Function()? rawFactory,
     this.audioExclusive = false,
     this.pollInterval = const Duration(milliseconds: 50),
-  }) : _rawFactory = rawFactory ?? FfiMpvRaw.load;
+  }) : _rawFactory = rawFactory ?? defaultRawFactory;
 
   /// Desktop-only hog-the-device toggle (--audio-exclusive).
   final bool audioExclusive;
@@ -240,7 +241,7 @@ class AriaPlayer {
     // ponytail: audio-exclusive is desktop-only bit-perfect; on Android the
     // OS mixer (AudioTrack/AAudio) may still resample after our lossless
     // decode — true bit-perfect there needs a USB DAC on Android 14+.
-    if (!Platform.isAndroid) {
+    if (!isAndroidHost) {
       raw.setOptionString(
         handle,
         'audio-exclusive',
@@ -427,7 +428,7 @@ class AriaPlayer {
   /// `audio-exclusive` carries UPDATE_AUDIO, so this reinitialises the output
   /// on its own — no file reload needed.
   void setAudioExclusive(bool on) {
-    if (!isAvailable || Platform.isAndroid) return;
+    if (!isAvailable || isAndroidHost) return;
     _raw!.setPropertyString(_handle, 'audio-exclusive', on ? 'yes' : 'no');
   }
 

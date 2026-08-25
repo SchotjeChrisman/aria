@@ -224,7 +224,7 @@ class AdaptiveShell extends StatelessWidget {
               child: Stack(
                 children: [
                   Positioned.fill(child: shell),
-                  const _FloatingBars(),
+                  const FloatingBars(),
                 ],
               ),
             ),
@@ -238,7 +238,7 @@ class AdaptiveShell extends StatelessWidget {
     // window. Custom (not NavigationRail) so the whole item highlights when
     // active — no Material icon-background pill.
     final extended = band == AriaBreakpoint.desktop;
-    final sidebar = _Sidebar(
+    final sidebar = Sidebar(
       destinations: visible,
       selectedIndex: selected,
       onSelect: select,
@@ -289,7 +289,7 @@ class AdaptiveShell extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const _FloatingBars(),
+                      const FloatingBars(),
                     ],
                   ),
                 ),
@@ -304,8 +304,9 @@ class AdaptiveShell extends StatelessWidget {
 
 /// Flat sidebar: brand wordmark + a column of items. Each item highlights as a
 /// whole (rounded accent-tint fill) when active — no NavigationRail icon pill.
-class _Sidebar extends StatelessWidget {
-  const _Sidebar({
+class Sidebar extends StatelessWidget {
+  const Sidebar({
+    super.key,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelect,
@@ -337,7 +338,7 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
           for (final (i, d) in destinations.indexed)
-            _SidebarItem(
+            SidebarItem(
               dest: d,
               selected: i == selectedIndex,
               extended: extended,
@@ -349,8 +350,9 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-class _SidebarItem extends StatelessWidget {
-  const _SidebarItem({
+class SidebarItem extends StatelessWidget {
+  const SidebarItem({
+    super.key,
     required this.dest,
     required this.selected,
     required this.extended,
@@ -417,8 +419,8 @@ class _SidebarItem extends StatelessWidget {
 /// content. [SelectionBar] collapses to nothing when no selection is active;
 /// [TransportBar] is always present. `mainAxisSize.min` keeps the stack pinned
 /// to the bottom edge without stealing hit-tests from the content above.
-class _FloatingBars extends StatelessWidget {
-  const _FloatingBars();
+class FloatingBars extends StatelessWidget {
+  const FloatingBars({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -18,7 +18,7 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Library')),
       body: ListView(
         padding: ariaPagePadding(context),
-        children: const [_LibraryTools(), _HealthTile(), _ReviewTile()],
+        children: const [LibraryTools(), HealthTile(), ReviewTile()],
       ),
     );
   }
@@ -29,8 +29,8 @@ class LibraryScreen extends ConsumerWidget {
 /// The count is the point. This tile said only "Library health" for a release
 /// and the owner of the library never found out the page existed; a tile that
 /// states how many things are wrong advertises itself.
-class _HealthTile extends ConsumerWidget {
-  const _HealthTile();
+class HealthTile extends ConsumerWidget {
+  const HealthTile({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -52,8 +52,8 @@ class _HealthTile extends ConsumerWidget {
 
 /// The other half: health says what is wrong, this is where identity gets
 /// resolved. Counts only the albums still awaiting an answer.
-class _ReviewTile extends ConsumerWidget {
-  const _ReviewTile();
+class ReviewTile extends ConsumerWidget {
+  const ReviewTile({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,8 +72,8 @@ class _ReviewTile extends ConsumerWidget {
   }
 }
 
-class _LibraryTools extends ConsumerWidget {
-  const _LibraryTools();
+class LibraryTools extends ConsumerWidget {
+  const LibraryTools({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

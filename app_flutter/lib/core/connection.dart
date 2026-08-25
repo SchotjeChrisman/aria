@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'native/native.dart';
 
 import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';

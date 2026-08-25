@@ -46,6 +46,7 @@ Future<void> showAddToPlaylistMenu(
 }) {
   if (tracks.isEmpty) return Future.value();
   return showModalBottomSheet<void>(
+    useRootNavigator: true,
     context: context,
     builder: (_) => Consumer(
       builder: (context, ref, _) {

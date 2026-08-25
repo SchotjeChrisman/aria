@@ -1,11 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/downloads.dart';
 import '../core/formats.dart';
 import '../core/theme.dart';
+import 'local_art_io.dart'
+    if (dart.library.js_interop) 'local_art_web.dart';
 
 /// albumId from a server art URL ("…/api/art/{albumId}"), null for anything
 /// else (external covers, no URL).
@@ -105,11 +105,7 @@ class ArtImage extends ConsumerWidget {
                 final local = albumId == null ? null : localArtOf(albumId);
                 return local == null
                     ? fallback
-                    : Image.file(
-                        File(local),
-                        fit: fit,
-                        errorBuilder: (_, _, _) => fallback,
-                      );
+                    : localArtImage(path: local, fit: fit, fallback: fallback);
               },
               frameBuilder: (_, child, frame, wasSync) => wasSync
                   ? child

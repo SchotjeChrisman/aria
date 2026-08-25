@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:isolate';
+import 'native/native.dart';
 import 'dart:typed_data';
 
 import 'package:aria_api/aria_api.dart';
@@ -35,7 +34,7 @@ final libraryTracksProvider = FutureProvider<List<Track>>((ref) async {
       } else {
         unawaited(_refreshCacheWhenDone(ref, fetch));
         final tracks =
-            await Isolate.run(() => AriaClient.decodeTracks(cached));
+            await runOffThread(() => AriaClient.decodeTracks(cached));
         Log.i('library',
             'loaded ${tracks.length} tracks from offline cache (slow server)');
         return tracks;
@@ -43,7 +42,7 @@ final libraryTracksProvider = FutureProvider<List<Track>>((ref) async {
     }
     // Same decoder + isolate as AriaClient.tracks() — 100k rows never parse
     // on the UI isolate.
-    final tracks = await Isolate.run(() => AriaClient.decodeTracks(bytes));
+    final tracks = await runOffThread(() => AriaClient.decodeTracks(bytes));
     Log.i('library', 'loaded ${tracks.length} tracks from server');
     unawaited(_writeTracksCache(ref, bytes)); // fire-and-forget
     return tracks;
@@ -51,7 +50,7 @@ final libraryTracksProvider = FutureProvider<List<Track>>((ref) async {
     Log.w('library', 'load failed', e);
     final cached = await _readTracksCache(ref);
     if (cached == null) rethrow;
-    final tracks = await Isolate.run(() => AriaClient.decodeTracks(cached));
+    final tracks = await runOffThread(() => AriaClient.decodeTracks(cached));
     Log.i('library', 'loaded ${tracks.length} tracks from offline cache');
     return tracks;
   }
@@ -60,7 +59,7 @@ final libraryTracksProvider = FutureProvider<List<Track>>((ref) async {
 /// After a cache fallback, mirror the (late) server response to disk when it
 /// eventually arrives; errors are swallowed — the fallback already served.
 /// A named helper, not an inline `.then` closure: closures capturing `ref`
-/// inside the provider body poison the `Isolate.run` context chain
+/// inside the provider body poison the `runOffThread` context chain
 /// (unsendable riverpod internals).
 Future<void> _refreshCacheWhenDone(Ref ref, Future<Uint8List> fetch) async {
   try {

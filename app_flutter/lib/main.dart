@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'core/native/native.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

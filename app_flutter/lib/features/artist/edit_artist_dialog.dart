@@ -39,7 +39,7 @@ Future<void> showArtistEditor(
   if (!context.mounted) return;
   final saved = await showDialog<bool>(
     context: context,
-    builder: (_) => _ArtistEditorDialog(
+    builder: (_) => ArtistEditorDialog(
       name: name,
       original: original,
       overrides: overrides,
@@ -53,8 +53,9 @@ Future<void> showArtistEditor(
   }
 }
 
-class _ArtistEditorDialog extends StatefulWidget {
-  const _ArtistEditorDialog({
+class ArtistEditorDialog extends StatefulWidget {
+  const ArtistEditorDialog({
+    super.key,
     required this.name,
     required this.original,
     required this.overrides,
@@ -67,10 +68,10 @@ class _ArtistEditorDialog extends StatefulWidget {
   final Future<Object?> Function(Map<String, dynamic> body) patch;
 
   @override
-  State<_ArtistEditorDialog> createState() => _ArtistEditorDialogState();
+  State<ArtistEditorDialog> createState() => ArtistEditorDialogState();
 }
 
-class _ArtistEditorDialogState extends State<_ArtistEditorDialog> {
+class ArtistEditorDialogState extends State<ArtistEditorDialog> {
   late final Map<String, TextEditingController> _ctrls = {
     for (final (f, _) in _fields)
       f: TextEditingController(
