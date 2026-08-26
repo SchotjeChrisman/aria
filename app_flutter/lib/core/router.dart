@@ -179,7 +179,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 /// NavigationRail on wide layouts (desktop), NavigationBar on narrow
 /// (Android phones). Width-based, not platform-based, so desktop windows
 /// resized narrow and Android tablets both do the right thing.
-class AdaptiveShell extends StatelessWidget {
+class AdaptiveShell extends StatefulWidget {
   const AdaptiveShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
@@ -191,19 +191,84 @@ class AdaptiveShell extends StatelessWidget {
   ];
 
   @override
+  State<AdaptiveShell> createState() => _AdaptiveShellState();
+}
+
+class _AdaptiveShellState extends State<AdaptiveShell> {
+  /// Where the user was before each sidebar jump, oldest first.
+  ///
+  /// go_router keeps no cross-branch history: `goBranch` either restores the
+  /// target branch's saved stack or replaces it with the branch root, and
+  /// both paths *replace* the match list rather than pushing onto it. So back
+  /// across a sidebar jump is ours to keep. Whole [RouteMatchList]s, not
+  /// paths — restoring one brings that branch's own back stack with it, so
+  /// back out of a restored album detail still reaches the album grid.
+  final _history = <RouteMatchList>[];
+
+  /// Narrow layout only — the wide one has no drawer. Needed because the
+  /// State's own context sits above the Scaffold it builds.
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // ponytail: fixed cap, oldest dropped. A smarter eviction policy can wait
+  // for someone to actually run into the ceiling.
+  static const _historyLimit = 20;
+
+  /// Whether jumping from [from] to the branch rooted at [toRoot] is worth
+  /// spending a back press on.
+  ///
+  /// `last.matchedLocation`, not `uri`: [RouteMatchList.uri] deliberately
+  /// ignores imperative pushes, so an open album detail still reports
+  /// '/library/albums' there — which would read as "already home" and skip
+  /// recording the one jump most worth undoing.
+  bool _shouldRecord(RouteMatchList from, String toRoot) =>
+      from.lastOrNull?.matchedLocation != toRoot;
+
+  /// Back at a branch root: undo the last sidebar jump instead of letting the
+  /// root navigator pop the shell (which backgrounds the app on Android).
+  ///
+  /// Reached once the branch navigator has nothing left to pop —
+  /// GoRouterDelegate.popRoute walks navigators innermost-first, so an album
+  /// detail is popped by its own branch and never gets here. An open drawer
+  /// also lands here (see below) rather than dismissing itself.
+  void _onPop(bool didPop, Object? result) {
+    if (didPop) return;
+    // An open drawer holds a LocalHistoryEntry on this same route and should
+    // get the press — but ModalRoute.popDisposition scans PopScopes before
+    // delegating to LocalHistoryRoute, so canPop:false pre-empts it and the
+    // drawer never hears about the back. Hand it back here.
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold != null && scaffold.isDrawerOpen) {
+      scaffold.closeDrawer();
+      return;
+    }
+    if (_history.isEmpty) return;
+    final previous = _history.removeLast();
+    setState(() {});
+    GoRouter.of(context).restore(previous);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: _history.isEmpty,
+      onPopInvokedWithResult: _onPop,
+      child: _buildShell(context),
+    );
+  }
+
+  Widget _buildShell(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final band = AriaBreakpoint.fromWidth(width);
     final wide = band != AriaBreakpoint.mobile;
     final c = AriaColors.of(context);
 
     final visible = [
-      for (final d in _all)
+      for (final d in AdaptiveShell._all)
         if (wide ? d.inRail : d.inBar) d,
     ];
     // Highlight the item whose path owns the current branch — '/library'
     // fronts '/library/albums' etc. on narrow layouts.
-    final currentPath = _all[shell.currentIndex].path;
+    final currentPath = AdaptiveShell._all[widget.shell.currentIndex].path;
     int? selected;
     for (var i = 0; i < visible.length; i++) {
       final p = visible[i].path;
@@ -213,12 +278,26 @@ class AdaptiveShell extends StatelessWidget {
       }
     }
     void select(int i) {
-      final branch = _all.indexOf(visible[i]);
-      shell.goBranch(branch, initialLocation: branch == shell.currentIndex);
+      // Always reset the branch to its root: a sidebar item is an absolute
+      // destination, not a resume of wherever that tab was left. Tapping
+      // Albums lands on the albums grid even if an album detail is still
+      // stacked in that branch. What that discards is kept in _history, so
+      // back still returns to it.
+      final branch = AdaptiveShell._all.indexOf(visible[i]);
+      final router = GoRouter.of(context);
+      final from = router.routerDelegate.currentConfiguration;
+      if (_shouldRecord(from, AdaptiveShell._all[branch].path)) {
+        setState(() {
+          _history.add(from);
+          if (_history.length > _historyLimit) _history.removeAt(0);
+        });
+      }
+      widget.shell.goBranch(branch, initialLocation: true);
     }
 
     if (!wide) {
       return Scaffold(
+        key: _scaffoldKey,
         // Scaffold auto-adds the hamburger when a drawer is present.
         appBar: AppBar(
           title: Text(
@@ -252,7 +331,7 @@ class AdaptiveShell extends StatelessWidget {
             Expanded(
               child: Stack(
                 children: [
-                  Positioned.fill(child: shell),
+                  Positioned.fill(child: widget.shell),
                   const FloatingBars(),
                 ],
               ),
@@ -314,7 +393,7 @@ class AdaptiveShell extends StatelessWidget {
                                             AriaBreakpoint.maxContentWidth) /
                                         2)
                                     .clamp(0.0, double.infinity),
-                            child: shell,
+                            child: widget.shell,
                           ),
                         ),
                       ),
