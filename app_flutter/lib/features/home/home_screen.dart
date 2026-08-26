@@ -557,6 +557,37 @@ class ArtistShelf extends ConsumerWidget {
   }
 }
 
+/// Buckets play times into this calendar week plus the three before it.
+///
+/// Returns per-week seconds (index 0 = this week, 3 = three weeks back) and a
+/// [week][weekday] grid, weekday 0 = Monday. Weeks are Monday-anchored, not
+/// rolling, so a dot's column is its real weekday. Days this week hasn't
+/// reached yet are -1 — the "not a day yet" sentinel the dot renderer skips.
+/// Day numbers are built in UTC so a DST shift can't turn a 7-day gap into
+/// 6 days 23h.
+(List<double>, List<List<double>>) bucketWeeks(
+  Iterable<(DateTime, double)> plays,
+  DateTime now,
+) {
+  final weekStart = DateTime.utc(now.year, now.month, now.day)
+      .subtract(Duration(days: now.weekday - 1));
+  final weekSecs = List<double>.filled(4, 0);
+  final dayGrid = List.generate(4, (_) => List<double>.filled(7, 0));
+  for (final (d, secs) in plays) {
+    final day = DateTime.utc(d.year, d.month, d.day);
+    final back = weekStart.difference(day).inDays;
+    // back <= 0 → this week; 1..7 → last week; 8..14 → two weeks back; ...
+    final w = back <= 0 ? 0 : (back - 1) ~/ 7 + 1;
+    if (d.isAfter(now) || w >= 4) continue;
+    weekSecs[w] += secs;
+    dayGrid[w][d.weekday - 1] += secs;
+  }
+  for (var wd = now.weekday; wd < 7; wd++) {
+    dayGrid[0][wd] = -1;
+  }
+  return (weekSecs, dayGrid);
+}
+
 /// Legacy buildListening: 30-day charts + top artists/tracks mini-lists.
 class ListeningSection extends ConsumerWidget {
   const ListeningSection({super.key, required this.stats});
@@ -572,21 +603,11 @@ class ListeningSection extends ConsumerWidget {
     // Bucket in the viewer's timezone — the server hands raw timestamps.
     final now = DateTime.now();
 
-    // Listening time (seconds) per week for the last 4 weeks, from the
-    // play-log times * each track's tagged duration. dayGrid also splits each
-    // week into its 7 weekdays for the dot column — a rolling 7-day window
-    // holds exactly one of each weekday, so no collisions.
-    final weekSecs = List<double>.filled(4, 0);
-    final dayGrid = List.generate(4, (_) => List<double>.filled(7, 0));
-    for (final p in hist) {
-      final d = DateTime.tryParse(p.at)?.toLocal();
-      if (d == null) continue;
-      final daysAgo = now.difference(d).inDays;
-      if (daysAgo < 0 || daysAgo >= 28) continue;
-      final secs = byId[p.id]?.duration ?? 0;
-      weekSecs[daysAgo ~/ 7] += secs;
-      dayGrid[daysAgo ~/ 7][d.weekday - 1] += secs;
-    }
+    final (weekSecs, dayGrid) = bucketWeeks([
+      for (final p in hist)
+        if (DateTime.tryParse(p.at)?.toLocal() case final d?)
+          (d, (byId[p.id]?.duration ?? 0).toDouble()),
+    ], now);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AriaSpace.s6),
@@ -860,10 +881,11 @@ class WeeklyTimeBox extends StatelessWidget {
     required this.dayGrid,
   });
 
-  /// Index 0 = current 7 days, 1 = prior week, up to 4 weeks back.
+  /// Index 0 = this calendar week (Monday-anchored), 1 = last week, ... 3.
   final List<double> weekSecs;
 
-  /// [week][weekday] listening seconds, week 0 = current, weekday 0 = Monday.
+  /// [week][weekday] listening seconds, week 0 = this calendar week, weekday 0
+  /// = Monday. -1 marks a day this week hasn't reached — it draws no dot.
   final List<List<double>> dayGrid;
 
   // Per-row content height and vertical padding, shared by the bar rows and
@@ -941,6 +963,7 @@ class WeeklyTimeBox extends StatelessWidget {
     );
 
     Widget dot(double secs) {
+      if (secs < 0) return const SizedBox.shrink(); // day not reached yet
       final has = secs > 0;
       const minD = 6.0;
       final size = has
