@@ -303,4 +303,42 @@ void main() {
     expect(tester.takeException(), isNull);
     await cleanup(tester);
   });
+
+  testWidgets('overlay buttons toggle instead of stacking copies', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    container.read(queueProvider.notifier).playQueue(const [track], 0);
+    final router = container.read(routerProvider);
+    router.push('/now-playing');
+    await tester.pumpAndSettle();
+
+    // Queue over now-playing.
+    toggleOverlay(tester.element(find.byType(NowPlayingScreen)), '/queue');
+    await tester.pumpAndSettle();
+    expect(find.byType(QueueScreen), findsOneWidget);
+
+    // The transport bar rides the queue screen, so its Queue button is still
+    // tappable there: a second tap must hide the queue, not stack a copy.
+    toggleOverlay(tester.element(find.byType(QueueScreen)), '/queue');
+    await tester.pumpAndSettle();
+    expect(find.byType(QueueScreen), findsNothing);
+    expect(find.byType(NowPlayingScreen), findsOneWidget);
+
+    // Asking for now-playing while the queue covers it surfaces the screen
+    // already on the stack instead of pushing a second one.
+    toggleOverlay(tester.element(find.byType(NowPlayingScreen)), '/queue');
+    await tester.pumpAndSettle();
+    toggleOverlay(tester.element(find.byType(QueueScreen)), '/now-playing');
+    await tester.pumpAndSettle();
+    expect(find.byType(QueueScreen), findsNothing);
+    expect(find.byType(NowPlayingScreen), findsOneWidget);
+
+    // One now-playing on the stack, not two: a single pop clears it.
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(NowPlayingScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+    await cleanup(tester);
+  });
 }

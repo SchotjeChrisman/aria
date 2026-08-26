@@ -87,6 +87,35 @@ final Set<String> _overlayPaths = {
         if (r is GoRoute) r.path,
 };
 
+/// Show or hide an overlay page (now-playing / lyrics / queue) from a toggle
+/// button.
+///
+/// The transport bar rides on top of the overlay screens themselves, so its
+/// Queue/Lyrics buttons stay tappable while that very screen is open — a
+/// plain `push` stacked a second copy on every tap. Rules: already on top,
+/// pop it (hide); buried under other overlays, pop down to it (show);
+/// otherwise push.
+void toggleOverlay(BuildContext context, String path) {
+  final router = GoRouter.of(context);
+  final matches = router.routerDelegate.currentConfiguration.matches;
+  // Walk the overlay run at the top of the stack, top-first, looking for
+  // `path`. `depth` is its 1-based distance from the top.
+  var depth = 0;
+  for (var i = matches.length - 1; i >= 0; i--) {
+    final route = matches[i].route;
+    if (route is! GoRoute || !_overlayPaths.contains(route.path)) break;
+    depth++;
+    if (route.path != path) continue;
+    // depth 1 (on top) pops the page itself; deeper pops only what covers it.
+    final pops = depth == 1 ? 1 : depth - 1;
+    for (var p = 0; p < pops && router.canPop(); p++) {
+      router.pop();
+    }
+    return;
+  }
+  router.push(path);
+}
+
 /// Push a shell-branch page (album/artist/…) from anywhere.
 ///
 /// Overlay pages are popped first: pushing a branch route while an overlay

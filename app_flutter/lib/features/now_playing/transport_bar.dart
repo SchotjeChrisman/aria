@@ -4,12 +4,13 @@ import 'package:aria_api/aria_api.dart';
 import 'package:aria_player/aria_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
 import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/log_sync.dart';
 import '../../core/player_providers.dart';
+import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../core/toast.dart';
 import '../../core/library_providers.dart' show enrichRefreshProvider;
@@ -222,13 +223,15 @@ class _TransportBarState extends ConsumerState<TransportBar> {
       icon: const Icon(PhosphorIconsRegular.queue),
       color: c.fgDim,
       tooltip: 'Queue',
-      onPressed: () => context.push('/queue'),
+      onPressed: () => toggleOverlay(context, '/queue'),
     );
     final lyricsBtn = IconButton(
       icon: const Icon(PhosphorIconsRegular.microphoneStage),
       color: c.fgDim,
       tooltip: 'Now playing / lyrics',
-      onPressed: track == null ? null : () => context.push('/now-playing'),
+      onPressed: track == null
+          ? null
+          : () => toggleOverlay(context, '/now-playing'),
     );
 
     // Floating frosted pill: inset from the window edges, soft shadow on the
@@ -472,7 +475,7 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         .watch(apiClientProvider)
         .artUrl(track.albumId, version: track.artVersion);
     return InkWell(
-      onTap: () => context.push('/now-playing'),
+      onTap: () => toggleOverlay(context, '/now-playing'),
       borderRadius: BorderRadius.circular(AriaRadius.sm),
       child: Row(
         children: [
