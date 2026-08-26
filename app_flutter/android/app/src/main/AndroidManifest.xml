@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- Android 13+: without this the foreground-service notification — and so
+         the whole media-control panel — is kept out of the shade. Requested at
+         runtime in MainActivity; declaring it alone grants nothing. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="aria"
         android:usesCleartextTraffic="true"

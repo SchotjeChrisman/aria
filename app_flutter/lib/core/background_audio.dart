@@ -6,12 +6,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'connection.dart';
 import 'player_providers.dart';
 
-// Mobile-only: main() guards the single call site on Android/iOS. A media
-// session (plus a foreground service on Android) keeps the process — and its
-// HTTP stream — alive in the background; the audio session pauses playback
-// when the output device goes away. Desktop never reaches this code.
-// The android* config fields below are ignored on iOS; there the same
-// AudioServiceConfig drives the now-playing/lock-screen controls.
+// main() guards the single call site: Android, iOS and macOS only — the
+// platforms audio_service implements. A media session (plus a foreground
+// service on Android) keeps the process — and its HTTP stream — alive in the
+// background; the audio session pauses playback when the output device goes
+// away. The android* config fields below are ignored on darwin; there the
+// same AudioServiceConfig drives the now-playing/lock-screen controls, and on
+// macOS the MPNowPlayingInfoCenter entry is what makes the keyboard media
+// keys address Aria rather than Music.app.
+//
+// audio_session is an iOS/Android package with a macOS stub: it stores the
+// configuration and nothing else, setActive() returns true unconditionally,
+// and neither the noisy nor the interruption stream ever fires. The three
+// audio_session listeners below are therefore inert on macOS rather than
+// wrong — in particular the setActive() guard cannot pause playback there.
 
 Future<void> initBackgroundAudio(ProviderContainer container) async {
   await AudioService.init(
@@ -19,8 +27,24 @@ Future<void> initBackgroundAudio(ProviderContainer container) async {
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'app.aria.audio',
       androidNotificationChannelName: 'Aria playback',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
+      // Forced false by the config's own assert once the service stays
+      // foreground: an FGS notification is ongoing anyway, so the flag would
+      // only be a lie about who decides.
+      androidNotificationOngoing: false,
+      // false, against audio_service's own default. Dropping out of the
+      // foreground on pause means every resume has to restart the service,
+      // and on Android 12+ a background FGS start throws
+      // ForegroundServiceStartNotAllowedException. That throw lands on the
+      // first line of enterPlayingState(), so it takes the two lines under it
+      // with it: mediaSession.setActive(true) and the notification. The
+      // session then never activates, which kills headset/bluetooth buttons
+      // and the shade panel together. Staying foreground while paused makes
+      // the restart a no-op. Cost: the notification can no longer be swiped
+      // away while paused (a foreground service forces it ongoing), and the
+      // OS can no longer reclaim the service under pressure — both fine for a
+      // music player, and the alternative the README offers is asking the
+      // user to turn off battery optimisation.
+      androidStopForegroundOnPause: false,
     ),
   );
   final session = await AudioSession.instance;

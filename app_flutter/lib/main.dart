@@ -41,10 +41,14 @@ Future<void> main() async {
       appSupportDirProvider.overrideWithValue(support),
     ],
   );
-  // Mobile: media session (+ Android foreground service) so playback survives
-  // backgrounding, and losing the output device pauses. Desktop needs
-  // neither — the mpv engine already handles ao errors there.
-  if (Platform.isAndroid || Platform.isIOS) await initBackgroundAudio(container);
+  // Media session: Android/iOS get background survival (+ a foreground
+  // service) and pause-on-output-loss; macOS gets the Now Playing entry that
+  // makes the keyboard media keys route here instead of to Music.app.
+  // Linux and Windows are excluded because audio_service has no
+  // implementation for them — the mpv engine handles ao errors there.
+  if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
+    await initBackgroundAudio(container);
+  }
   runApp(
     UncontrolledProviderScope(container: container, child: const AriaApp()),
   );
