@@ -354,12 +354,28 @@ class FavouriteButton extends ConsumerWidget {
 }
 
 /// "…" button opening [trackMenuItems] anchored under itself. Near a screen
-/// edge showMenu flips it back into view on its own.
+/// edge showMenu flips it back into view on its own. It is how a mouse reaches
+/// the verbs a right-click reaches — the track table's rows carry one, so
+/// nothing lives ONLY behind a secondary click.
 class TrackMenuButton extends ConsumerWidget {
-  const TrackMenuButton({super.key, required this.track, this.color});
+  const TrackMenuButton({
+    super.key,
+    required this.track,
+    this.color,
+    this.extra = const [],
+    this.dense = false,
+  });
 
   final Track track;
   final Color? color;
+
+  /// Page-specific verbs appended to the usual ones (a playlist's "Remove
+  /// from playlist", say).
+  final List<AriaMenuItem> extra;
+
+  /// Shrinks to fit a table row: the default 48px button does not fit the
+  /// track table's 44px itemExtent.
+  final bool dense;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -369,12 +385,17 @@ class TrackMenuButton extends ConsumerWidget {
         icon: const Icon(PhosphorIconsRegular.dotsThree),
         color: color,
         tooltip: 'More',
+        iconSize: dense ? 18 : null,
+        padding: dense ? EdgeInsets.zero : null,
+        constraints: dense
+            ? const BoxConstraints.tightFor(width: 32, height: 32)
+            : null,
         onPressed: () {
           final box = buttonContext.findRenderObject()! as RenderBox;
           showAriaContextMenu(
             buttonContext,
             box.localToGlobal(box.size.bottomLeft(Offset.zero)),
-            trackMenuItems(buttonContext, ref, track),
+            trackMenuItems(buttonContext, ref, track, extra: extra),
           );
         },
       ),

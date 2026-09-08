@@ -1906,6 +1906,7 @@ components:
         releaseType: is, isNot.
         addedDays: within (numeric value, days).
         tag: is, isNot, anyOf, allOf (exact tag-name match).
+        favourite: is (boolean) — the independent per-track heart flag, not a tag.
         loudness, dynamicRange, sampleRate, bitsPerSample: is, gt, lt (numeric value).
         Measured off the decoded audio, so all four are null until POST /api/analyze
         has run and a null fails EVERY operator including lt — an unmeasured track is
@@ -1919,7 +1920,7 @@ components:
         field:
           type: string
           enum: [title, artist, albumArtist, album, genre, composer, format, credited,
-                 year, lossless, releaseType, playCount, addedDays, tag,
+                 year, lossless, releaseType, playCount, addedDays, tag, favourite,
                  loudness, dynamicRange, sampleRate, bitsPerSample, suspect]
         op:
           type: string

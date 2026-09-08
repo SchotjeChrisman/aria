@@ -264,6 +264,26 @@ Widget trackTableStory(BuildContext context) {
         child: TrackHeaderRow(sort: sort),
       ),
       Section(
+        title: 'TrackTable',
+        note: 'Header and rows as one widget, scrolled sideways below 900px. '
+            'The playlist pages render THIS, so a playlist is the library '
+            'display rather than a lookalike. With no sort passed it keeps '
+            'the order it was given until a header is clicked.',
+        child: SizedBox(height: 360, child: TrackTable(tracks: fixtureTracks)),
+      ),
+      const Section(
+        title: 'TrackTable — empty',
+        note: 'The empty message is the caller\'s: a smart playlist says its '
+            'rules matched nothing, a manual one says how to add tracks.',
+        child: SizedBox(
+          height: 280,
+          child: TrackTable(
+            tracks: [],
+            emptyMessage: 'No tracks match these rules.',
+          ),
+        ),
+      ),
+      Section(
         title: 'TrackTableRow',
         note: 'Alternating rows, the playing one accented, play counts only '
             'when the sort or filter asked for them.',

@@ -170,6 +170,36 @@ func TestEvalRuleQualityPredicates(t *testing.T) {
 // the form could emit before it must still validate AND evaluate to exactly
 // what it did. `year` in particular stopped being its own case and now runs
 // through evalNumeric with the other measured fields.
+// The favourite rule exists so the smart editor can offer the same
+// "Favourites only" row the library Tracks filter has always had. It reads the
+// independent per-track flag, not the tag of the same name.
+func TestEvalRuleFavourite(t *testing.T) {
+	loved := map[string]any{"id": "t1", "favourite": true}
+	plain := map[string]any{"id": "t2", "favourite": false}
+	for _, tc := range []struct {
+		name  string
+		track map[string]any
+		want  bool
+	}{
+		{"favourite matches is true", loved, true},
+		{"non-favourite does not", plain, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := rule("favourite", "is", true)
+			if !validRules(map[string]any{"match": "all", "rules": []any{r}}) {
+				t.Fatalf("favourite is-rule does not validate")
+			}
+			if got := evalRule(tc.track, r, nil, nil); got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+	// only `is` — the form never emits anything else for a boolean
+	if validRules(map[string]any{"match": "all", "rules": []any{rule("favourite", "gt", 0)}}) {
+		t.Error("favourite gt should not validate")
+	}
+}
+
 func TestExistingRuleShapesUnchanged(t *testing.T) {
 	track := map[string]any{
 		"id": "t1", "title": "Come Together", "artist": "The Beatles",

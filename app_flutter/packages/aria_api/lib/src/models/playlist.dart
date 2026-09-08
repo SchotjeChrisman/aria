@@ -16,10 +16,17 @@ const smartRuleFields = <String, List<String>>{
   'playCount': ['is', 'gt', 'lt'],
   'addedDays': ['within'],
   'tag': ['is', 'isNot', 'anyOf', 'allOf'],
+  'favourite': ['is'],
+  // Measured off the decoded audio; null until /api/analyze has seen the file.
+  'loudness': ['is', 'gt', 'lt'],
+  'dynamicRange': ['is', 'gt', 'lt'],
+  'sampleRate': ['is', 'gt', 'lt'],
+  'bitsPerSample': ['is', 'gt', 'lt'],
+  'suspect': ['is'],
 };
 
-/// One rule: `value` is a String for string ops, num for year/playCount/
-/// addedDays, bool for lossless, and List&lt;String&gt; for anyOf/allOf.
+/// One rule: `value` is a String for string ops, num for the numeric fields,
+/// bool for lossless/suspect/favourite, and List&lt;String&gt; for anyOf/allOf.
 class SmartRule {
   const SmartRule({required this.field, required this.op, this.value});
 
@@ -58,7 +65,7 @@ class SmartRules {
 
   bool get isValid =>
       (match == 'all' || match == 'any') &&
-      rules.length <= 16 &&
+      rules.length <= 24 && // server cap
       rules.every((r) => r.isValid);
 
   factory SmartRules.fromJson(Map<String, dynamic> j) => SmartRules(

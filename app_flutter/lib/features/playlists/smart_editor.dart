@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
+import '../../widgets/filter_form.dart';
 import '../../widgets/multi_select_field.dart';
+import '../library/track_filters.dart' show trackFilterOptionsProvider;
 import 'providers.dart';
 import 'smart_filter.dart';
 
@@ -24,55 +26,15 @@ class SmartEditorDialog extends ConsumerStatefulWidget {
 }
 
 class SmartEditorDialogState extends ConsumerState<SmartEditorDialog> {
-  late final SmartFilterState _st = rulesToState(widget.playlist?.rules);
+  late final FilterDraft _draft = rulesToState(widget.playlist?.rules);
   late final _name = TextEditingController(text: widget.playlist?.name ?? '');
-  late final _yearFrom = TextEditingController(
-    text: _st.yearFrom?.toString() ?? '',
-  );
-  late final _yearTo = TextEditingController(
-    text: _st.yearTo?.toString() ?? '',
-  );
-  late final _added = TextEditingController(
-    text: _st.addedDays?.toString() ?? '',
-  );
-  late final _loudFrom = TextEditingController(
-    text: _st.loudnessFrom?.toString() ?? '',
-  );
-  late final _loudTo = TextEditingController(
-    text: _st.loudnessTo?.toString() ?? '',
-  );
-  late final _range = TextEditingController(
-    text: _st.minDynamicRange?.toString() ?? '',
-  );
-  late String _match = widget.playlist?.rules?.match ?? 'all';
   String? _error;
   bool _saving = false;
 
   @override
   void dispose() {
     _name.dispose();
-    _yearFrom.dispose();
-    _yearTo.dispose();
-    _added.dispose();
-    _loudFrom.dispose();
-    _loudTo.dispose();
-    _range.dispose();
     super.dispose();
-  }
-
-  // Legacy applyScalarFilters(): read scalar inputs back into the state.
-  void _applyScalars() {
-    int? numVal(TextEditingController c) => int.tryParse(c.text.trim());
-    double? dblVal(TextEditingController c) => double.tryParse(c.text.trim());
-    _st.yearFrom = numVal(_yearFrom);
-    _st.yearTo = numVal(_yearTo);
-    _st.addedDays = numVal(_added);
-    // LUFS are negative and fractional, so these are doubles, not ints.
-    _st.loudnessFrom = dblVal(_loudFrom);
-    _st.loudnessTo = dblVal(_loudTo);
-    _st.minDynamicRange = dblVal(_range);
-    // lossless / releaseType / played / sample rate / bit depth / suspect bind
-    // to _st directly via the dropdowns.
   }
 
   Future<void> _save() async {
@@ -82,8 +44,7 @@ class SmartEditorDialogState extends ConsumerState<SmartEditorDialog> {
       setState(() => _error = 'Name required.');
       return;
     }
-    _applyScalars();
-    final r = stateToRules(_st, _match);
+    final r = stateToRules(_draft);
     if (r.error != null) {
       setState(() => _error = r.error);
       return;
@@ -134,154 +95,14 @@ class SmartEditorDialogState extends ConsumerState<SmartEditorDialog> {
                 ),
               ),
               const SizedBox(height: AriaSpace.s3),
-              Row(
-                children: [
-                  const Text('Match'),
-                  const SizedBox(width: AriaSpace.s2),
-                  DropdownButton<String>(
-                    value: _match,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('all')),
-                      DropdownMenuItem(value: 'any', child: Text('any')),
-                    ],
-                    onChanged: (v) => setState(() => _match = v ?? 'all'),
-                  ),
-                  const SizedBox(width: AriaSpace.s2),
-                  const Text('of the following:'),
-                ],
-              ),
-              const SizedBox(height: AriaSpace.s3),
               Flexible(
                 child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final (field, label) in filterStringFields) ...[
-                        MultiSelectField(
-                          label: label,
-                          options:
-                              ref.watch(smartFieldValuesProvider(field)).value ??
-                              const [],
-                          state: _st.strings[field]!,
-                        ),
-                        const SizedBox(height: AriaSpace.s4),
-                      ],
-                      _row(
-                        context,
-                        'Year',
-                        Row(
-                          children: [
-                            Expanded(child: _numField(_yearFrom, 'from')),
-                            const SizedBox(width: AriaSpace.s2),
-                            Expanded(child: _numField(_yearTo, 'to')),
-                          ],
-                        ),
-                      ),
-                      _row(
-                        context,
-                        'Quality',
-                        _anySelect(
-                          value: _st.lossless,
-                          options: const [
-                            ('true', 'Lossless'),
-                            ('false', 'Lossy'),
-                          ],
-                          onChanged: (v) => setState(() => _st.lossless = v),
-                        ),
-                      ),
-                      _row(
-                        context,
-                        'Release type',
-                        _anySelect(
-                          value: _st.releaseType,
-                          options: [for (final t in releaseTypes) (t, t)],
-                          onChanged: (v) => setState(() => _st.releaseType = v),
-                        ),
-                      ),
-                      // Legacy: played/never only — no exact play-count UI.
-                      _row(
-                        context,
-                        'Played',
-                        _anySelect(
-                          value: _st.played,
-                          options: const [
-                            ('played', 'Played'),
-                            ('never', 'Never played'),
-                          ],
-                          onChanged: (v) => setState(() => _st.played = v),
-                        ),
-                      ),
-                      _row(
-                        context,
-                        'Added (days)',
-                        _numField(_added, 'e.g. 30'),
-                      ),
-                      // Everything below needs the analysis pass: a track the
-                      // server has not decoded matches none of these rows.
-                      _row(
-                        context,
-                        'Minimum sample rate',
-                        _anySelect(
-                          value: _st.minSampleRate?.toString(),
-                          options: const [
-                            ('44100', '44.1 kHz'),
-                            ('48000', '48 kHz'),
-                            ('88200', '88.2 kHz'),
-                            ('96000', '96 kHz'),
-                            ('192000', '192 kHz'),
-                          ],
-                          onChanged: (v) => setState(
-                            () => _st.minSampleRate = v == null
-                                ? null
-                                : int.parse(v),
-                          ),
-                        ),
-                      ),
-                      _row(
-                        context,
-                        'Minimum bit depth',
-                        _anySelect(
-                          value: _st.minBits?.toString(),
-                          options: const [('16', '16-bit'), ('24', '24-bit')],
-                          onChanged: (v) => setState(
-                            () => _st.minBits = v == null ? null : int.parse(v),
-                          ),
-                        ),
-                      ),
-                      _row(
-                        context,
-                        'Loudness (LUFS)',
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _numField(_loudFrom, 'louder than -14'),
-                            ),
-                            const SizedBox(width: AriaSpace.s2),
-                            Expanded(
-                              child: _numField(_loudTo, 'quieter than -20'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _row(
-                        context,
-                        'Dynamic range over (LU)',
-                        _numField(_range, 'e.g. 8'),
-                      ),
-                      _row(
-                        context,
-                        'Suspect files',
-                        _anySelect(
-                          value: _st.suspect,
-                          options: const [
-                            ('false', 'Exclude transcodes'),
-                            ('true', 'Only transcodes'),
-                          ],
-                          onChanged: (v) => setState(() => _st.suspect = v),
-                        ),
-                      ),
-                    ],
+                  child: FilterForm(
+                    draft: _draft,
+                    options: {
+                      for (final (field, _) in filterStringFields)
+                        field: ref.watch(trackFilterOptionsProvider(field)),
+                    },
                   ),
                 ),
               ),
@@ -315,40 +136,4 @@ class SmartEditorDialogState extends ConsumerState<SmartEditorDialog> {
       ),
     );
   }
-
-  Widget _row(BuildContext context, String label, Widget control) => Padding(
-    padding: const EdgeInsets.only(bottom: AriaSpace.s4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: AriaSpace.s1),
-        control,
-      ],
-    ),
-  );
-
-  Widget _numField(TextEditingController ctrl, String hint) => TextField(
-    controller: ctrl,
-    // signed: LUFS values are negative
-    keyboardType: const TextInputType.numberWithOptions(signed: true),
-    decoration: InputDecoration(hintText: hint),
-  );
-
-  /// Scalar select with a leading "Any" (null) choice, like legacy sel().
-  Widget _anySelect({
-    required String? value,
-    required List<(String, String)> options,
-    required ValueChanged<String?> onChanged,
-  }) => DropdownButton<String?>(
-    value: value,
-    isExpanded: true,
-    underline: const SizedBox.shrink(),
-    items: [
-      const DropdownMenuItem<String?>(value: null, child: Text('Any')),
-      for (final (v, l) in options)
-        DropdownMenuItem<String?>(value: v, child: Text(l)),
-    ],
-    onChanged: onChanged,
-  );
 }

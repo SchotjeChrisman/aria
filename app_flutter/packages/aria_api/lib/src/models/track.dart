@@ -54,6 +54,9 @@ class Track {
     this.tags = const [],
     this.performers = const [],
     this.albumArtists = const [],
+    this.loudnessLufs,
+    this.dynamicRangeLu,
+    this.suspect = false,
   });
 
   final String id;
@@ -104,6 +107,18 @@ class Track {
   /// predating the field; render [albumArtist] then.
   final List<String> albumArtists;
 
+  /// What the decoder measured, in its own units — served since the analysis
+  /// pass, read by the quality filters. Null means unanalysed, and a null must
+  /// FAIL every comparison rather than read as 0, or an unmeasured track is
+  /// the loudest thing in the library.
+  final double? loudnessLufs; // integrated LUFS, negative
+  final double? dynamicRangeLu; // EBU R128 loudness range, LU
+
+  /// The decoded stream contradicts the container (an upscaled transcode).
+  /// False on an unanalysed track means "nothing has contradicted it yet",
+  /// not "verified genuine" — the server's own default.
+  final bool suspect;
+
   /// Alias for [format].
   String? get codec => format;
 
@@ -145,6 +160,9 @@ class Track {
         genres: asStringList(j['genres']),
         tags: asStringList(j['tags']),
         albumArtists: asStringList(j['albumArtists']),
+        loudnessLufs: asDouble(j['loudnessLufs']),
+        dynamicRangeLu: asDouble(j['dynamicRangeLu']),
+        suspect: asBool(j['suspect']),
         performers: j['performers'] is List
             ? (j['performers'] as List)
                 .whereType<Map<String, dynamic>>()

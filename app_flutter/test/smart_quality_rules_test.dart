@@ -1,5 +1,6 @@
 import 'package:aria_api/aria_api.dart';
 import 'package:aria/features/playlists/smart_filter.dart';
+import 'package:aria/widgets/filter_form.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 SmartRule? ruleFor(List<SmartRule> rules, String field, String op) {
@@ -11,7 +12,7 @@ SmartRule? ruleFor(List<SmartRule> rules, String field, String op) {
 
 void main() {
   test('quality rows become rules and survive a round trip', () {
-    final st = SmartFilterState()
+    final st = FilterDraft()
       ..minSampleRate = 96000
       ..minBits = 24
       ..loudnessFrom = -14
@@ -19,7 +20,7 @@ void main() {
       ..minDynamicRange = 8
       ..suspect = 'false';
 
-    final rules = stateToRules(st, 'all').rules!.rules;
+    final rules = stateToRules(st).rules!.rules;
     // integers use the year rows' `gt v - 1` shape; the continuous ones take
     // the entered bound as-is
     expect(ruleFor(rules, 'sampleRate', 'gt')?.value, 95999);
@@ -40,8 +41,8 @@ void main() {
   });
 
   test('an untouched form emits none of the quality rules', () {
-    final st = SmartFilterState()..lossless = 'true';
-    final rules = stateToRules(st, 'all').rules!.rules;
+    final st = FilterDraft()..lossless = 'true';
+    final rules = stateToRules(st).rules!.rules;
     expect(rules.length, 1);
     expect(rules.single.field, 'lossless');
   });
@@ -60,7 +61,7 @@ void main() {
         SmartRule(field: 'addedDays', op: 'within', value: 30),
       ],
     );
-    final again = stateToRules(rulesToState(saved), 'all').rules!.rules;
+    final again = stateToRules(rulesToState(saved)).rules!.rules;
     String key(SmartRule r) => '${r.field}/${r.op}/${r.value}';
     expect(
       again.map(key).toSet(),

@@ -1,36 +1,12 @@
 import 'package:aria_api/aria_api.dart';
 
+import '../../widgets/filter_form.dart';
 import '../../widgets/multi_select_field.dart';
 
 // The smart-playlist form model, ported from legacy app.js (newFilterState /
-// smartForm / collectSmartRules). String multi-selects + field list live in
-// widgets/multi_select_field.dart (shared with the library Tracks filter); this
-// file owns turning the picks into server [SmartRules] and back.
-
-class SmartFilterState {
-  SmartFilterState()
-    : strings = {
-        for (final (f, _) in filterStringFields) f: MultiSelectState(),
-      };
-
-  final Map<String, MultiSelectState> strings;
-  int? yearFrom;
-  int? yearTo;
-  String? lossless; // 'true' | 'false' | null (Any)
-  String? releaseType;
-  String? played; // 'played' | 'never' | null (Any)
-  int? addedDays;
-
-  // Measured off the decoded audio by /api/analyze. A track that has not been
-  // analysed matches none of these — not even `quieter than`, since the server
-  // fails every comparison against a null rather than reading it as 0.
-  int? minSampleRate; // Hz
-  int? minBits;
-  double? loudnessFrom; // LUFS: louder than this
-  double? loudnessTo; // LUFS: quieter than this
-  double? minDynamicRange; // LU
-  String? suspect; // 'false' (exclude) | 'true' (only) | null (Any)
-}
+// smartForm / collectSmartRules). The form itself and its draft state are
+// widgets/filter_form.dart, shared verbatim with the library Tracks filter;
+// this file owns only turning the picks into server [SmartRules] and back.
 
 int? _asInt(Object? v) => v is num ? v.toInt() : int.tryParse('$v');
 
@@ -38,8 +14,8 @@ double? _asDouble(Object? v) => v is num ? v.toDouble() : double.tryParse('$v');
 
 /// Legacy smartForm(): saved rules -> editable filter state. Rules with no
 /// form row anymore (title/album from the old editor) are dropped on edit.
-SmartFilterState rulesToState(SmartRules? rules) {
-  final st = SmartFilterState();
+FilterDraft rulesToState(SmartRules? rules) {
+  final st = FilterDraft()..match = rules?.match ?? 'all';
   for (final r in rules?.rules ?? const <SmartRule>[]) {
     final ms = st.strings[r.field];
     if (ms != null) {
@@ -71,6 +47,8 @@ SmartFilterState rulesToState(SmartRules? rules) {
         st.played = (r.op == 'is' && _asInt(r.value) == 0) ? 'never' : 'played';
       case 'addedDays':
         st.addedDays = _asInt(r.value);
+      case 'favourite':
+        st.favourites = '${r.value}' == 'true';
       // The quality rows. Each reverses exactly what stateToRules emits, so
       // editing a playlist round-trips instead of quietly dropping the rule.
       case 'sampleRate':
@@ -94,11 +72,8 @@ SmartFilterState rulesToState(SmartRules? rules) {
   return st;
 }
 
-/// Legacy collectSmartRules(): state -> rules, or an error when nothing set.
-({SmartRules? rules, String? error}) stateToRules(
-  SmartFilterState st,
-  String match,
-) {
+/// Legacy collectSmartRules(): draft -> rules, or an error when nothing set.
+({SmartRules? rules, String? error}) stateToRules(FilterDraft st) {
   final rules = <SmartRule>[];
   for (final (f, _) in filterStringFields) {
     final ms = st.strings[f]!;
@@ -135,6 +110,9 @@ SmartFilterState rulesToState(SmartRules? rules) {
   if (st.addedDays != null && st.addedDays! > 0) {
     rules.add(SmartRule(field: 'addedDays', op: 'within', value: st.addedDays));
   }
+  if (st.favourites) {
+    rules.add(SmartRule(field: 'favourite', op: 'is', value: true));
+  }
   // `gt v - 1` rather than `>=`, because the server's numeric ops are only
   // is/gt/lt — the same shape the year rows have always used. Safe on integers.
   if (st.minSampleRate != null) {
@@ -143,7 +121,9 @@ SmartFilterState rulesToState(SmartRules? rules) {
     );
   }
   if (st.minBits != null) {
-    rules.add(SmartRule(field: 'bitsPerSample', op: 'gt', value: st.minBits! - 1));
+    rules.add(
+      SmartRule(field: 'bitsPerSample', op: 'gt', value: st.minBits! - 1),
+    );
   }
   // Loudness and range are continuous, so they take the entered bound as-is:
   // "louder than -14 LUFS", "quieter than -20 LUFS", "more than 8 LU of range".
@@ -159,8 +139,10 @@ SmartFilterState rulesToState(SmartRules? rules) {
     );
   }
   if (st.suspect != null) {
-    rules.add(SmartRule(field: 'suspect', op: 'is', value: st.suspect == 'true'));
+    rules.add(
+      SmartRule(field: 'suspect', op: 'is', value: st.suspect == 'true'),
+    );
   }
   if (rules.isEmpty) return (rules: null, error: 'Set at least one filter.');
-  return (rules: SmartRules(match: match, rules: rules), error: null);
+  return (rules: SmartRules(match: st.match, rules: rules), error: null);
 }

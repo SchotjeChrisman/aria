@@ -8,6 +8,7 @@ import 'package:aria/widgets/artist_avatar.dart';
 import 'package:aria/widgets/context_menu.dart';
 import 'package:aria/widgets/empty_state.dart';
 import 'package:aria/widgets/filter_bar.dart';
+import 'package:aria/widgets/filter_form.dart';
 import 'package:aria/widgets/format_badge.dart';
 import 'package:aria/widgets/library_cards.dart';
 import 'package:aria/widgets/listen_later_shelf.dart';
@@ -631,6 +632,45 @@ class _MultiSelectDemo extends StatelessWidget {
           state: _artist,
         ),
       ],
+    );
+  }
+}
+
+Widget filterFormStory(BuildContext context) {
+  return StoryPage(
+    children: [
+      Section(
+        title: 'FilterForm',
+        note: 'The one filter form. The library Tracks dialog and the '
+            'smart-playlist editor both render THIS — they used to keep two '
+            'copies that drifted apart. Rows write into the draft as you '
+            'type, so nothing depends on a collect-the-scalars step at save.',
+        child: _FilterFormDemo(),
+      ),
+    ],
+  );
+}
+
+class _FilterFormDemo extends StatelessWidget {
+  // Mutated in place; the enclosing dialog owns it in the app.
+  static final _draft = FilterDraft();
+
+  @override
+  Widget build(BuildContext context) {
+    final artists = {
+      for (final t in fixtureTracks) t.albumArtist ?? t.artist ?? '',
+    }..remove('');
+    return FilterForm(
+      draft: _draft,
+      options: {
+        'albumArtist': artists.toList()..sort(),
+        'genre': ({for (final t in fixtureTracks) ...t.genres}.toList())..sort(),
+        'format': ({
+          for (final t in fixtureTracks)
+            if (t.format != null) t.format!.toUpperCase(),
+        }.toList())
+          ..sort(),
+      },
     );
   }
 }
@@ -1331,6 +1371,13 @@ final componentEntries = <Entry>[
     useCase: 'Pills',
     key: 'filter-bar',
     builder: filterBarStory,
+  ),
+  Entry(
+    folder: 'Controls',
+    component: 'FilterForm',
+    useCase: 'Every filter row',
+    key: 'filter-form',
+    builder: filterFormStory,
   ),
   Entry(
     folder: 'Controls',

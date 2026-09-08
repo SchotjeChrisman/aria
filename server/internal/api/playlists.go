@@ -31,6 +31,7 @@ var ruleFields = map[string][]string{
 	"playCount":   numOps,
 	"addedDays":   {"within"},
 	"tag":         {"is", "isNot", "anyOf", "allOf"},
+	"favourite":   {"is"}, // the independent per-track heart, not a tag
 	// Measured off the decoded audio (migration 008), so every one of these is
 	// null until /api/analyze has seen the file — see numericFields.
 	"loudness":      numOps, // integrated LUFS, negative
@@ -61,7 +62,7 @@ func validRules(v any) bool {
 		return false
 	}
 	rules, ok := m["rules"].([]any)
-	if !ok || len(rules) > 24 { // form emits up to 18 since the quality rows
+	if !ok || len(rules) > 24 { // form emits up to 19 since favourites
 		return false
 	}
 	for _, rv := range rules {
@@ -280,7 +281,7 @@ func evalRule(t, r map[string]any, counts map[string]int, raw map[string]string)
 		return evalNumeric(deref(t[key]), op, value)
 	}
 	switch field {
-	case "lossless", "suspect":
+	case "lossless", "suspect", "favourite":
 		want := value == true || value == "true"
 		b, ok := deref(t[field]).(bool)
 		return ok && b == want

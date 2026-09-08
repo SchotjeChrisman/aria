@@ -4,15 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/phosphor_icons.dart';
 
-import '../../core/downloads.dart';
 import '../../core/formats.dart';
 import '../../core/player_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/selection_highlight.dart';
-import '../../widgets/track_actions.dart';
-import '../../widgets/track_row.dart';
+import '../library/tracks_section.dart' show TrackTable;
 import 'name_dialog.dart';
 import 'playlists_screen.dart';
 import 'providers.dart';
@@ -28,16 +25,9 @@ class PlaylistScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pls = ref.watch(playlistsProvider);
     final tracks = ref.watch(playlistTracksProvider(id));
-    final currentId = ref.watch(currentTrackProvider)?.id;
 
     final body = switch (pls) {
-      AsyncData(:final value) => _build(
-        context,
-        ref,
-        _find(value, id),
-        tracks,
-        currentId,
-      ),
+      AsyncData(:final value) => _build(context, ref, _find(value, id), tracks),
       AsyncError() => const EmptyState(message: 'Playlist unavailable.'),
       _ => const Center(child: CircularProgressIndicator()),
     };
@@ -56,176 +46,150 @@ class PlaylistScreen extends ConsumerWidget {
     WidgetRef ref,
     Playlist? pl,
     AsyncValue<List<Track>> tracksAsync,
-    String? currentId,
   ) {
     if (pl == null) return const EmptyState(message: 'Playlist not found.');
     final list = tracksAsync.value;
 
-    return ListView(
-      padding: ariaPagePadding(context, top: 0),
-      children: [
-        Row(
-          children: [
-            Flexible(
-              child: Text(
-                pl.name,
-                style: Theme.of(context).textTheme.titleLarge,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (pl.isSmart) ...[
-              const SizedBox(width: AriaSpace.s3),
-              const SmartBadge(),
-            ],
-          ],
-        ),
-        if (list != null) ...[
-          const SizedBox(height: AriaSpace.s2),
-          Text(
-            '${list.length} track${list.length == 1 ? '' : 's'} · '
-            '${formatDuration(list.fold<double>(0, (s, t) => s + (t.duration ?? 0)))}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-        const SizedBox(height: AriaSpace.s4),
-        Wrap(
-          spacing: AriaSpace.s3,
-          runSpacing: AriaSpace.s2,
-          children: [
-            FilledButton.icon(
-              icon: const Icon(PhosphorIconsFill.play, size: 18),
-              label: const Text('Play all'),
-              onPressed: list == null || list.isEmpty
-                  ? null
-                  : () => ref.read(queueProvider.notifier).playQueue(list, 0),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(PhosphorIconsRegular.shuffle, size: 16),
-              label: const Text('Shuffle'),
-              onPressed: list == null || list.isEmpty
-                  ? null
-                  : () => ref
-                        .read(queueProvider.notifier)
-                        .playQueue(List.of(list)..shuffle(), 0),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
-              label: const Text('Rename'),
-              onPressed: () => _rename(context, ref, pl),
-            ),
-            if (pl.isSmart)
-              OutlinedButton.icon(
-                icon: const Icon(PhosphorIconsRegular.faders, size: 16),
-                label: const Text('Edit rules'),
-                onPressed: () => showSmartEditor(context, playlist: pl),
-              ),
-            OutlinedButton.icon(
-              icon: Icon(
-                PhosphorIconsRegular.x,
-                size: 16,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              label: Text(
-                'Delete',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              onPressed: () => _delete(context, ref, pl),
-            ),
-          ],
-        ),
-        const SizedBox(height: AriaSpace.s5),
-        ...switch (tracksAsync) {
-          AsyncData(:final value) when value.isEmpty => [
-            EmptyState(
-              message: pl.isSmart
-                  ? 'No tracks match these rules.'
-                  : 'Empty — pick "Add to playlist…" on any track to add '
-                        'it here.',
-            ),
-          ],
-          AsyncData(:final value) => [
-            for (final (i, t) in value.indexed)
-              _trackRow(context, ref, pl, value, i, t, currentId),
-          ],
-          AsyncError() => [const EmptyState(message: 'Playlist unavailable.')],
-          _ => const [
-            Padding(
-              padding: EdgeInsets.all(AriaSpace.s10),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          ],
-        },
-      ],
-    );
-  }
-
-  Widget _trackRow(
-    BuildContext context,
-    WidgetRef ref,
-    Playlist pl,
-    List<Track> list,
-    int i,
-    Track t,
-    String? currentId,
-  ) {
-    final row = TrackRow(
-      number: i + 1,
-      title: t.title ?? 'Unknown',
-      subtitle: [
-        t.artist,
-        t.album,
-      ].where((s) => s != null && s.isNotEmpty).join(' · '),
-      duration: t.duration,
-      format: t.format,
-      bitsPerSample: t.bitsPerSample,
-      sampleRate: t.sampleRate,
-      lossless: t.lossless,
-      downloaded: ref.watch(
-        downloadsProvider.select((s) => s.index.containsKey(t.id)),
-      ),
-      isCurrent: t.id == currentId,
-      onTap: () {
-        if (selectionTapHandled(ref, trackSelectionItem(t))) return;
-        ref.read(queueProvider.notifier).playQueue(list, i);
-      },
-      // Legacy trackCtx everywhere, plus this page's remove.
-      onSecondary: (pos) => showAriaContextMenu(
-        context,
-        pos,
-        trackMenuItems(
-          context,
-          ref,
-          t,
-          extra: [
-            if (!pl.isSmart)
-              AriaMenuItem(
-                'Remove from playlist',
-                () => ref
-                    .read(playlistsProvider.notifier)
-                    .removeTrack(pl.id, t.id),
-                icon: PhosphorIconsRegular.x,
-                destructive: true,
-              ),
-          ],
-        ),
-      ),
-    );
-    if (pl.isSmart) {
-      return SelectionHighlight(kind: 'track', itemKey: t.id, child: row);
-    }
-    // Manual playlists get the legacy row ✕ (removes ALL occurrences
-    // server-side). GAP: TrackRow has no trailing-action slot.
-    return SelectionHighlight(
-      kind: 'track',
-      itemKey: t.id,
-      child: Row(
+    // Header above, then the library's Tracks table below it — same columns,
+    // same sortable header, same rows. The table scrolls on its own, so the
+    // page is a Column rather than the ListView it used to be.
+    //
+    // The header is capped and scrolls inside that cap: it is unshrinkable
+    // (a Wrap of five buttons that gains rows as the window narrows), so on a
+    // short window a plain Column overflows it instead of scrolling it, the
+    // way the old ListView did.
+    return LayoutBuilder(
+      builder: (context, cons) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: row),
-          IconButton(
-            icon: const Icon(PhosphorIconsRegular.x, size: 16),
-            tooltip: 'Remove from playlist',
-            onPressed: () =>
-                ref.read(playlistsProvider.notifier).removeTrack(pl.id, t.id),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: cons.maxHeight * 0.6),
+            child: SingleChildScrollView(
+              child: Padding(
+                // Flat s6, not ariaPagePadding: the table's columns are laid out on
+                // a flat s6 too, and ariaPagePadding's centering inset would push
+                // this header inboard of its own column header on a wide window.
+                padding: const EdgeInsets.symmetric(horizontal: AriaSpace.s6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            pl.name,
+                            style: Theme.of(context).textTheme.titleLarge,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (pl.isSmart) ...[
+                          const SizedBox(width: AriaSpace.s3),
+                          const SmartBadge(),
+                        ],
+                      ],
+                    ),
+                    if (list != null) ...[
+                      const SizedBox(height: AriaSpace.s2),
+                      Text(
+                        '${list.length} track${list.length == 1 ? '' : 's'} · '
+                        '${formatDuration(list.fold<double>(0, (s, t) => s + (t.duration ?? 0)))}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    const SizedBox(height: AriaSpace.s4),
+                    Wrap(
+                      spacing: AriaSpace.s3,
+                      runSpacing: AriaSpace.s2,
+                      children: [
+                        FilledButton.icon(
+                          icon: const Icon(PhosphorIconsFill.play, size: 18),
+                          label: const Text('Play all'),
+                          onPressed: list == null || list.isEmpty
+                              ? null
+                              : () => ref
+                                    .read(queueProvider.notifier)
+                                    .playQueue(list, 0),
+                        ),
+                        OutlinedButton.icon(
+                          icon: const Icon(
+                            PhosphorIconsRegular.shuffle,
+                            size: 16,
+                          ),
+                          label: const Text('Shuffle'),
+                          onPressed: list == null || list.isEmpty
+                              ? null
+                              : () => ref
+                                    .read(queueProvider.notifier)
+                                    .playQueue(List.of(list)..shuffle(), 0),
+                        ),
+                        OutlinedButton.icon(
+                          icon: const Icon(
+                            PhosphorIconsRegular.pencilSimple,
+                            size: 16,
+                          ),
+                          label: const Text('Rename'),
+                          onPressed: () => _rename(context, ref, pl),
+                        ),
+                        if (pl.isSmart)
+                          OutlinedButton.icon(
+                            icon: const Icon(
+                              PhosphorIconsRegular.faders,
+                              size: 16,
+                            ),
+                            label: const Text('Edit rules'),
+                            onPressed: () =>
+                                showSmartEditor(context, playlist: pl),
+                          ),
+                        OutlinedButton.icon(
+                          icon: Icon(
+                            PhosphorIconsRegular.x,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          label: Text(
+                            'Delete',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          onPressed: () => _delete(context, ref, pl),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AriaSpace.s5),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: switch (tracksAsync) {
+              AsyncData(:final value) => TrackTable(
+                tracks: value,
+                emptyMessage: pl.isSmart
+                    ? 'No tracks match these rules.'
+                    : 'Empty — pick "Add to playlist…" on any track to add '
+                          'it here.',
+                // Legacy trackCtx everywhere, plus this page's remove (which
+                // drops ALL occurrences server-side).
+                menuExtra: pl.isSmart
+                    ? null
+                    : (t) => [
+                        AriaMenuItem(
+                          'Remove from playlist',
+                          () => ref
+                              .read(playlistsProvider.notifier)
+                              .removeTrack(pl.id, t.id),
+                          icon: PhosphorIconsRegular.x,
+                          destructive: true,
+                        ),
+                      ],
+              ),
+              AsyncError() => const EmptyState(
+                message: 'Playlist unavailable.',
+              ),
+              _ => const Center(child: CircularProgressIndicator()),
+            },
           ),
         ],
       ),

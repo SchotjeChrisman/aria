@@ -16,6 +16,11 @@ Track t({
   String? releaseType,
   String? addedAt,
   List<Performer> performers = const [],
+  int? sampleRate,
+  int? bitsPerSample,
+  double? loudnessLufs,
+  double? dynamicRangeLu,
+  bool suspect = false,
 }) => Track(
   id: id,
   albumId: 'al',
@@ -29,6 +34,11 @@ Track t({
   releaseType: releaseType,
   addedAt: addedAt,
   performers: performers,
+  sampleRate: sampleRate,
+  bitsPerSample: bitsPerSample,
+  loudnessLufs: loudnessLufs,
+  dynamicRangeLu: dynamicRangeLu,
+  suspect: suspect,
 );
 
 const emptyTags = TagNameIndex({}, {}, {});
@@ -189,6 +199,74 @@ void main() {
       expect(matchesQuery('Miles Davis', 'davis'), isTrue);
       expect(translit('Miles Davis'), isNull);
       expect(matchesQuery('Miles Davis', 'coltrane'), isFalse);
+    });
+  });
+
+  group('quality rows (same rules the smart editor sends the server)', () {
+    test('minimum sample rate and bit depth are inclusive', () {
+      expect(
+        pass(t(sampleRate: 96000), const TrackFilters(minSampleRate: 96000)),
+        isTrue,
+      );
+      expect(
+        pass(t(sampleRate: 48000), const TrackFilters(minSampleRate: 96000)),
+        isFalse,
+      );
+      expect(
+        pass(t(bitsPerSample: 24), const TrackFilters(minBits: 24)),
+        isTrue,
+      );
+      expect(
+        pass(t(bitsPerSample: 16), const TrackFilters(minBits: 24)),
+        isFalse,
+      );
+    });
+
+    test(
+      'an unanalysed track fails every quality row, quieter-than included',
+      () {
+        // The server's rule: a null measurement is not a quiet one. Reading it
+        // as 0 would make every unanalysed track the loudest in the library.
+        const quieterThan = TrackFilters(loudnessTo: -20);
+        expect(pass(t(), quieterThan), isFalse);
+        expect(pass(t(loudnessLufs: -23), quieterThan), isTrue);
+        expect(pass(t(loudnessLufs: -14), quieterThan), isFalse);
+
+        expect(pass(t(), const TrackFilters(minSampleRate: 44100)), isFalse);
+        expect(pass(t(), const TrackFilters(minDynamicRange: 8)), isFalse);
+      },
+    );
+
+    test('loudness bounds are strict, matching the server gt/lt', () {
+      expect(
+        pass(t(loudnessLufs: -14), const TrackFilters(loudnessFrom: -14)),
+        isFalse,
+      );
+      expect(
+        pass(t(loudnessLufs: -13), const TrackFilters(loudnessFrom: -14)),
+        isTrue,
+      );
+      expect(
+        pass(t(dynamicRangeLu: 8), const TrackFilters(minDynamicRange: 8)),
+        isFalse,
+      );
+      expect(
+        pass(t(dynamicRangeLu: 9), const TrackFilters(minDynamicRange: 8)),
+        isTrue,
+      );
+    });
+
+    test('suspect excludes or isolates transcodes', () {
+      expect(
+        pass(t(suspect: true), const TrackFilters(suspect: 'true')),
+        isTrue,
+      );
+      expect(pass(t(), const TrackFilters(suspect: 'true')), isFalse);
+      expect(pass(t(), const TrackFilters(suspect: 'false')), isTrue);
+      expect(
+        pass(t(suspect: true), const TrackFilters(suspect: 'false')),
+        isFalse,
+      );
     });
   });
 }

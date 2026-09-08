@@ -2,15 +2,15 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme.dart';
+import '../../widgets/filter_form.dart';
 import '../../widgets/multi_select_field.dart';
 import 'album_filters.dart';
 import 'library_providers.dart';
 
-// The Tracks-view rich filter (legacy view.filters + openFilterDialog):
-// primary-artist / performer / genre / tag / composer / format multi-selects
-// with AND-OR modes, year range, lossless/lossy, release type,
-// played/never-played, added-within-days.
+// The Tracks-view rich filter (legacy view.filters + openFilterDialog). The
+// form is widgets/filter_form.dart, shared with the smart-playlist editor, so
+// the two offer exactly the same rows; this file holds the immutable applied
+// state and the client-side matching the smart editor delegates to the server.
 
 /// One multi-select: values + match mode (legacy multiSelect state).
 @immutable
@@ -35,6 +35,12 @@ class TrackFilters {
     this.added,
     this.favourites = false,
     this.combine = 'all',
+    this.minSampleRate,
+    this.minBits,
+    this.loudnessFrom,
+    this.loudnessTo,
+    this.minDynamicRange,
+    this.suspect,
   });
 
   /// field -> MultiFilter, only active fields present.
@@ -59,6 +65,19 @@ class TrackFilters {
   /// 'any' = at least one active field (OR).
   final String combine;
 
+  // Measured off the decoded audio by the server's analysis pass. A track it
+  // has not decoded matches none of these — not even `quieter than`, because
+  // a missing measurement must fail a comparison, not read as 0. Same rule the
+  // server applies to the identical smart-playlist rules.
+  final int? minSampleRate; // Hz
+  final int? minBits;
+  final double? loudnessFrom; // LUFS: louder than this
+  final double? loudnessTo; // LUFS: quieter than this
+  final double? minDynamicRange; // LU
+
+  /// 'true' = transcodes only, 'false' = exclude transcodes, null = any.
+  final String? suspect;
+
   MultiFilter stringFilter(String field) =>
       strings[field] ?? const MultiFilter();
 
@@ -66,7 +85,18 @@ class TrackFilters {
   int get activeCount {
     var n = strings.values.where((f) => f.isActive).length;
     if (yearFrom != null || yearTo != null) n++;
-    for (final v in [lossless, type, played, added]) {
+    for (final v in [
+      lossless,
+      type,
+      played,
+      added,
+      minSampleRate,
+      minBits,
+      loudnessFrom,
+      loudnessTo,
+      minDynamicRange,
+      suspect,
+    ]) {
       if (v != null) n++;
     }
     if (favourites) n++;
@@ -140,13 +170,17 @@ bool trackPassesFilters(
   }
   if (f.stringFilter('genre').isActive) {
     results.add(
-      _msPass(f.stringFilter('genre'), trackGenresUp(t, genreParents),
-          exact: true),
+      _msPass(
+        f.stringFilter('genre'),
+        trackGenresUp(t, genreParents),
+        exact: true,
+      ),
     );
   }
   if (f.stringFilter('tag').isActive) {
-    results.add(_msPass(f.stringFilter('tag'), tagIndex.namesFor(t),
-        exact: true));
+    results.add(
+      _msPass(f.stringFilter('tag'), tagIndex.namesFor(t), exact: true),
+    );
   }
   if (f.stringFilter('composer').isActive) {
     results.add(_msPass(f.stringFilter('composer'), [t.composer]));
@@ -162,6 +196,26 @@ bool trackPassesFilters(
     final played = (playCounts[t.id] ?? 0) > 0;
     results.add((f.played == 'played') == played);
   }
+  // The quality rows, matched exactly as the server matches the same smart
+  // rules: `>= min` (its `gt min - 1`), strict gt/lt on the continuous ones,
+  // and a null measurement fails every one of them.
+  if (f.minSampleRate != null) {
+    results.add((t.sampleRate ?? -1) >= f.minSampleRate!);
+  }
+  if (f.minBits != null) results.add((t.bitsPerSample ?? -1) >= f.minBits!);
+  if (f.loudnessFrom != null) {
+    final v = t.loudnessLufs;
+    results.add(v != null && v > f.loudnessFrom!);
+  }
+  if (f.loudnessTo != null) {
+    final v = t.loudnessLufs;
+    results.add(v != null && v < f.loudnessTo!);
+  }
+  if (f.minDynamicRange != null) {
+    final v = t.dynamicRangeLu;
+    results.add(v != null && v > f.minDynamicRange!);
+  }
+  if (f.suspect != null) results.add(t.suspect == (f.suspect == 'true'));
   final within = f.added;
   if (within != null && within > 0) {
     final at = t.addedAt == null ? null : DateTime.tryParse(t.addedAt!);
@@ -216,12 +270,64 @@ final trackFilterOptionsProvider = Provider.family<List<String>, String>((
 
 // ---------------------------------------------------------------- dialog
 
+/// Applied filters -> an editable draft of the shared form.
+FilterDraft draftOf(TrackFilters f) {
+  final d = FilterDraft()
+    ..match = f.combine
+    ..favourites = f.favourites
+    ..yearFrom = f.yearFrom
+    ..yearTo = f.yearTo
+    ..lossless = f.lossless
+    ..releaseType = f.type
+    ..played = f.played
+    ..addedDays = f.added
+    ..minSampleRate = f.minSampleRate
+    ..minBits = f.minBits
+    ..loudnessFrom = f.loudnessFrom
+    ..loudnessTo = f.loudnessTo
+    ..minDynamicRange = f.minDynamicRange
+    ..suspect = f.suspect;
+  for (final (field, _) in filterStringFields) {
+    final mf = f.stringFilter(field);
+    d.strings[field]!
+      ..vals.addAll(mf.vals)
+      ..mode = mf.mode;
+  }
+  return d;
+}
+
+/// The draft back to applied filters. The smart editor's stateToRules() is
+/// this function's opposite number: same draft, different destination.
+TrackFilters filtersOf(FilterDraft d) => TrackFilters(
+  strings: {
+    for (final (field, _) in filterStringFields)
+      if (d.strings[field]!.vals.isNotEmpty)
+        field: MultiFilter(
+          vals: List.of(d.strings[field]!.vals),
+          mode: d.strings[field]!.mode,
+        ),
+  },
+  yearFrom: d.yearFrom,
+  yearTo: d.yearTo,
+  lossless: d.lossless,
+  type: d.releaseType,
+  played: d.played,
+  added: d.addedDays,
+  favourites: d.favourites,
+  combine: d.match,
+  minSampleRate: d.minSampleRate,
+  minBits: d.minBits,
+  loudnessFrom: d.loudnessFrom,
+  loudnessTo: d.loudnessTo,
+  minDynamicRange: d.minDynamicRange,
+  suspect: d.suspect,
+);
+
 /// Legacy openFilterDialog: edit a draft, Apply/Clear/Cancel.
-Future<void> showTrackFilterDialog(BuildContext context) =>
-    showDialog<void>(
-      context: context,
-      builder: (_) => const TrackFilterDialog(),
-    );
+Future<void> showTrackFilterDialog(BuildContext context) => showDialog<void>(
+  context: context,
+  builder: (_) => const TrackFilterDialog(),
+);
 
 class TrackFilterDialog extends ConsumerStatefulWidget {
   const TrackFilterDialog({super.key});
@@ -231,177 +337,26 @@ class TrackFilterDialog extends ConsumerStatefulWidget {
 }
 
 class TrackFilterDialogState extends ConsumerState<TrackFilterDialog> {
-  late final Map<String, MultiSelectState> _draft;
-  late final TextEditingController _yearFrom;
-  late final TextEditingController _yearTo;
-  late final TextEditingController _added;
-  String? _lossless;
-  String? _type;
-  String? _played;
-  bool _favourites = false;
-  String _combine = 'all';
-
-  @override
-  void initState() {
-    super.initState();
-    final f = ref.read(trackFiltersProvider);
-    _draft = {
-      for (final (field, _) in filterStringFields)
-        field: MultiSelectState(
-          vals: f.stringFilter(field).vals,
-          mode: f.stringFilter(field).mode,
-        ),
-    };
-    _yearFrom = TextEditingController(text: f.yearFrom?.toString() ?? '');
-    _yearTo = TextEditingController(text: f.yearTo?.toString() ?? '');
-    _added = TextEditingController(text: f.added?.toString() ?? '');
-    _lossless = f.lossless;
-    _type = f.type;
-    _played = f.played;
-    _favourites = f.favourites;
-    _combine = f.combine;
-  }
-
-  @override
-  void dispose() {
-    _yearFrom.dispose();
-    _yearTo.dispose();
-    _added.dispose();
-    super.dispose();
-  }
-
-  int? _num(TextEditingController c) => int.tryParse(c.text.trim());
+  late final FilterDraft _draft = draftOf(ref.read(trackFiltersProvider));
 
   void _apply() {
-    ref
-        .read(trackFiltersProvider.notifier)
-        .apply(
-          TrackFilters(
-            strings: {
-              for (final (field, _) in filterStringFields)
-                if (_draft[field]!.vals.isNotEmpty)
-                  field: MultiFilter(
-                    vals: _draft[field]!.vals,
-                    mode: _draft[field]!.mode,
-                  ),
-            },
-            yearFrom: _num(_yearFrom),
-            yearTo: _num(_yearTo),
-            lossless: _lossless,
-            type: _type,
-            played: _played,
-            added: _num(_added),
-            favourites: _favourites,
-            combine: _combine,
-          ),
-        );
+    ref.read(trackFiltersProvider.notifier).apply(filtersOf(_draft));
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = AriaColors.of(context);
-
-    Widget label(String s) => Padding(
-      padding: const EdgeInsets.only(top: AriaSpace.s4, bottom: AriaSpace.s1),
-      child: Text(s, style: Theme.of(context).textTheme.labelMedium),
-    );
-
-    Widget dropdown(
-      String? value,
-      List<(String, String)> options,
-      ValueChanged<String?> onChanged,
-    ) => DropdownButton<String?>(
-      value: value,
-      isExpanded: true,
-      underline: const SizedBox.shrink(),
-      dropdownColor: c.bgRaised,
-      items: [
-        const DropdownMenuItem(child: Text('Any')),
-        for (final (v, l) in options)
-          DropdownMenuItem(value: v, child: Text(l)),
-      ],
-      onChanged: (v) => setState(() => onChanged(v)),
-    );
-
     return AlertDialog(
       title: const Text('Filters'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'all', label: Text('Match all fields')),
-                    ButtonSegment(value: 'any', label: Text('Match any field')),
-                  ],
-                  selected: {_combine},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (s) =>
-                      setState(() => _combine = s.first),
-                ),
-              ),
-              const SizedBox(height: AriaSpace.s4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Favourites only'),
-                value: _favourites,
-                onChanged: (v) => setState(() => _favourites = v),
-              ),
-              for (final (field, fieldLabel) in filterStringFields) ...[
-                MultiSelectField(
-                  label: fieldLabel,
-                  options: ref.watch(trackFilterOptionsProvider(field)),
-                  state: _draft[field]!,
-                ),
-                const SizedBox(height: AriaSpace.s4),
-              ],
-              label('Year'),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _yearFrom,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(hintText: 'from'),
-                    ),
-                  ),
-                  const SizedBox(width: AriaSpace.s3),
-                  Expanded(
-                    child: TextField(
-                      controller: _yearTo,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(hintText: 'to'),
-                    ),
-                  ),
-                ],
-              ),
-              label('Quality'),
-              dropdown(_lossless, const [
-                ('true', 'Lossless'),
-                ('false', 'Lossy'),
-              ], (v) => _lossless = v),
-              label('Release type'),
-              dropdown(_type, [
-                for (final t in releaseTypes) (t, t),
-              ], (v) => _type = v),
-              label('Played'),
-              dropdown(_played, const [
-                ('played', 'Played'),
-                ('never', 'Never played'),
-              ], (v) => _played = v),
-              label('Added (days)'),
-              TextField(
-                controller: _added,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: 'e.g. 30'),
-              ),
-            ],
+          child: FilterForm(
+            draft: _draft,
+            options: {
+              for (final (field, _) in filterStringFields)
+                field: ref.watch(trackFilterOptionsProvider(field)),
+            },
           ),
         ),
       ),
