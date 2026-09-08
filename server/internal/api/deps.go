@@ -15,10 +15,13 @@ import (
 // resulting track count. Status is JSON-shaped progress, e.g.
 // {"scanning":bool,"done":int,"total":int}. LastParsed is how many files the
 // last scan re-read rather than skipped, which is how the periodic scan tells
-// a quiet hour from one that needs the enrichment passes run.
+// a quiet hour from one that needs the enrichment passes run. LastChanged
+// additionally counts deletions, so the periodic scan can tell a tick that
+// moved the library from one that did not.
 type Scanner interface {
 	Scan(ctx context.Context) (int, error)
 	LastParsed() int
+	LastChanged() bool
 	Status() any
 }
 
@@ -157,15 +160,48 @@ func (d *Deps) RunPasses(ctx context.Context) {
 	}
 }
 
-// InvalidateTracks drops the cached merged /api/tracks view. Every mutation
-// that feeds the merge (scan/enrich done, edits, reidentify, tags) calls it;
-// the next read rebuilds lazily.
+// InvalidateTracks drops the cached merged /api/tracks view AND announces the
+// new generation to every connected app. Every mutation that feeds the merge
+// (scan/enrich done, edits, reidentify, tags) already calls it, which is
+// exactly why the announcement belongs here and not at each call site: the
+// server is where the library changes, so one signal from here is what keeps
+// every client — not just the device that made the change — from sitting on a
+// stale copy until someone presses Rescan on it.
+//
+// The frame carries the generation rather than a "something changed" flag so a
+// client that MISSED one (asleep, offline, or a full hub buffer — the hub drops
+// frames for slow subscribers) still notices on reconnect, where the stream
+// opens with the current generation. A boolean would be lost with the frame.
 func (d *Deps) InvalidateTracks() {
+	gen := d.invalidateTracks()
+	if d.Events != nil { // hand-built Deps in tests carry no hub
+		d.Events.Publish("library", map[string]any{"gen": gen})
+	}
+}
+
+// InvalidateTracksQuiet drops the cache WITHOUT announcing it. For changes the
+// apps already apply themselves and that are not worth a whole-library refetch
+// on every device — the favourite toggle, which is optimistic client-side
+// precisely so a heart tap costs nothing. The generation still rises, so the
+// next real announcement carries the favourite along with it.
+func (d *Deps) InvalidateTracksQuiet() { d.invalidateTracks() }
+
+// invalidateTracks does the cache drop and returns the new generation.
+func (d *Deps) invalidateTracks() uint64 {
 	d.tracksMu.Lock()
+	defer d.tracksMu.Unlock()
 	d.tracksGen++
 	d.tracksView = nil
 	d.tracksGz = nil
-	d.tracksMu.Unlock()
+	return d.tracksGen
+}
+
+// TracksGen is the current merged-view generation, sent to every new SSE
+// subscriber so a reconnecting app can tell whether it slept through a change.
+func (d *Deps) TracksGen() uint64 {
+	d.tracksMu.Lock()
+	defer d.tracksMu.Unlock()
+	return d.tracksGen
 }
 
 // NewDeps wires all repos and the SSE hub; Scanner/Enricher/Analyzer/

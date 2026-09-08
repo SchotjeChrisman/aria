@@ -153,8 +153,8 @@ order.
 ## API
 
 Full spec: [`server/openapi.yaml`](server/openapi.yaml). Same `/api` paths and
-shapes as v1, plus `GET /healthz`, `GET /api/events` (SSE scan/enrich/analyze
-progress), `POST /api/analyze` + `GET /api/analyze/status` (the background
+shapes as v1, plus `GET /healthz`, `GET /api/events` (SSE library generation,
+plus scan/enrich/analyze progress), `POST /api/analyze` + `GET /api/analyze/status` (the background
 loudness measurement that feeds the ReplayGain figures on `GET /api/tracks`;
 501 when the server has no ffmpeg), and `limit`/`offset` on `GET /api/tracks`.
 
@@ -192,6 +192,15 @@ up new metadata: the enricher's own TTLs (discography 7 days, artist popularity
 30 days) can only expire on a pass that reaches them. Both accept any
 `time.ParseDuration` string (`90m`, `6h`); an unparseable value logs and falls
 back to the default rather than silently disabling the scan.
+
+Scanning is the server's job and only the server's: drop new music in the mount
+and every running app picks it up on the next walk, with no per-device rescan.
+Anything that changes the library — a scan, an enrichment pass, a metadata edit
+made from any device — bumps a generation the server announces over
+`/api/events`, and each app refreshes off that. Apps that were asleep or offline
+compare generations when they reconnect, so they catch up too. Settings →
+Library → **Rescan library** is only there for when you don't want to wait for
+the next tick.
 
 Scanned extensions: flac, mp3, m4a, m4b, ogg, oga, opus, spx, wav, aiff, aif,
 aifc, afc, ape, wv, dsf, wma, tta, shn, mpc. Deliberately excluded: dff/dsdiff

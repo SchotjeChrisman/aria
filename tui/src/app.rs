@@ -234,6 +234,13 @@ pub struct App {
     pub loading: bool,
     /// Scan/enrich progress from the SSE stream, as (label, done, total).
     pub progress: Option<(String, u64, u64)>,
+    /// Last library generation the server announced. The server bumps it on
+    /// every change to the merged view — a scan, an enrichment pass, an edit
+    /// made from any client — and states it again on connect and on every
+    /// keepalive, so comparing it is how this client notices a change it was
+    /// not around for. `None` until the first frame: the startup load is
+    /// already current, so the opening generation is recorded, not acted on.
+    seen_gen: Option<u64>,
 
     /// Track id whose play has already been reported, so it is reported once.
     reported: Option<String>,
@@ -303,6 +310,7 @@ impl App {
             error: None,
             loading: false,
             progress: None,
+            seen_gen: None,
             reported: None,
             reports_sent: 0,
             last_track_id: None,
@@ -994,9 +1002,10 @@ impl App {
         }
     }
 
-    /// The server publishes four progress streams. Each carries a snapshot,
-    /// not a delta, and the `running: false` frame is the cue that the library
-    /// changed underneath us.
+    /// The server publishes four progress streams plus `library` generations.
+    /// Progress frames are display only; the generation is what says the
+    /// library moved, because the SERVER owns the library and this is one of
+    /// several clients watching it.
     fn handle_sse(&mut self, ev: SseEvent) {
         let Some(v) = ev.json() else { return };
         let done = v.get("done").and_then(|x| x.as_u64()).unwrap_or(0);
@@ -1009,28 +1018,34 @@ impl App {
             .to_string();
 
         match ev.name.as_str() {
+            // The one frame that means "the library changed". Everything that
+            // can change it bumps the generation server-side, so this replaces
+            // the guessing the progress frames used to do: a scan whose only
+            // change was a deleted file, or an edit made from the phone, moves
+            // it just as a new album does.
+            "library" => {
+                let Some(gen) = v.get("gen").and_then(|x| x.as_u64()) else {
+                    return;
+                };
+                // ponytail: no coalescing, unlike the Flutter client — a burst
+                // (bulk tagging from another client) reloads once per write.
+                // Upgrade path if that ever bites: defer on self.loading.
+                if self.seen_gen.is_some_and(|seen| seen != gen) {
+                    self.load_library();
+                    self.load_status();
+                }
+                self.seen_gen = Some(gen);
+            }
             "scan" => {
                 if total > 0 && done < total {
                     self.progress = Some(("scan".into(), done, total));
                 } else {
-                    // A finished scan means new tracks; pick them up.
-                    if self.progress.is_some() {
-                        self.progress = None;
-                        self.load_library();
-                        self.load_status();
-                    }
+                    self.progress = None; // the reload rides the generation
                 }
             }
             "enrich" | "analyze" | "fingerprint" => match running {
                 Some(true) => self.progress = Some((phase, done, total)),
-                _ => {
-                    if self.progress.is_some() {
-                        self.progress = None;
-                        // Enrichment rewrites the merged view, so the library
-                        // is stale once a pass ends.
-                        self.load_library();
-                    }
-                }
+                _ => self.progress = None,
             },
             _ => {}
         }

@@ -129,6 +129,15 @@ class LibraryTools extends ConsumerWidget {
               ),
           ],
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: AriaSpace.s1),
+          child: Text(
+            'The server rescans on its own and every device picks the change '
+            'up — this button is only for when you want it now.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
         const SizedBox(height: AriaSpace.s3),
         Row(
           children: [

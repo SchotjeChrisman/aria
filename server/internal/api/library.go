@@ -939,7 +939,9 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		d.InvalidateTracks()
+		// Quiet: every app tracks favourites optimistically, so announcing this
+		// would make one heart tap refetch the whole library on every device.
+		d.InvalidateTracksQuiet()
 		writeJSON(w, http.StatusOK, map[string]any{"favourite": fav})
 	})
 

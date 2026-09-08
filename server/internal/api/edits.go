@@ -534,6 +534,7 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 			writeJSON(w, http.StatusOK, map[string]any{})
 			return
 		}
+		d.InvalidateTracks() // portraits/bios feed peopleProvider on every client
 		writeRawJSON(w, http.StatusOK, res)
 	})
 

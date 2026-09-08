@@ -510,3 +510,47 @@ func TestIsLossless(t *testing.T) {
 		}
 	}
 }
+
+// LastChanged is what decides whether connected apps are told to refetch, so
+// the case LastParsed cannot see — a file DELETED from disk, which re-reads
+// nothing — has to flip it too, and a genuinely quiet rescan must not.
+func TestScanLastChanged(t *testing.T) {
+	musicDir := fixtureTree(t, map[string]map[string][]string{
+		"Album/01.flac": {taglib.Title: {"A"}, taglib.Album: {"X"}},
+		"Album/02.flac": {taglib.Title: {"B"}, taglib.Album: {"X"}},
+	})
+	dataDir := t.TempDir()
+	d, err := db.Open(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	s := New(musicDir, dataDir, repo.NewTracks(d), repo.NewAlbums(d), nil)
+	ctx := context.Background()
+
+	scan := func(what string) {
+		t.Helper()
+		if _, err := s.Scan(ctx); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+	}
+
+	scan("first scan")
+	if !s.LastChanged() {
+		t.Error("first scan reported no change, want changed (two new files)")
+	}
+	scan("quiet rescan")
+	if s.LastChanged() {
+		t.Error("rescan of an untouched library reported a change, want none")
+	}
+	if err := os.Remove(filepath.Join(musicDir, "Album", "02.flac")); err != nil {
+		t.Fatal(err)
+	}
+	scan("rescan after delete")
+	if s.LastParsed() != 0 {
+		t.Errorf("rescan after delete parsed %d files, want 0", s.LastParsed())
+	}
+	if !s.LastChanged() {
+		t.Error("rescan after a deleted file reported no change, want changed")
+	}
+}

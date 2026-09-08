@@ -138,7 +138,8 @@ type Scanner struct {
 	scanning bool
 	done     int
 	total    int
-	parsed   int // files actually parsed last scan (skips excluded); read by tests
+	parsed   int  // files actually parsed last scan (skips excluded); read by tests
+	changed  bool // last scan parsed or deleted something (drives client refresh)
 }
 
 func New(musicDir, dataDir string, tracks *repo.Tracks, albums *repo.Albums, onProgress func(done, total int)) *Scanner {
@@ -165,6 +166,16 @@ func (s *Scanner) LastParsed() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.parsed
+}
+
+// LastChanged reports whether the most recent scan actually moved the library
+// — parsed a new/changed file, or deleted rows for files that vanished.
+// LastParsed alone does not answer that: it does not count deletions. Same
+// lifetime rule as LastParsed, read it straight after Scan returns.
+func (s *Scanner) LastChanged() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.changed
 }
 
 // Busy reports whether a scan is in flight. The loudness-analysis job reads it
@@ -213,7 +224,7 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 	}
 
 	s.mu.Lock()
-	s.scanning, s.done, s.total, s.parsed = true, 0, len(files), 0
+	s.scanning, s.done, s.total, s.parsed, s.changed = true, 0, len(files), 0, false
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
@@ -294,16 +305,20 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 			return 0, err
 		}
 	}
+	var deleted int64
 	if deleteOK {
-		if _, err := s.tracks.DeleteNotIn(ctx, keep); err != nil {
+		n, err := s.tracks.DeleteNotIn(ctx, keep)
+		if err != nil {
 			return 0, err
 		}
+		deleted = n
 	}
 	if err := s.albums.Rebuild(ctx); err != nil {
 		return 0, err
 	}
 	s.mu.Lock()
 	s.parsed = len(parsed)
+	s.changed = len(parsed) > 0 || deleted > 0
 	s.mu.Unlock()
 	return len(keep), nil
 }

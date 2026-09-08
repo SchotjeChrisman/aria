@@ -35,12 +35,14 @@ func periodicScan(ctx context.Context, deps *api.Deps, full bool) {
 		}
 		return
 	}
-	// Unconditional, though it costs a cache drop on every quiet tick: a scan
-	// that parsed NOTHING can still have deleted rows for files that vanished,
-	// and LastParsed does not count those. An hourly rebuild of the merged view,
-	// lazily on the next reader, is the cheaper mistake than serving an album
-	// whose files are gone.
-	deps.InvalidateTracks()
+	// LastChanged, not LastParsed: a scan that parsed NOTHING can still have
+	// deleted rows for files that vanished, and serving an album whose files are
+	// gone is the worse mistake. Gated rather than unconditional because
+	// InvalidateTracks now announces a new generation to every connected app —
+	// a quiet tick must not make all of them refetch the whole library hourly.
+	if deps.Scanner.LastChanged() {
+		deps.InvalidateTracks()
+	}
 	// LastParsed is read straight after Scan returned, while this goroutine is
 	// the only caller — the select loop that drives both cadences is what
 	// guarantees no other tick is in flight to overwrite it.

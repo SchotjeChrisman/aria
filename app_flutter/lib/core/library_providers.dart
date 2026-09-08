@@ -162,58 +162,75 @@ void invalidateLibrary(Ref ref) {
   ref.invalidate(peopleProvider);
 }
 
-/// True while the server reports an enrichment pass in flight.
-bool enrichBusy(Object? statusJson) =>
-    statusJson is Map &&
-    (statusJson['running'] == true || statusJson['phase'] != 'idle');
+/// The library generation carried by a `library` SSE frame, or null when the
+/// frame is not one (malformed, or a differently shaped event). Type-tested
+/// rather than cast: a bad `gen` must yield null, not throw out of the stream
+/// loop and drop the app into its reconnect delay.
+int? libraryGen(Object? frameJson) {
+  final gen = frameJson is Map ? frameJson['gen'] : null;
+  return gen is num ? gen.toInt() : null;
+}
 
-/// App-lifetime `enrich`/`analyze` SSE watcher: when a server pass finishes
-/// (busy -> idle) the library caches refresh, no matter which screen is
-/// open — both are server-side work, the app just reacts to it.
-/// Watched by TransportBar; the Settings poller only renders progress.
+/// App-lifetime `library` SSE watcher: the app holds a whole-library cache, the
+/// SERVER is where that library actually changes — a scan on its own schedule
+/// (SCAN_INTERVAL, hourly by default), an enrichment pass, an edit made from
+/// any device — so the server announces a generation and every connected app
+/// refreshes off it. Nothing about keeping a device current is that device's
+/// job; without this, each one sat on its stale copy until someone walked over
+/// and pressed Rescan on it.
 ///
-/// The three passes (enrich, fingerprint, analyze) are tracked separately
-/// rather than through one shared `wasBusy`: the analyzer runs for hours after
-/// enrichment has gone idle, and a single flag would read every interleaving as
-/// a spurious transition and refresh the whole library on each one.
+/// A GENERATION, not a "something changed" ping, because the hub drops frames
+/// for slow subscribers and an app that is asleep or offline receives none at
+/// all. The stream opens with the current generation, so a phone that dozed
+/// through the 04:00 scan compares on reconnect and refetches then. A ping
+/// would simply have been lost with the frame that carried it.
+///
+/// Watched by TransportBar; the Settings poller only renders pass progress.
+const _coalesceWindow = Duration(seconds: 1);
+
 final enrichRefreshProvider = Provider<void>((ref) {
   final client = ref.watch(apiClientProvider);
   var disposed = false;
   // The reconnect delay must be a cancellable Timer, not Future.delayed —
   // dispose (server-URL change, test teardown) has to stop it immediately.
   Timer? retry;
+  // Coalesces a burst into one refetch. Generations rise per mutation, and
+  // plenty of things move several in a row — tagging 20 tracks is 20 sequential
+  // writes, one manual rescan is the scan plus the enrich and analyse passes
+  // behind it. Refetching the whole library on each would be absurd; waiting a
+  // beat for the burst to settle costs nothing anyone can perceive.
+  Timer? coalesce;
   ref.onDispose(() {
     disposed = true;
     retry?.cancel();
+    coalesce?.cancel();
   });
-  final wasBusy = {'enrich': false, 'analyze': false, 'fingerprint': false};
-
-  void seen(String src, bool busy) {
-    if (wasBusy[src] != busy) Log.i(src, busy ? 'pass started' : 'pass finished');
-    if (wasBusy[src]! && !busy) invalidateLibrary(ref);
-    wasBusy[src] = busy;
-  }
+  // Outlives one connection on purpose: comparing across a reconnect is the
+  // whole point. Null until the first frame — the startup fetch is already
+  // current, so the opening generation is recorded, not acted on.
+  int? seenGen;
 
   Future<void> tick() async {
     try {
-      // A pass may have ended while disconnected — one status probe on
-      // (re)connect closes that gap before we trust the stream.
-      final s = await client.enrichStatus();
-      if (disposed) return;
-      seen('enrich', s.phase != 'idle');
       await for (final e in client.events()) {
         if (disposed) return;
-        if (e.event != 'enrich' &&
-            e.event != 'analyze' &&
-            e.event != 'fingerprint') {
-          continue;
-        }
+        if (e.event != 'library') continue; // scan/enrich progress: cosmetic
+        int? gen;
         try {
-          // All three statuses are deliberately the same {phase,running} shape.
-          seen(e.event, enrichBusy(jsonDecode(e.data)));
+          gen = libraryGen(jsonDecode(e.data));
         } on FormatException {
-          // malformed frame — ignore, the next one corrects us
+          continue; // malformed frame — the next one corrects us
         }
+        if (gen == null) continue;
+        if (seenGen != null && gen != seenGen) {
+          Log.i('library', 'server generation $seenGen -> $gen');
+          coalesce?.cancel();
+          coalesce = Timer(_coalesceWindow, () {
+            if (disposed) return;
+            invalidateLibrary(ref);
+          });
+        }
+        seenGen = gen;
       }
     } catch (_) {
       // server away — quiet retry, same cadence as the settings poller

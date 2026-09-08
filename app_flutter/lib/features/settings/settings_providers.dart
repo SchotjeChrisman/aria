@@ -5,7 +5,6 @@ import 'package:aria_api/aria_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection.dart';
-import '../../core/library_providers.dart';
 import '../../core/log.dart';
 
 // The exclusive-access toggle lives in core so playerInitProvider can apply
@@ -132,9 +131,10 @@ class ScanController extends Notifier<ScanState> {
       final tracks = await client.scan();
       Log.i('scan', 'finished: $tracks tracks');
       state = ScanState(lastTracks: tracks);
-      // New/changed files: refresh everything derived from the track list —
-      // the core cache feeds library/album/artist/search/playlists/tags.
-      invalidateLibrary(ref);
+      // No invalidateLibrary here: the scan bumped the server's library
+      // generation, and the app-lifetime watcher refreshes THIS device off that
+      // frame like any other. Refreshing locally as well just fetched the whole
+      // library twice.
       ref.invalidate(serverStatusProvider);
     } catch (e) {
       Log.w('scan', 'failed', e);

@@ -51,9 +51,16 @@ paths:
   /api/events:
     get:
       tags: [system]
-      summary: Server-sent events for scan and enrichment progress (v2 addition)
+      summary: Server-sent events for library changes and progress (v2 addition)
       description: |
         `text/event-stream`. Named events:
+        - `event: library` — data is `{"gen": int}`, the generation of the merged
+          `GET /api/tracks` view. Bumped by every change to it (scan, enrichment,
+          edits, tags, art, reidentify), and also sent as the FIRST frame of the
+          stream and in place of the keepalive comment every 25s. Clients compare
+          it with the last one they saw and refetch the library when it differs;
+          restating it on a timer is what lets a client that missed a frame, or
+          was offline entirely, catch up without being told twice.
         - `event: scan` — data is `{"scanning": bool, "done": int, "total": int, "tracks": int}`;
           emitted on scan start, periodically during, and on completion.
         - `event: enrich` — data is an EnrichStatus JSON object, emitted whenever
