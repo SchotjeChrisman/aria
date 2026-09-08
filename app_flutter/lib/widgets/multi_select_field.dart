@@ -54,6 +54,12 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
   final _search = TextEditingController();
   final _focus = FocusNode();
 
+  /// Ties the option list into the search field's TapRegion. Without it a
+  /// mouse press on an option is a tap OUTSIDE the field: onTapOutside fires
+  /// on pointer-DOWN, unfocuses, the list leaves the tree, and the InkWell
+  /// never sees the pointer-up — the list just blinked shut (macOS/desktop).
+  final _group = Object();
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +101,7 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
               child: TextField(
                 controller: _search,
                 focusNode: _focus,
+                groupId: _group,
                 onTapOutside: (_) => _focus.unfocus(),
                 decoration: const InputDecoration(hintText: 'search…'),
               ),
@@ -117,53 +124,67 @@ class _MultiSelectFieldState extends State<MultiSelectField> {
           ],
         ),
         if (showList)
-          Container(
-            margin: const EdgeInsets.only(top: AriaSpace.s1),
-            constraints: const BoxConstraints(maxHeight: 180),
-            // Clip the option rows' square InkWell hover to the rounded surface
-            // (shadow is unaffected by the container's own clipBehavior).
-            clipBehavior: Clip.antiAlias,
-            decoration: ariaSurface(c, radius: AriaRadius.sm, fill: c.bgFloat),
-            child: hits.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(AriaSpace.s3),
-                    child: Text('No matches', style: TextStyle(color: c.fgDim)),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: hits.length,
-                    itemBuilder: (context, i) {
-                      final v = hits[i];
-                      final sel = st.vals.contains(v);
-                      return InkWell(
-                        onTap: () => setState(() {
-                          sel ? st.vals.remove(v) : st.vals.add(v);
-                        }),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AriaSpace.s3,
-                            vertical: AriaSpace.s2,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  v,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: sel ? c.accent : c.fg,
+          TapRegion(
+            groupId: _group,
+            child: Container(
+              margin: const EdgeInsets.only(top: AriaSpace.s1),
+              constraints: const BoxConstraints(maxHeight: 180),
+              // Clip the option rows' square InkWell hover to the rounded surface
+              // (shadow is unaffected by the container's own clipBehavior).
+              clipBehavior: Clip.antiAlias,
+              decoration: ariaSurface(
+                c,
+                radius: AriaRadius.sm,
+                fill: c.bgFloat,
+              ),
+              child: hits.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(AriaSpace.s3),
+                      child: Text(
+                        'No matches',
+                        style: TextStyle(color: c.fgDim),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: hits.length,
+                      itemBuilder: (context, i) {
+                        final v = hits[i];
+                        final sel = st.vals.contains(v);
+                        return InkWell(
+                          onTap: () => setState(() {
+                            sel ? st.vals.remove(v) : st.vals.add(v);
+                          }),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AriaSpace.s3,
+                              vertical: AriaSpace.s2,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    v,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: sel ? c.accent : c.fg,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (sel)
-                                Icon(PhosphorIconsRegular.check, size: 16, color: c.accent),
-                            ],
+                                if (sel)
+                                  Icon(
+                                    PhosphorIconsRegular.check,
+                                    size: 16,
+                                    color: c.accent,
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
+            ),
           ),
         if (st.vals.isNotEmpty)
           Padding(
