@@ -3,6 +3,7 @@
 package scanner
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -10,11 +11,13 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -169,7 +172,8 @@ func (s *Scanner) LastParsed() int {
 }
 
 // LastChanged reports whether the most recent scan actually moved the library
-// — parsed a new/changed file, or deleted rows for files that vanished.
+// — parsed a new/changed file, deleted rows for files that vanished, or found
+// a cover or artist image added, replaced or removed.
 // LastParsed alone does not answer that: it does not count deletions. Same
 // lifetime rule as LastParsed, read it straight after Scan returns.
 func (s *Scanner) LastChanged() bool {
@@ -204,7 +208,7 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
-	files, walkErrs := s.walk()
+	files, imgs, walkErrs := s.walk()
 	prev, err := s.tracks.ListPathInfo(ctx)
 	if err != nil {
 		return 0, err
@@ -232,14 +236,13 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		s.mu.Unlock()
 	}()
 
-	// albums whose art already exists on disk (previous scans) count as seen,
-	// so art is extracted at most once per album ever, not once per scan.
-	artSeen := map[string]bool{}
+	// albums whose embedded art is already on disk (previous scans, the legacy
+	// extension-less name included). Only a new or changed file re-extracts, and
+	// claimed keeps that to one read per album per scan.
+	artSeen, claimed := map[string]bool{}, map[string]bool{}
 	if ents, err := os.ReadDir(artDir); err == nil {
 		for _, e := range ents {
-			if id, ok := strings.CutSuffix(e.Name(), ".jpg"); ok {
-				artSeen[id] = true
-			}
+			artSeen[strings.TrimSuffix(e.Name(), ".jpg")] = true
 		}
 	}
 
@@ -247,9 +250,10 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 	var (
 		keep     []string
 		wg       sync.WaitGroup
-		resMu    sync.Mutex // guards parsed + kept + artSeen during the pool
+		resMu    sync.Mutex // guards parsed + unparsed + placed + claimed during the pool
 		parsed   []repo.Track
-		unparsed []string // ids of already-indexed files this pass could not read
+		unparsed []string        // ids of already-indexed files this pass could not read
+		placed   []repo.PathInfo // every kept row, for placing the library's own images
 		jobs     = make(chan fileEntry)
 		workers  = runtime.NumCPU()
 	)
@@ -258,7 +262,7 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		go func() {
 			defer wg.Done()
 			for fe := range jobs {
-				t, ok := s.parseOne(fe, scanAt, artDir, artSeen, &resMu)
+				t, ok := s.parseOne(fe, scanAt, artDir, claimed, &resMu)
 				resMu.Lock()
 				if ok {
 					parsed = append(parsed, t)
@@ -268,6 +272,7 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 					// take its row — and with it favourite, addedAt and every
 					// plays join — down with it
 					unparsed = append(unparsed, p.ID)
+					placed = append(placed, p)
 				}
 				resMu.Unlock()
 				s.progress()
@@ -280,6 +285,9 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		}
 		if p, ok := byPath[fe.rel]; ok && p.Mtime == fe.mtime && p.Size == fe.size {
 			keep = append(keep, p.ID) // unchanged: keep the row, skip the parse
+			resMu.Lock()              // workers append the rows they fail to re-read
+			placed = append(placed, p)
+			resMu.Unlock()
 			s.progress()
 			continue
 		}
@@ -291,11 +299,19 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
+	for _, t := range parsed {
+		placed = append(placed, repo.PathInfo{Path: t.Path, AlbumID: t.AlbumID, AlbumArtist: t.AlbumArtist, Mtime: t.Mtime})
+	}
+	s.refreshStaleArt(placed, artDir, claimed)
+	for id := range claimed { // what is left claimed was written
+		artSeen[id] = true
+	}
+	albumArt, artistArt := placeLocalArt(imgs, placed)
+	hasArt := func(albumID string) bool { _, ok := albumArt[albumID]; return ok || artSeen[albumID] }
 	// second pass so early tracks of an album whose art came from a later track
-	// still get hasArt=true. Skipped rows keep their stored value; an album that
-	// gains art from a new file self-corrects on the next changed-file rescan.
+	// still get hasArt=true; skipped rows are brought in line by SetHasArt below.
 	for i := range parsed {
-		parsed[i].HasArt = artSeen[parsed[i].AlbumID]
+		parsed[i].HasArt = hasArt(parsed[i].AlbumID)
 		keep = append(keep, parsed[i].ID)
 	}
 	keep = append(keep, unparsed...)
@@ -305,20 +321,45 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 			return 0, err
 		}
 	}
-	var deleted int64
+	var deleted, flipped int64
+	artChanged := false
+	// a walk with errors saw only part of the tree: images it missed would read
+	// as removed, so the library's own art is only re-placed after a clean walk
 	if deleteOK {
 		n, err := s.tracks.DeleteNotIn(ctx, keep)
 		if err != nil {
 			return 0, err
 		}
 		deleted = n
+		withArt := map[string]bool{}
+		for _, p := range placed {
+			if hasArt(p.AlbumID) {
+				withArt[p.AlbumID] = true
+			}
+		}
+		if flipped, err = s.tracks.SetHasArt(ctx, slices.Collect(maps.Keys(withArt))); err != nil {
+			return 0, err
+		}
+		for kind, m := range map[string]map[string]repo.LocalArt{"album": albumArt, "artist": artistArt} {
+			old, err := s.albums.LocalArts(ctx, kind)
+			if err != nil {
+				return 0, err
+			}
+			if maps.Equal(old, m) {
+				continue
+			}
+			if err := s.albums.ReplaceLocalArt(ctx, kind, m); err != nil {
+				return 0, err
+			}
+			artChanged = true
+		}
 	}
 	if err := s.albums.Rebuild(ctx); err != nil {
 		return 0, err
 	}
 	s.mu.Lock()
 	s.parsed = len(parsed)
-	s.changed = len(parsed) > 0 || deleted > 0
+	s.changed = len(parsed) > 0 || deleted > 0 || flipped > 0 || artChanged
 	s.mu.Unlock()
 	return len(keep), nil
 }
@@ -334,14 +375,22 @@ func (s *Scanner) progress() {
 	}
 }
 
-func (s *Scanner) walk() (out []fileEntry, errs int) {
+// walk lists the audio files, plus the cover and artist images by folder
+// ("" for the library root) so placeLocalArt never has to touch the disk.
+func (s *Scanner) walk() (out []fileEntry, imgs map[string][]localImg, errs int) {
+	imgs = map[string][]localImg{}
 	filepath.WalkDir(s.musicDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("scan: skip %s: %v", p, err)
 			errs++
 			return nil
 		}
-		if d.IsDir() || !exts[strings.ToLower(filepath.Ext(p))] {
+		ext := strings.ToLower(filepath.Ext(p))
+		if d.IsDir() || !exts[ext] && !imageExts[ext] {
+			return nil
+		}
+		name := strings.ToLower(strings.TrimSuffix(d.Name(), filepath.Ext(p)))
+		if imageExts[ext] && !slices.Contains(coverNames, name) && !slices.Contains(artistNames, name) {
 			return nil
 		}
 		info, err := d.Info()
@@ -353,13 +402,114 @@ func (s *Scanner) walk() (out []fileEntry, errs int) {
 		if err != nil {
 			return nil
 		}
+		if imageExts[ext] {
+			dir := slashDir(rel)
+			imgs[dir] = append(imgs[dir], localImg{name, repo.LocalArt{Path: rel, Mtime: info.ModTime().Unix()}})
+			return nil
+		}
 		out = append(out, fileEntry{abs: p, rel: rel, mtime: info.ModTime().Unix(), size: info.Size()})
 		return nil
 	})
-	return out, errs
+	return out, imgs, errs
 }
 
-func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[string]bool, artMu *sync.Mutex) (repo.Track, bool) {
+// The images a library carries for itself, matched case-insensitively on the
+// name without its extension and ranked best first: Navidrome's default order
+// for covers, Kodi's artist.*/folder.* for an artist folder — folder.* there
+// only when the folder is named after the artist, since a box set's or a genre
+// folder's folder.jpg is a cover, not a face.
+var (
+	coverNames  = []string{"cover", "folder", "front"}
+	artistNames = []string{"artist", "folder"}
+	imageExts   = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+)
+
+type localImg struct {
+	name string // lowercased, no extension
+	art  repo.LocalArt
+}
+
+// pickImg returns the best-ranked image in one folder's list.
+func pickImg(imgs []localImg, names []string) (repo.LocalArt, bool) {
+	for _, n := range names {
+		for _, im := range imgs {
+			if im.name == n {
+				return im.art, true
+			}
+		}
+	}
+	return repo.LocalArt{}, false
+}
+
+// slashDir is rel's folder with forward slashes, "" for the library root.
+func slashDir(rel string) string {
+	if dir := filepath.ToSlash(filepath.Dir(rel)); dir != "." {
+		return dir
+	}
+	return ""
+}
+
+// placeLocalArt assigns the walked images, both keyed by albumId: an album
+// takes the cover in its folder (a disc folder's own cover when the album
+// folder has none), and its artist image is the one in the folder holding the
+// album folders, on the albums of that folder's owner (folderOwner). Keyed by
+// album, with the tag in Name, because an edit or a MusicBrainz correction can
+// rename that album's artist; the API files the image under both. Nothing at
+// the library root is placed: the root is nobody's folder. rows is sorted
+// first so the pick never depends on worker order, which would re-place art
+// every scan.
+func placeLocalArt(imgs map[string][]localImg, rows []repo.PathInfo) (albums, artists map[string]repo.LocalArt) {
+	albums, artists = map[string]repo.LocalArt{}, map[string]repo.LocalArt{}
+	slices.SortFunc(rows, func(a, b repo.PathInfo) int { return strings.Compare(a.Path, b.Path) })
+	inFolder := map[string][]string{}            // artist folder -> album artists with an album in it
+	albumsIn := map[string]map[string][]string{} // artist folder -> albumId -> its album artists
+	for _, p := range rows {
+		dir, _ := albumDir(p.Path)
+		if dir == "" {
+			continue
+		}
+		if _, ok := albums[p.AlbumID]; !ok {
+			if a, ok := pickImg(imgs[dir], coverNames); ok {
+				albums[p.AlbumID] = a
+			} else if a, ok := pickImg(imgs[slashDir(p.Path)], coverNames); ok {
+				albums[p.AlbumID] = a
+			}
+		}
+		if parent := path.Dir(dir); parent != "." {
+			if !slices.Contains(inFolder[parent], p.AlbumArtist) {
+				inFolder[parent] = append(inFolder[parent], p.AlbumArtist)
+			}
+			// several when no ALBUMARTIST tag: each track's artist stands in,
+			// guest credits and all
+			if albumsIn[parent] == nil {
+				albumsIn[parent] = map[string][]string{}
+			}
+			if aas := albumsIn[parent][p.AlbumID]; !slices.Contains(aas, p.AlbumArtist) {
+				albumsIn[parent][p.AlbumID] = append(aas, p.AlbumArtist)
+			}
+		}
+	}
+	for _, folder := range slices.Sorted(maps.Keys(inFolder)) {
+		who := folderOwner(path.Base(folder), inFolder[folder])
+		names := artistNames[:1] // artist.*
+		if strings.EqualFold(who, path.Base(folder)) {
+			names = artistNames
+		}
+		a, ok := pickImg(imgs[folder], names)
+		if who == "" || !ok {
+			continue
+		}
+		a.Name = who
+		for id, aas := range albumsIn[folder] {
+			if slices.Contains(aas, who) {
+				artists[id] = a
+			}
+		}
+	}
+	return albums, artists
+}
+
+func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, claimed map[string]bool, artMu *sync.Mutex) (repo.Track, bool) {
 	tags, err := taglib.ReadTags(fe.abs)
 	if err != nil {
 		log.Printf("scan: skip %s: %v", fe.abs, err)
@@ -399,7 +549,7 @@ func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[stri
 	}
 
 	if len(props.Images) > 0 {
-		s.extractArt(fe.abs, albumID, artDir, artSeen, artMu)
+		s.extractArt(fe.abs, albumID, artDir, claimed, artMu)
 	}
 
 	format := strings.ToUpper(props.Format)
@@ -439,29 +589,103 @@ func (s *Scanner) parseOne(fe fileEntry, scanAt, artDir string, artSeen map[stri
 	}, true
 }
 
-// extractArt writes the embedded front cover to artDir/<albumId>.jpg once per
-// album (legacy always used .jpg regardless of image bytes; clients sniff).
-func (s *Scanner) extractArt(abs, albumID, artDir string, artSeen map[string]bool, artMu *sync.Mutex) {
+// extractArt writes the embedded front cover of a new or changed file to
+// artDir/<albumId>.jpg, once per album per scan (legacy always used .jpg
+// regardless of image bytes; clients sniff). Overwriting is the point: a cover
+// replaced in a tag editor changes the file, and the served cover follows.
+func (s *Scanner) extractArt(abs, albumID, artDir string, claimed map[string]bool, artMu *sync.Mutex) {
 	artMu.Lock()
-	if artSeen[albumID] {
+	if claimed[albumID] {
 		artMu.Unlock()
 		return
 	}
-	artSeen[albumID] = true // claim before the slow read so no other worker duplicates it
+	claimed[albumID] = true // claim before the slow read so no other worker duplicates it
 	artMu.Unlock()
 
 	img, err := taglib.ReadImage(abs)
 	if err == nil && len(img) > 0 {
-		err = os.WriteFile(filepath.Join(artDir, albumID+".jpg"), img, 0o644)
+		err = writeFileAtomic(filepath.Join(artDir, albumID+".jpg"), img)
 	}
 	if err != nil || len(img) == 0 {
 		artMu.Lock()
-		delete(artSeen, albumID)
+		delete(claimed, albumID)
 		artMu.Unlock()
 		if err != nil {
 			log.Printf("scan: skip art %s: %v", albumID, err)
 		}
 	}
+}
+
+// folderOwner is whose portrait a folder's artist image is: the album artist
+// named like the folder, else the shortest one every album artist in it builds
+// on — "The Beatles" in a folder that also holds "The Beatles & Tony
+// Sheridan", or the only one there is. "" when the folder holds unrelated
+// artists, as a genre folder or a composer's folder of performers' albums
+// does: a guess there hands one person's face to everyone.
+func folderOwner(base string, names []string) string {
+	for _, n := range names {
+		if strings.EqualFold(n, base) {
+			return n
+		}
+	}
+	byLen := slices.SortedFunc(slices.Values(names), func(a, b string) int { return cmp.Compare(len(a), len(b)) })
+	for _, c := range byLen {
+		if !slices.ContainsFunc(names, func(n string) bool {
+			return !strings.Contains(strings.ToLower(n), strings.ToLower(c))
+		}) {
+			return c
+		}
+	}
+	return ""
+}
+
+// refreshStaleArt re-reads the newest file of every album whose extracted art
+// is older than that file. The pool only sees changed files, and a scanner
+// before this one recorded a re-tagged file as seen without ever re-reading
+// its cover; this is what heals those. Once per album: a rewrite leaves the
+// art newer than the file, and a file with no picture gets the art touched so
+// it is not re-read every scan.
+func (s *Scanner) refreshStaleArt(rows []repo.PathInfo, artDir string, claimed map[string]bool) {
+	newest := map[string]repo.PathInfo{}
+	for _, p := range rows {
+		if p.Mtime > newest[p.AlbumID].Mtime {
+			newest[p.AlbumID] = p
+		}
+	}
+	var mu sync.Mutex // extractArt's claim lock; nothing else runs now
+	for id, p := range newest {
+		art := filepath.Join(artDir, id+".jpg")
+		fi, err := os.Stat(art)
+		if claimed[id] || err != nil || fi.ModTime().Unix() >= p.Mtime {
+			continue
+		}
+		s.extractArt(filepath.Join(s.musicDir, p.Path), id, artDir, claimed, &mu)
+		if !claimed[id] {
+			now := time.Now()
+			os.Chtimes(art, now, now)
+		}
+	}
+}
+
+// writeFileAtomic replaces dst in one rename, so an art request racing a
+// rescan never serves half a cover.
+func writeFileAtomic(dst string, b []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), dst)
 }
 
 // albumIdentity derives the album id from where the file lives, with the ALBUM
@@ -471,22 +695,7 @@ func (s *Scanner) extractArt(abs, albumID, artDir string, artSeen map[string]boo
 // the parsed subset, so adding one file could silently re-key a whole folder.
 // Returns the id and the disc number recovered from a CD1/Disc 2 folder (0 = none).
 func albumIdentity(rel, album, albumArtist string) (id string, discFromDir int) {
-	dir := filepath.ToSlash(filepath.Dir(rel))
-	if dir == "." {
-		dir = ""
-	}
-	if dir != "" {
-		// fold at most once, and only when a parent segment survives — so
-		// MUSIC_DIR/CD1/*.flac keeps its own group rather than dumping into the
-		// root pool. ponytail: one level; recurse if a real library ever nests
-		// disc folders.
-		if m := discSegRE.FindStringSubmatch(path.Base(dir)); m != nil && strings.Contains(dir, "/") {
-			discFromDir = discNum(m[1])
-			if dir = path.Dir(dir); dir == "." {
-				dir = ""
-			}
-		}
-	}
+	dir, discFromDir := albumDir(rel)
 	dirKey := strings.ToLower(dir)
 	// ponytail: no dash/quote folding, no NFKC — dirKey already separates a
 	// remaster from its original, and every normaliser addition is a permanent
@@ -503,6 +712,22 @@ func albumIdentity(rel, album, albumArtist string) (id string, discFromDir int) 
 		aaKey = strings.ToLower(albumArtist)
 	}
 	return sha1Hex(dirKey + "\x00" + albumKey + "\x00" + aaKey), discFromDir
+}
+
+// albumDir is the folder an album lives in: the file's own folder with a disc
+// subfolder (CD1, Disc 2) folded into its parent, "" at the library root.
+// Returns the disc number the fold recovered (0 = none).
+func albumDir(rel string) (dir string, discFromDir int) {
+	dir = slashDir(rel)
+	// fold at most once, and only when a parent segment survives — so
+	// MUSIC_DIR/CD1/*.flac keeps its own group rather than dumping into the
+	// root pool. ponytail: one level; recurse if a real library ever nests
+	// disc folders.
+	if m := discSegRE.FindStringSubmatch(path.Base(dir)); dir != "" && m != nil && strings.Contains(dir, "/") {
+		discFromDir = discNum(m[1])
+		dir = path.Dir(dir)
+	}
+	return dir, discFromDir
 }
 
 // AlbumID exposes the grouping rule to the one-shot migration-007 remap, which

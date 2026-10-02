@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"go.senan.xyz/taglib"
 
@@ -463,7 +464,7 @@ func TestWalkExtensionGate(t *testing.T) {
 		}
 	}
 	got := map[string]bool{}
-	files, _ := (&Scanner{musicDir: dir}).walk()
+	files, _, _ := (&Scanner{musicDir: dir}).walk()
 	for _, fe := range files {
 		got[filepath.ToSlash(fe.rel)] = true
 	}
@@ -552,5 +553,234 @@ func TestScanLastChanged(t *testing.T) {
 	}
 	if !s.LastChanged() {
 		t.Error("rescan after a deleted file reported no change, want changed")
+	}
+}
+
+// Whose portrait an artist folder's image is: never a guess between
+// unrelated artists.
+func TestFolderOwner(t *testing.T) {
+	for _, c := range []struct {
+		base  string
+		names []string
+		want  string
+	}{
+		{"Brel", []string{"Brel & Friends", "Brel"}, "Brel"},
+		{"kate", []string{"Peter & Friends", "Kate"}, "Kate"}, // the name alone decides
+		{"Beatles", []string{"The Beatles & Tony Sheridan", "The Beatles"}, "The Beatles"},
+		{"Misc", []string{"Someone"}, "Someone"},
+		{"Rock", []string{"X", "Y"}, ""},
+		{"Barber", []string{"Esther Yoo", "The Sixteen"}, ""},
+	} {
+		if got := folderOwner(c.base, c.names); got != c.want {
+			t.Errorf("folderOwner(%q, %q) = %q, want %q", c.base, c.names, got, c.want)
+		}
+	}
+}
+
+// The library's own images: a folder cover and an artist folder's portrait are
+// placed without any audio file changing, a genre folder's image is nobody's
+// portrait, removing a cover takes it back out, and a cover re-embedded in a
+// tag editor replaces the extracted one — also when an older scanner already
+// recorded the re-tagged file without re-reading it.
+func TestScanLibraryImages(t *testing.T) {
+	musicDir := fixtureTree(t, map[string]map[string][]string{
+		"Artist/Album/01.flac":      {taglib.Album: {"Album"}, taglib.AlbumArtist: {"Artist"}},
+		"Artist/Album2/CD1/01.flac": {taglib.Album: {"Album2"}, taglib.AlbumArtist: {"Artist"}},
+		"Genre/A1/01.flac":          {taglib.Album: {"A1"}, taglib.AlbumArtist: {"X"}},
+		"Genre/A2/01.flac":          {taglib.Album: {"A2"}, taglib.AlbumArtist: {"Y"}},
+		// the folder is named after one of its two album artists
+		"Brel/Album/01.flac": {taglib.Album: {"Album"}, taglib.AlbumArtist: {"Brel"}},
+		"Brel/Duets/01.flac": {taglib.Album: {"Duets"}, taglib.AlbumArtist: {"Brel & Friends"}},
+		// no ALBUMARTIST: each track's artist stands in, a guest credit too
+		"Solo/Album/01.flac": {taglib.Album: {"Album"}, taglib.Artist: {"Solo"}},
+		"Solo/Album/02.flac": {taglib.Album: {"Album"}, taglib.Artist: {"Solo feat. Guest"}},
+		// a box set's and a genre folder's folder.jpg are covers, not faces
+		"Artist/Box/Part A/01.flac": {taglib.Album: {"Part A"}, taglib.AlbumArtist: {"Artist"}},
+		"Soundtracks/OST/01.flac":   {taglib.Album: {"OST"}, taglib.AlbumArtist: {"Hans Zimmer"}},
+		"Disc/Set/CD1/01.flac":      {taglib.Album: {"Set"}, taglib.AlbumArtist: {"Disc"}},
+	})
+	dataDir := t.TempDir()
+	d, err := db.Open(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	tracks, albums := repo.NewTracks(d), repo.NewAlbums(d)
+	s := New(musicDir, dataDir, tracks, albums, nil)
+	ctx := context.Background()
+	scan := func() {
+		t.Helper()
+		if _, err := s.Scan(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(rel, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(musicDir, filepath.FromSlash(rel)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hasArt := func(rel string) bool {
+		t.Helper()
+		tr, err := tracks.ByID(ctx, sha1Hex(rel))
+		if err != nil || tr == nil {
+			t.Fatalf("track %s: %v", rel, err)
+		}
+		return tr.HasArt
+	}
+	scan()
+	if hasArt("Artist/Album/01.flac") {
+		t.Fatal("fixture already carries embedded art")
+	}
+	ids := albumIDs(t, ctx, tracks)
+
+	write("Artist/Album/cover.jpg", "cover")
+	write("Artist/Album/Folder.jpg", "loses to cover, though it sorts first on disk")
+	write("Artist/Album2/CD1/front.png", "disc front")
+	write("Genre/folder.jpg", "genre art")
+	write("Disc/Set/cover.jpg", "album folder above the disc folder")
+	scan()
+	if !s.LastChanged() {
+		t.Error("new library covers did not count as a change")
+	}
+	alb, err := albums.LocalArts(ctx, "album")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		ids["Artist/Album/01.flac"]:      "Artist/Album/cover.jpg",
+		ids["Artist/Album2/CD1/01.flac"]: "Artist/Album2/CD1/front.png",
+		ids["Disc/Set/CD1/01.flac"]:      "Disc/Set/cover.jpg",
+	}
+	if len(alb) != len(want) {
+		t.Errorf("album images = %v, want %v", alb, want)
+	}
+	for id, p := range want {
+		if alb[id].Path != filepath.FromSlash(p) {
+			t.Errorf("album %s image = %q, want %q", id, alb[id].Path, p)
+		}
+	}
+	if !hasArt("Artist/Album/01.flac") || !hasArt("Artist/Album2/CD1/01.flac") || hasArt("Genre/A1/01.flac") {
+		t.Error("hasArt not brought in line on files that did not change")
+	}
+
+	scan()
+	if s.LastChanged() {
+		t.Error("an unchanged library re-placed its images")
+	}
+
+	// an artist image flips no hasArt, so only the placement itself can say so
+	write("Artist/artist.png", "portrait")
+	write("Brel/folder.jpg", "Brel")
+	write("Solo/artist.jpg", "Solo")
+	write("Artist/Box/folder.jpg", "box cover")
+	write("Soundtracks/folder.jpg", "genre art")
+	scan()
+	if !s.LastChanged() {
+		t.Error("a new artist image did not count as a change")
+	}
+	art, err := albums.LocalArts(ctx, "artist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	portrait := repo.LocalArt{Path: filepath.FromSlash("Artist/artist.png"), Name: "Artist"}
+	brel := repo.LocalArt{Path: filepath.FromSlash("Brel/folder.jpg"), Name: "Brel"}
+	solo := repo.LocalArt{Path: filepath.FromSlash("Solo/artist.jpg"), Name: "Solo"}
+	strip := func(a repo.LocalArt) repo.LocalArt { a.Mtime = 0; return a }
+	if len(art) != 4 || strip(art[ids["Artist/Album/01.flac"]]) != portrait ||
+		strip(art[ids["Artist/Album2/CD1/01.flac"]]) != portrait || strip(art[ids["Brel/Album/01.flac"]]) != brel ||
+		strip(art[ids["Solo/Album/01.flac"]]) != solo {
+		t.Errorf("artist images = %v, want Artist's on both their albums, Brel's on his own only, Solo's despite the guest credit, and no box-set or genre folder.jpg", art)
+	}
+
+	// replaced in place: same name, same count, new file
+	was := art[ids["Artist/Album/01.flac"]].Mtime
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(filepath.Join(musicDir, "Artist", "artist.png"), later, later); err != nil {
+		t.Fatal(err)
+	}
+	scan()
+	if art, _ = albums.LocalArts(ctx, "artist"); !s.LastChanged() || art[ids["Artist/Album/01.flac"]].Mtime == was {
+		t.Error("an artist image replaced in place was not picked up")
+	}
+
+	os.Remove(filepath.Join(musicDir, "Artist", "Album", "cover.jpg"))
+	os.Remove(filepath.Join(musicDir, "Artist", "Album", "Folder.jpg"))
+	scan()
+	if hasArt("Artist/Album/01.flac") {
+		t.Error("a removed cover left hasArt set")
+	}
+
+	song := filepath.Join(musicDir, "Genre", "A1", "01.flac")
+	slot := filepath.Join(dataDir, "art", ids["Genre/A1/01.flac"]+".jpg")
+	jpeg := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	setTime := func(p string, ago time.Duration) {
+		t.Helper()
+		at := time.Now().Add(-ago)
+		if err := os.Chtimes(p, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, img := range [][]byte{append(jpeg, "first"...), append(jpeg, "the second"...)} {
+		if err := taglib.WriteImage(song, img); err != nil {
+			t.Fatal(err)
+		}
+		// FLAC padding can absorb the picture, so only the mtime tells the
+		// scanner; a real edit lands seconds apart, not within this test's second
+		setTime(song, time.Duration(10-i)*time.Hour)
+		scan()
+		if got, _ := os.ReadFile(slot); string(got) != string(img) {
+			t.Errorf("served embedded art = %q, want the one now in the file %q", got, img)
+		}
+		if !hasArt("Genre/A1/01.flac") {
+			t.Error("embedded art left hasArt unset")
+		}
+	}
+
+	// what an older scanner left: art extracted, the file re-tagged after it,
+	// and the new mtime+size recorded without the cover being read again
+	third := append(jpeg, "a third cover"...)
+	setTime(slot, 3*time.Hour)
+	if err := taglib.WriteImage(song, third); err != nil {
+		t.Fatal(err)
+	}
+	setTime(song, 2*time.Hour)
+	fi, err := os.Stat(song)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(`UPDATE tracks SET mtime = ?, size = ? WHERE id = ?`,
+		fi.ModTime().Unix(), fi.Size(), sha1Hex("Genre/A1/01.flac")); err != nil {
+		t.Fatal(err)
+	}
+	scan()
+	if got, _ := os.ReadFile(slot); string(got) != string(third) {
+		t.Errorf("served embedded art = %q, want the re-tagged cover %q", got, third)
+	}
+	before, _ := os.Stat(slot)
+	scan()
+	if after, _ := os.Stat(slot); !after.ModTime().Equal(before.ModTime()) {
+		t.Error("healed art was read again on the next scan")
+	}
+
+	// the same, but the newer file carries no picture: the art stays, and is
+	// marked read so the file is not opened again every scan
+	bare := filepath.Join(musicDir, "Genre", "A2", "01.flac")
+	bareSlot := filepath.Join(dataDir, "art", ids["Genre/A2/01.flac"]+".jpg")
+	if err := os.WriteFile(bareSlot, []byte("OLD"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setTime(bareSlot, 3*time.Hour)
+	setTime(bare, 2*time.Hour)
+	if fi, err = os.Stat(bare); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(`UPDATE tracks SET mtime = ? WHERE id = ?`, fi.ModTime().Unix(), sha1Hex("Genre/A2/01.flac")); err != nil {
+		t.Fatal(err)
+	}
+	scan()
+	after, _ := os.Stat(bareSlot)
+	if got, _ := os.ReadFile(bareSlot); string(got) != "OLD" || time.Since(after.ModTime()) > time.Hour {
+		t.Errorf("art of a picture-less newer file = %q, touched %v ago; want kept and touched", got, time.Since(after.ModTime()))
 	}
 }

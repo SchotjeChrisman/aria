@@ -141,13 +141,16 @@ func (r *Tracks) Count(ctx context.Context) (int, error) {
 }
 
 // PathInfo is what the incremental scanner needs to decide skip vs re-parse.
+// AlbumID and AlbumArtist let it place library images on albums whose files
+// it skipped.
 type PathInfo struct {
-	ID, Path, AddedAt string
-	Mtime, Size       int64
+	ID, Path, AddedAt    string
+	AlbumID, AlbumArtist string
+	Mtime, Size          int64
 }
 
 func (r *Tracks) ListPathInfo(ctx context.Context) ([]PathInfo, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, path, addedAt, mtime, size FROM tracks`)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, path, addedAt, albumId, albumArtist, mtime, size FROM tracks`)
 	if err != nil {
 		return nil, err
 	}
@@ -155,12 +158,29 @@ func (r *Tracks) ListPathInfo(ctx context.Context) ([]PathInfo, error) {
 	var out []PathInfo
 	for rows.Next() {
 		var p PathInfo
-		if err := rows.Scan(&p.ID, &p.Path, &p.AddedAt, &p.Mtime, &p.Size); err != nil {
+		if err := rows.Scan(&p.ID, &p.Path, &p.AddedAt, &p.AlbumID, &p.AlbumArtist, &p.Mtime, &p.Size); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// SetHasArt makes hasArt true for exactly the tracks of albumIDs and returns
+// how many rows flipped. The scanner runs it after every walk, so a cover added
+// to or removed from a folder reaches tracks whose own files did not change.
+func (r *Tracks) SetHasArt(ctx context.Context, albumIDs []string) (int64, error) {
+	ids, err := json.Marshal(append([]string{}, albumIDs...)) // [] not null: none means clear all
+	if err != nil {
+		return 0, err
+	}
+	res, err := r.db.ExecContext(ctx, `WITH art(id) AS (SELECT value FROM json_each(?))
+		UPDATE tracks SET hasArt = (albumId IN art)
+		WHERE hasArt <> (albumId IN art)`, string(ids))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (r *Tracks) query(ctx context.Context, q string, args ...any) ([]Track, error) {

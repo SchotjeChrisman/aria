@@ -120,3 +120,21 @@ func TestTracksDeleteNotIn(t *testing.T) {
 		t.Errorf("byAlbum = %v, %v; want [id1]", ts, err)
 	}
 }
+
+// SetHasArt with no album left holding art clears every flag: an empty list
+// must not read as SQL NULL, which matches nothing and flips nothing.
+func TestTracksSetHasArtNone(t *testing.T) {
+	r := NewTracks(testDB(t))
+	ctx := context.Background()
+	t1 := track("id1", "a/one.flac", "One", "A", "Alb")
+	t1.HasArt = true
+	if err := r.UpsertAll(ctx, []Track{t1}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.SetHasArt(ctx, nil); err != nil || n != 1 {
+		t.Fatalf("SetHasArt(nil) flipped %d (%v), want 1", n, err)
+	}
+	if got, _ := r.ByID(ctx, "id1"); got.HasArt {
+		t.Error("hasArt still set after its cover went")
+	}
+}
