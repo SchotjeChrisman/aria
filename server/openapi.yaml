@@ -228,9 +228,14 @@ paths:
       tags: [streaming]
       summary: Album cover art
       description: |
-        Cached cover file (embedded art extracted at scan, or fetched by enrichment).
-        Always served from `<albumId>.jpg` but the bytes may actually be PNG —
-        clients should sniff. Non-40-hex albumId yields 404.
+        The album's cover. The local library leads: unless the editor picked
+        another source (artSource), this is the cover image in the album folder
+        (cover/folder/front .jpg|.jpeg|.png|.webp, case-insensitive), else the
+        embedded art the scanner extracted, and only then art fetched by
+        enrichment. The scanner re-extracts embedded art when a file changes.
+        Slots are stored as `<albumId>.jpg` but the bytes may actually be PNG —
+        clients should sniff. `Cache-Control: no-cache` with an ETag: a rescan
+        can change what the same URL holds. Non-40-hex albumId yields 404.
       operationId: getArt
       parameters:
         - { name: albumId, in: path, required: true, schema: { $ref: '#/components/schemas/Sha1' } }
@@ -584,7 +589,16 @@ paths:
     get:
       tags: [enrichment]
       summary: Bulk name-to-portrait map
-      description: Every enriched person/composer with an image; edited artist portraits win over enrichment.
+      description: |
+        Every person/composer with an image. An edited portrait wins, then an
+        image in the artist's own folder (artist.*, or folder.* when the folder
+        is named after them; .jpg|.jpeg|.png|.webp in the folder holding their
+        album folders), then enrichment. A library
+        image is a server-relative `/api/people/img/{name}?v=…` URL to resolve
+        against the server, listed under the album artist tag its folder
+        belongs to, that name's Latin spelling, and the name an album edit or a
+        MusicBrainz correction gives that artist (never a classical lead
+        performer); an edited portrait is also listed under the Latin name.
       operationId: getPeople
       responses:
         '200':

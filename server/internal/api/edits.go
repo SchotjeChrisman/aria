@@ -213,7 +213,7 @@ func patchEdits(ctx context.Context, d *Deps, kind, key string, patch map[string
 }
 
 // prepareArtSource validates and effects an album artSource patch in place:
-// rejects unknown values, forbids "file" without embedded art, fetches+writes
+// rejects unknown values, forbids "file" without local art, fetches+writes
 // the .api.jpg slot when picking "api" (if absent), and injects the bumped
 // artVersion (backend-owned, never client-set). Returns (0,"") on success or an
 // HTTP status+message. A nil value (clear override) only bumps the version.
@@ -225,8 +225,8 @@ func prepareArtSource(ctx context.Context, d *Deps, id string, ts []repo.Track, 
 		}
 		switch s {
 		case "file":
-			if !embeddedArtPresent(d.Cfg.DataDir, id) {
-				return http.StatusBadRequest, "no embedded art"
+			if !localArtPresent(ctx, d, id) {
+				return http.StatusBadRequest, "no local art"
 			}
 		case "api":
 			p := artSlotPath(d.Cfg.DataDir, id, "api")
@@ -488,6 +488,10 @@ func registerEdits(mux *http.ServeMux, d *Deps) {
 						orig[k] = v
 					}
 				}
+			}
+			// what shows without an edit: the library's own image leads
+			if img, ok := localPortrait(ctx, d, r.PathValue("key"), key); ok {
+				orig["image"] = img
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"original": orig, "overrides": overrides})
 

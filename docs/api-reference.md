@@ -179,7 +179,7 @@ and track edits + derived `releaseType` / `genres` / `tags` / ReplayGain.
 | `orchestra` | string | from the enrich-cache `track` blob |
 | `performers` | array of `{"name":string,"role":string}` | from the enrich-cache `track` blob |
 | `albumArtists` | array of string | classical album-header credit line; only when the MB credit split into composers+performers **and** `classicalDisplayArtist != "0"`. **Deleted whenever an album edit sets `albumArtist`** |
-| `artVersion` | int | fanned from the album edit row; bumped by art changes. Use as an art cache-buster |
+| `artVersion` | int | the album edit row's counter (bumped by art edits) plus the mtimes of the album's folder cover and extracted embedded art, so it also moves when a cover file changes. Use only as an art cache-buster |
 
 **Field precedence inside a merged track** (`library.go:487-536`, later wins):
 
@@ -243,7 +243,9 @@ concurrent requests.
 * `200`: the enrich-cache `artist` blob with the DB artist-edit row spread over
   the top. All fields `omitempty`, so treat every one as optional: `type`,
   `area`, `born`, `died`, `members[]`, `bands[]`, `bio`, `url`, `image`
-  (external portrait URL — prefer proxying via `/api/people/img/{name}`),
+  (external portrait URL — prefer proxying via `/api/people/img/{name}`; an
+  image in the artist's own library folder replaces it as a server-relative
+  `/api/people/img/{name}?v=…` URL, and an edited one beats both),
   `imgSrc` (`wikipedia|deezer`), `similar[] {name, image|null}`,
   `discography[] {title, cover|null, date|null, type, deezerId?}`,
   `discographyAt`, `imgCheckedAt`, `bioCheckedAt`, `mbid`, `nameLatin`,
@@ -258,26 +260,38 @@ concurrent requests.
 Classical composer hero card. **Cache-only — never hits the network**, so a cold
 entry is simply a 404 and the call never blocks.
 
-* `200`: the raw cached blob served verbatim. All fields `omitempty`:
-  `fullName`, `epoch`, `portrait` (URL), `born` (year only), `died` (year only),
-  `bio`, `url`.
-* `404` text/plain when absent or when the cached blob is the literal `null`
-  (a cached miss). No edit overlay on this route.
+* `200`: the cached blob. All fields `omitempty`: `fullName`, `epoch`,
+  `portrait` (URL), `born` (year only), `died` (year only), `bio`, `url`.
+  `portrait` is the photo the person's avatars show: an edited artist photo,
+  else the image in their own library folder (a server-relative
+  `/api/people/img/{name}?v=…` URL), else the cached one.
+* `404` text/plain when the entry is absent or the literal `null` (a cached
+  miss) **and** there is no photo for the name; with a photo it is
+  `{"portrait": …}` alone. The portrait is the only edit overlay on this
+  route.
 
 ### `GET /api/people`
 
-Bulk portrait map. Memoized 60 s server-side.
+Bulk portrait map. Memoized 60 s server-side, dropped early whenever the
+library generation moves (a scan, an edit, an enrichment pass).
 
-* `200`: a flat `{"<person name>": "<external image URL>"}` — no wrapper key, no
-  nulls. Keys are **raw stored names** for entries written before Latinisation
-  and the artist-edit key otherwise, so they do not always match the spellings
-  `/api/tracks` served. Fetch the picture via `/api/people/img/{name}` using the
-  same key.
+* `200`: a flat `{"<person name>": "<image URL>"}` — no wrapper key, no nulls.
+  Precedence: an edited portrait, then an image in the artist's own library
+  folder, then enrichment. A library image is a **server-relative**
+  `/api/people/img/{name}?v=…` URL — resolve it against the server; `v` moves
+  when the file does. Keys are **raw stored names** for entries written before
+  Latinisation and the artist-edit key otherwise; an edited portrait is also
+  listed under the Latin display name. A library image is listed under the
+  album artist tag its folder belongs to, that name's Latin spelling, and the
+  name an album edit or a MusicBrainz correction gives that album's artist —
+  never under a classical lead performer the album is displayed with. Fetch the
+  picture via `/api/people/img/{name}` using the same key.
 
 ### `GET /api/people/img/{name}`
 
 Portrait proxy: fetches the `/api/people` URL once, caches under
-`DATA_DIR/people/`, serves from the LAN.
+`DATA_DIR/people/`, serves from the LAN. A library image is served straight
+from the music dir with `Cache-Control: no-cache`.
 
 * Binary image bytes (`image/jpeg|png|webp`), `Cache-Control: public,
   max-age=31536000`, `ETag`, Range / `If-None-Match` supported. **Not JSON.**
@@ -289,18 +303,24 @@ Portrait proxy: fetches the `/api/people` URL once, caches under
 Album cover image.
 
 * Query: `source` — optional, one of:
-  * `""` (default) — resolve the album's stored `artSource`
-  * `"file"` — embedded/scanner slot
+  * `""` (default) — resolve the album's stored `artSource`; with none set,
+    `file` and then `api`
+  * `"file"` — the library's own art: the cover image in the album folder
+    (`cover`, `folder`, `front` with `.jpg|.jpeg|.png|.webp`, case-insensitive;
+    a disc folder's own when the album folder has none), else the embedded art
+    the scanner extracted (re-extracted whenever a file changes)
   * `"api"` — enriched slot, falling back to an uncached **live remote preview**
   * `"custom"` — uploaded slot
   * anything else ⇒ `400 {"error":"invalid source"}`
-* Binary `image/jpeg`. **Not JSON.** On-disk slots get
-  `Cache-Control: public, max-age=31536000` + `ETag` + Range via
-  `http.ServeContent`. The live remote preview is `Cache-Control: no-store`.
+* Binary image (`image/jpeg` for the slots, a folder cover's own type). **Not
+  JSON.** On-disk images get `Cache-Control: no-cache` + `ETag` + Range via
+  `http.ServeContent` — a rescan can change what the same URL holds. The live
+  remote preview is `Cache-Control: no-store`.
 * `404` text/plain when the id is malformed or no slot resolves.
 * Excluded from gzip.
-* **Because of the one-year max-age, append the track's `artVersion` as a
-  cache-busting query token.** The server ignores unknown params.
+* **Append the track's `artVersion` as a cache-busting query token**, so a
+  client-side image cache refetches after an art edit. The server ignores
+  unknown params.
 
 ### `POST /api/art/{albumId}`
 
@@ -1244,8 +1264,8 @@ enrichment in every view. Nothing is ever written back to the audio files.
   **every track** of the album in `/api/tracks`; the rest surface through
   `/api/album/{albumId}/info`.
 * Errors: `404` text/plain with newline when the album has no tracks;
-  `400 {"error":"invalid edits"|"invalid artSource"|"no embedded art"}`
-  (`artSource:"file"` with no embedded art);
+  `400 {"error":"invalid edits"|"invalid artSource"|"no local art"}`
+  (`artSource:"file"` with neither a folder cover nor embedded art);
   `502 {"error":"art fetch failed"}` (`artSource:"api"` and the fetch failed);
   `500 {"error":"art write failed"|"internal error"}`.
 * Side effects: setting `state` takes effect **immediately** — `local` drops the
@@ -1514,12 +1534,14 @@ Concrete gotchas, in rough order of how much damage they cause.
     mutation, favourite toggle, edit, scan, or enrichment run invalidates it, so
     a mutation followed immediately by a refetch **does** see fresh data.
 36. `/api/people` and `/api/newreleases` are memoized **60 s** server-side —
-    polling faster is pointless.
+    polling faster is pointless. `/api/people` is also dropped on every library
+    generation, so refetch it on the `library` SSE event.
 37. `/api/mixes` and `/api/plays/counts` are recomputed per request, and mixes
     runs several full-table queries. **Do not poll them in a render loop.**
-38. Album art and portraits are `max-age=31536000` with an `ETag`. **You must
-    append the track's `artVersion` as a query token to bust that cache** after
-    an art change. External covers are `max-age=2592000`; booklets are `private,
+38. Album art and library portraits are `no-cache` with an `ETag`; proxied
+    remote portraits are `max-age=31536000`. **Append the track's `artVersion`
+    to art URLs, and a token of the `/api/people` value to portrait URLs**, so
+    a client image cache refetches after a change. External covers are `max-age=2592000`; booklets are `private,
     no-cache`.
 
 ### SSE

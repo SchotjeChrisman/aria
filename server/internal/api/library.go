@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -338,6 +340,23 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		albumGain[id], albumPeak[id] = analyze.AlbumGain(ats), analyze.AlbumPeak(ats)
 	}
 
+	covers, err := d.Albums.LocalArts(ctx, "album")
+	if err != nil {
+		return nil, err
+	}
+	artTokens := map[string]int64{}
+	artToken := func(id string) int64 {
+		v, ok := artTokens[id]
+		if !ok {
+			v = covers[id].Mtime
+			if fi, err := os.Stat(artSlotPath(d.Cfg.DataDir, id, "file")); err == nil {
+				v += fi.ModTime().Unix()
+			}
+			artTokens[id] = v
+		}
+		return v
+	}
+
 	editAlbum := make(map[string]map[string]any, len(editAlbumRaw))
 	for k, raw := range editAlbumRaw {
 		var m map[string]any
@@ -487,7 +506,9 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 		if raw, ok := enrichTrack[t.ID]; ok {
 			overlay(m, raw) // composer/conductor/orchestra/performers corrections
 		}
-		if t.HasArt || artByAlbum[t.AlbumID] {
+		// a cover picked in the editor (an upload, the api slot) exists even
+		// when the files carry none
+		if t.HasArt || artByAlbum[t.AlbumID] || editAlbum[t.AlbumID]["artSource"] != nil {
 			m["hasArt"] = true
 		}
 		// Album/artist/year corrections from the confirmed release. Before the
@@ -530,6 +551,13 @@ func buildMergedTracks(ctx context.Context, d *Deps) ([]map[string]any, error) {
 			if _, ok := ae["albumArtist"]; ok {
 				delete(m, "albumArtists")
 			}
+		}
+		// the served cover also changes without an edit — a replaced
+		// cover.jpg, a cover re-embedded in the files — so its mtimes join the
+		// edit counter in the cache-bust token the app puts on the art URL
+		if tok := artToken(t.AlbumID); tok != 0 {
+			v, _ := m["artVersion"].(float64)
+			m["artVersion"] = int64(v) + tok
 		}
 		if raw, ok := editTrack[t.ID]; ok {
 			overlay(m, raw)
@@ -1020,7 +1048,14 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 		if doc != nil {
 			json.Unmarshal(doc, &p)
 		}
-		// DB edits beat enrichment, and make even MB-unknown names real
+		// the library's own image beats the fetched one
+		if img, ok := localPortrait(r.Context(), d, r.PathValue("name"), name); ok {
+			if p == nil {
+				p = map[string]any{}
+			}
+			p["image"] = img
+		}
+		// DB edits beat both, and make even MB-unknown names real
 		if raw, err := d.Edits.Get(r.Context(), "artist", name); err == nil && raw != nil {
 			if p == nil {
 				p = map[string]any{}
@@ -1040,12 +1075,36 @@ func RegisterLibrary(mux *http.ServeMux, d *Deps) {
 	// the raw name too, so a Latinised composer needs resolving first or the
 	// page 404s and loses its whole hero card.
 	mux.HandleFunc("GET /api/composer/{name}", func(w http.ResponseWriter, r *http.Request) {
-		doc, found, err := d.EnrichCache.Get(r.Context(), "composer", rawName(r.Context(), d, r.PathValue("name")))
-		if err != nil || !found || string(doc) == "null" {
+		ctx := r.Context()
+		raw := rawName(ctx, d, r.PathValue("name"))
+		doc, _, err := d.EnrichCache.Get(ctx, "composer", raw)
+		if err != nil {
 			notFound(w)
 			return
 		}
-		writeRawJSON(w, http.StatusOK, doc)
+		// the hero shows the photo every avatar of this person shows — the
+		// people map's: an edited one, the library's own, else the fetched
+		// face (an artist entry's beats the composer cache's own portrait).
+		// A photo alone still makes a hero, for a composer nothing knew of.
+		img := ""
+		if idx, err := people(ctx, d); err == nil {
+			img = cmp.Or(idx.urls[r.PathValue("name")], idx.urls[raw])
+		}
+		var p map[string]any
+		json.Unmarshal(doc, &p) // absent or a cached miss ("null") leaves it nil
+		if img == "" {
+			if p == nil {
+				notFound(w)
+				return
+			}
+			writeRawJSON(w, http.StatusOK, doc)
+			return
+		}
+		if p == nil {
+			p = map[string]any{}
+		}
+		p["portrait"] = img
+		writeJSON(w, http.StatusOK, p)
 	})
 
 	mux.HandleFunc("GET /api/lyrics/{id}", func(w http.ResponseWriter, r *http.Request) {

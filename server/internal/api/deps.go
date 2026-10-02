@@ -97,6 +97,8 @@ type Deps struct {
 	tracksGz   []byte     // pre-gzipped JSON of the full view (same generation)
 	buildMu    sync.Mutex // single-flight for buildMergedTracks
 	gzMu       sync.Mutex // single-flight for the encode (must NOT nest inside buildMu)
+
+	people memo[peopleIdx] // GET /api/people; dropped with the merged view
 }
 
 // bgCtx returns the app-lifetime context (Background until main wires Bg).
@@ -189,11 +191,13 @@ func (d *Deps) InvalidateTracksQuiet() { d.invalidateTracks() }
 // invalidateTracks does the cache drop and returns the new generation.
 func (d *Deps) invalidateTracks() uint64 {
 	d.tracksMu.Lock()
-	defer d.tracksMu.Unlock()
 	d.tracksGen++
 	d.tracksView = nil
 	d.tracksGz = nil
-	return d.tracksGen
+	gen := d.tracksGen
+	d.tracksMu.Unlock()
+	d.people.reset() // after tracksMu: a slow people rebuild must not hold it up
+	return gen
 }
 
 // TracksGen is the current merged-view generation, sent to every new SSE

@@ -223,6 +223,16 @@ lyrics, on demand), and — only with a token, see below — **Discogs**
 (styles, label, catalogue number). Corrections overlay file tags at read time;
 your files are never modified.
 
+Images in the library lead. An album shows the cover image in its folder
+(`cover`, `folder` or `front`, as `.jpg`, `.jpeg`, `.png` or `.webp`), else the
+art embedded in its files. An artist shows `artist.*` from the folder that
+holds their album folders when that folder is theirs — named after them, or
+holding only their albums and collaborations — and `folder.*` only from a
+folder named exactly after them, since a box set's or a genre folder's
+`folder.jpg` is a cover. Fetched covers and photos only fill in
+where the library has none, and a cover or photo picked in the editor beats
+both.
+
 ### Genres
 
 Your file's `GENRE` tag is never touched. It is *decomposed* into a canonical,

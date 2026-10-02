@@ -42,10 +42,20 @@ func artSlotPath(dataDir, id, source string) string {
 	}
 }
 
-// embeddedArtPresent reports real scanner-written embedded art (.jpg or the
-// legacy extension-less file), size > 0.
-func embeddedArtPresent(dataDir, id string) bool {
-	for _, p := range []string{artSlotPath(dataDir, id, "file"), filepath.Join(dataDir, "art", id)} {
+// localArtPaths lists the album's own art, best first: the cover image in its
+// folder, then the scanner-written embedded art (.jpg, then the legacy
+// extension-less file). The local library leads, so this is the "file" slot.
+func localArtPaths(ctx context.Context, d *Deps, id string) []string {
+	out := []string{artSlotPath(d.Cfg.DataDir, id, "file"), filepath.Join(d.Cfg.DataDir, "art", id)}
+	if a, ok, _ := d.Albums.LocalArtOf(ctx, "album", id); ok {
+		out = append([]string{filepath.Join(d.Cfg.MusicDir, a.Path)}, out...)
+	}
+	return out
+}
+
+// localArtPresent reports whether any of localArtPaths is a non-empty file.
+func localArtPresent(ctx context.Context, d *Deps, id string) bool {
+	for _, p := range localArtPaths(ctx, d, id) {
 		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Size() > 0 {
 			return true
 		}
@@ -77,26 +87,37 @@ func mbidOf(ts []repo.Track) string {
 	return ""
 }
 
-// serveArtSlot serves the on-disk slot with the long-lived immutable cache +
-// ETag; false when the file is absent. The file slot also honours the legacy
-// extension-less path.
-func serveArtSlot(w http.ResponseWriter, r *http.Request, dataDir, id, source string) bool {
-	f, err := os.Open(artSlotPath(dataDir, id, source))
-	if err != nil && source == "file" {
-		f, err = os.Open(filepath.Join(dataDir, "art", id))
+// serveArtSlot serves an on-disk slot; false when the file is absent. The file
+// slot is the album's local art, folder cover first (localArtPaths).
+func serveArtSlot(w http.ResponseWriter, r *http.Request, d *Deps, id, source string) bool {
+	if source == "file" {
+		for _, p := range localArtPaths(r.Context(), d, id) {
+			if serveArtFile(w, r, p) {
+				return true
+			}
+		}
+		return false
 	}
+	return serveArtFile(w, r, artSlotPath(d.Cfg.DataDir, id, source))
+}
+
+// serveArtFile serves one image with an ETag; false when the file is absent.
+// no-cache, not a long max-age: a rescan or a replaced cover.jpg changes what
+// the same URL holds, so a browser revalidates (a 304 when nothing moved).
+// The type comes from the extension (slots are .jpg by legacy), else a sniff.
+func serveArtFile(w http.ResponseWriter, r *http.Request, path string) bool {
+	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
 	defer f.Close()
 	fi, err := f.Stat()
-	if err != nil || fi.IsDir() {
+	if err != nil || fi.IsDir() || fi.Size() == 0 {
 		return false
 	}
-	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, fi.ModTime().UnixNano(), fi.Size()))
-	http.ServeContent(w, r, "", fi.ModTime(), f) // handles If-None-Match/Range
+	http.ServeContent(w, r, filepath.Base(path), fi.ModTime(), f) // handles If-None-Match/Range
 	return true
 }
 
@@ -124,11 +145,11 @@ func serveArtPreview(w http.ResponseWriter, r *http.Request, d *Deps, id string)
 }
 
 func registerArt(mux *http.ServeMux, d *Deps) {
-	// art lives under DATA_DIR/art/ in per-source slots: <id>.jpg (embedded,
-	// scanner), <id>.api.jpg (enriched/picked API), <id>.custom.jpg (upload).
-	// On-disk slots get a long client cache; the artVersion query token busts
-	// it. ?source= selects a slot directly (dialog thumbnails); a missing api
-	// slot streams a live remote preview, uncached.
+	// art lives in per-source slots: file (the album folder's cover image, else
+	// the embedded art the scanner wrote to DATA_DIR/art/<id>.jpg), api
+	// (<id>.api.jpg, enriched/picked) and custom (<id>.custom.jpg, upload).
+	// ?source= selects a slot directly (dialog thumbnails); a missing api slot
+	// streams a live remote preview, uncached.
 	mux.HandleFunc("GET /api/art/{albumId}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("albumId")
 		if !albumIDRe.MatchString(id) {
@@ -140,24 +161,19 @@ func registerArt(mux *http.ServeMux, d *Deps) {
 			httpError(w, http.StatusBadRequest, "invalid source")
 			return
 		}
-		dir := d.Cfg.DataDir
-
 		if source == "" { // resolve stored artSource (default when none set)
 			stored, _ := albumArtMeta(r.Context(), d, id)
 			switch stored {
 			case "custom":
-				if !serveArtSlot(w, r, dir, id, "custom") {
+				if !serveArtSlot(w, r, d, id, "custom") {
 					notFound(w)
 				}
 			case "api":
-				if !serveArtSlot(w, r, dir, id, "api") {
+				if !serveArtSlot(w, r, d, id, "api") {
 					serveArtPreview(w, r, d, id)
 				}
-			default: // "" (none set) or "file": embedded, else api fallback
-				if embeddedArtPresent(dir, id) && serveArtSlot(w, r, dir, id, "file") {
-					return
-				}
-				if !serveArtSlot(w, r, dir, id, "api") {
+			default: // "" (none set) or "file": the library's own art, else api fallback
+				if !serveArtSlot(w, r, d, id, "file") && !serveArtSlot(w, r, d, id, "api") {
 					notFound(w)
 				}
 			}
@@ -167,11 +183,11 @@ func registerArt(mux *http.ServeMux, d *Deps) {
 		// explicit slot request (thumbnails): serve exactly that slot
 		switch source {
 		case "api":
-			if !serveArtSlot(w, r, dir, id, "api") {
+			if !serveArtSlot(w, r, d, id, "api") {
 				serveArtPreview(w, r, d, id)
 			}
 		default: // file | custom — no fallback
-			if !serveArtSlot(w, r, dir, id, source) {
+			if !serveArtSlot(w, r, d, id, source) {
 				notFound(w)
 			}
 		}

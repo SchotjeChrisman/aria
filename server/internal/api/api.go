@@ -38,6 +38,13 @@ func (m *memo[T]) get(ttl time.Duration, build func() (T, error)) (T, error) {
 	return v, nil
 }
 
+// reset makes the next get rebuild.
+func (m *memo[T]) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.at = time.Time{}
+}
+
 const maxBodyBytes = 32 << 10 // legacy express.json limit
 
 var registrars []func(*http.ServeMux, *Deps)

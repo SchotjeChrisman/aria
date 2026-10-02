@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -9,14 +10,19 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"aria/internal/enrich"
+	"aria/internal/repo"
 )
 
 func init() { register(registerEnrich) }
@@ -88,6 +94,110 @@ func cacheRemoteImg(ctx context.Context, src, dst string) error {
 	return os.Rename(tmp.Name(), dst)
 }
 
+// peopleIdx is the memoized portrait index behind /api/people.
+type peopleIdx struct {
+	urls  map[string]string        // name -> portrait URL, what /api/people serves
+	local map[string]repo.LocalArt // name -> the library's own image it points at
+}
+
+// people builds name -> portrait URL: an edited portrait, else the library's
+// own image, else the enrichment cache's. Memoized: recompute scans every
+// artist+composer cache blob, and InvalidateTracks drops it whenever an edit,
+// scan or enrichment pass lands.
+func people(ctx context.Context, d *Deps) (peopleIdx, error) {
+	return d.people.get(time.Minute, func() (peopleIdx, error) {
+		idx := peopleIdx{urls: map[string]string{}, local: map[string]repo.LocalArt{}}
+		if we, ok := d.Enricher.(warmEnricher); ok {
+			m, err := we.People(ctx)
+			if err != nil {
+				return idx, err
+			}
+			idx.urls = m
+		}
+		// raw names come with a Latin spelling the app asks under instead
+		var latin map[string]string
+		if ln, ok := d.Enricher.(latinNamer); ok {
+			latin, _ = ln.LatinNames(ctx)
+		}
+		// a library image goes under the album artist tag its folder belongs
+		// to, and under what an album edit or a MusicBrainz correction renames
+		// that artist to. Not under the classical display artist the album may
+		// be shown with: that is the lead performer, another person entirely.
+		local, err := d.Albums.LocalArts(ctx, "artist")
+		if err != nil {
+			return idx, err
+		}
+		if len(local) > 0 {
+			fixes, err := d.EnrichCache.ListKind(ctx, "album")
+			if err != nil {
+				return idx, err
+			}
+			edits, err := d.Edits.ListKind(ctx, "album")
+			if err != nil {
+				return idx, err
+			}
+			file := func(n string, a repo.LocalArt) {
+				for _, n := range []string{n, latin[n]} {
+					if n != "" {
+						idx.urls[n], idx.local[n] = localPortraitURL(n, a), a
+					}
+				}
+			}
+			for _, id := range slices.Sorted(maps.Keys(local)) { // sorted: one winner per name
+				a := local[id]
+				file(a.Name, a)
+				var fix, ed struct {
+					AlbumArtist string `json:"albumArtist"`
+				}
+				json.Unmarshal(fixes[id], &fix)
+				json.Unmarshal(edits[id], &ed)
+				if n := cmp.Or(ed.AlbumArtist, fix.AlbumArtist); n != "" {
+					file(n, a)
+				}
+			}
+		}
+		// edited portraits win; keyed by the raw name, so the Latin one too
+		artists, err := d.Edits.ListKind(ctx, "artist")
+		if err != nil {
+			return idx, err
+		}
+		for n, raw := range artists {
+			var e struct {
+				Image string `json:"image"`
+			}
+			if json.Unmarshal(raw, &e) == nil && e.Image != "" {
+				idx.urls[n] = e.Image
+				if l := latin[n]; l != "" {
+					idx.urls[l] = e.Image
+				}
+			}
+		}
+		return idx, nil
+	})
+}
+
+// localPortrait is the URL of the library's own image for an artist asked for
+// under any of names (as shown, as stored); ok false when there is none.
+func localPortrait(ctx context.Context, d *Deps, names ...string) (string, bool) {
+	idx, err := people(ctx, d)
+	if err != nil {
+		return "", false
+	}
+	for _, n := range names {
+		if a, ok := idx.local[n]; ok {
+			return localPortraitURL(n, a), true
+		}
+	}
+	return "", false
+}
+
+// localPortraitURL is the server-relative URL /api/people and /api/artist
+// carry for an artist image found in the library; the app resolves it against
+// its server. v changes when the file does, so a replaced image reloads.
+func localPortraitURL(name string, a repo.LocalArt) string {
+	return "/api/people/img/" + url.PathEscape(name) + "?v=" + strconv.FormatInt(a.Mtime, 36)
+}
+
 // warmEnricher is the people/warm-up surface beyond Deps.Enricher (matched
 // structurally by *enrich.Enricher, like onDemandEnricher in library.go).
 type warmEnricher interface {
@@ -134,71 +244,47 @@ func registerEnrich(mux *http.ServeMux, d *Deps) {
 		writeJSON(w, http.StatusOK, d.Enricher.Status())
 	})
 
-	// memoized: recompute scans every artist+composer cache blob, but the
-	// map only changes as enrichment/edits land — 60s staleness is invisible
-	var peopleMemo memo[map[string]string]
-	// name -> external portrait URL (enrichment cache, edited portraits win).
-	people := func(ctx context.Context) (map[string]string, error) {
-		return peopleMemo.get(time.Minute, func() (map[string]string, error) {
-			out := map[string]string{}
-			if we, ok := d.Enricher.(warmEnricher); ok {
-				m, err := we.People(ctx)
-				if err != nil {
-					return nil, err
-				}
-				out = m
-			}
-			// edited portraits win
-			artists, err := d.Edits.ListKind(ctx, "artist")
-			if err != nil {
-				return nil, err
-			}
-			for n, raw := range artists {
-				var e struct {
-					Image string `json:"image"`
-				}
-				if json.Unmarshal(raw, &e) == nil && e.Image != "" {
-					out[n] = e.Image
-				}
-			}
-			return out, nil
-		})
-	}
-
 	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) {
-		out, err := people(r.Context())
+		idx, err := people(r.Context(), d)
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		writeJSON(w, http.StatusOK, idx.urls)
 	})
 
 	// Portrait proxy: the map holds external CDN URLs (Deezer/Wikimedia).
 	// Loading dozens straight from the app bursts those hosts and a random
 	// subset drops each render. Fetch once, cache to DATA_DIR/people/, and
-	// serve from the LAN like album art. 404 -> app shows initials.
+	// serve from the LAN like album art. A library image is served straight
+	// from the music dir. 404 -> app shows initials.
 	mux.HandleFunc("GET /api/people/img/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if name == "" || utf8.RuneCountInString(name) > 200 {
 			notFound(w)
 			return
 		}
-		m, err := people(r.Context())
+		idx, err := people(r.Context(), d)
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		src := m[name]
+		src := idx.urls[name]
 		if src == "" {
 			notFound(w)
 			return
 		}
+		if strings.HasPrefix(src, "/") { // localPortraitURL: the library's own image
+			a, ok := idx.local[name]
+			if !ok || !serveArtFile(w, r, filepath.Join(d.Cfg.MusicDir, a.Path)) {
+				notFound(w)
+			}
+			return
+		}
 		// Key by source URL: a re-identified/edited portrait has a new URL, so
-		// it lands in a fresh slot instead of serving the old file forever.
-		// ponytail: the app's own image cache still keys by the stable proxy
-		// URL — a portrait edit shows after an app restart. Add a version token
-		// to the proxy path if in-session busting ever matters.
+		// it lands in a fresh slot instead of serving the old file forever. The
+		// app versions its proxy URL by the /api/people value for the same
+		// reason on its side.
 		sum := sha1.Sum([]byte(src))
 		path := filepath.Join(d.Cfg.DataDir, "people", hex.EncodeToString(sum[:])+".jpg")
 		if serveCachedImg(w, r, path, 0, 31536000) {

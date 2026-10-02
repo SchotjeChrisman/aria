@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"aria/internal/config"
 	"aria/internal/db"
@@ -222,7 +223,7 @@ func TestArtPickSideEffects(t *testing.T) {
 		}
 	})
 
-	// PATCH artSource=file with no embedded art -> 400
+	// PATCH artSource=file with no local art -> 400
 	t.Run("pick file no embedded", func(t *testing.T) {
 		deps, _ := artDeps(t)
 		if rec := patch(deps, `{"artSource":"file"}`); rec.Code != 400 {
@@ -241,6 +242,11 @@ func TestArtPickSideEffects(t *testing.T) {
 		if stub.calls != 0 {
 			t.Fatalf("custom pick fetched remote (calls=%d)", stub.calls)
 		}
+		// the files carry no art, yet the grids must show the picked cover
+		view, err := mergedTracks(context.Background(), deps)
+		if err != nil || len(view) != 1 || view[0]["hasArt"] != true {
+			t.Fatalf("hasArt after a custom pick = %v (%v), want true", view, err)
+		}
 	})
 }
 
@@ -257,5 +263,230 @@ func TestArtVersionDefault(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	if v, _ := out["artVersion"].(float64); v != 1 {
 		t.Fatalf("first artVersion = %v, want 1", out["artVersion"])
+	}
+}
+
+// The album folder's own cover leads the file slot, ahead of embedded art, and
+// is enough on its own for the editor to pick "file".
+func TestArtPrefersLibraryCover(t *testing.T) {
+	deps, dir := artDeps(t)
+	deps.Cfg.MusicDir = t.TempDir()
+	h := New(deps)
+	ctx := context.Background()
+	writeSlot(t, dir, "file", []byte("EMBEDDED"+string(jpegBytes)))
+	if err := os.MkdirAll(filepath.Join(deps.Cfg.MusicDir, "Art", "Alb"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deps.Cfg.MusicDir, "Art", "Alb", "cover.png"), []byte("\x89PNG\r\n\x1a\nCOVER"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := deps.Albums.ReplaceLocalArt(ctx, "album", map[string]repo.LocalArt{
+		testAlbumID: {Path: filepath.Join("Art", "Alb", "cover.png"), Mtime: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"", "?source=file"} {
+		rec := getArt(t, h, q)
+		if rec.Code != 200 || !strings.HasSuffix(rec.Body.String(), "COVER") || rec.Header().Get("Content-Type") != "image/png" {
+			t.Errorf("GET art%s = %d %s %q, want the folder cover", q, rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
+		}
+		// a rescan or a replaced cover.jpg changes what this same URL holds
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("GET art%s Cache-Control = %q, want no-cache", q, cc)
+		}
+	}
+
+	// a replaced cover.jpg moves the art token the app puts on the URL
+	token := func() any {
+		t.Helper()
+		deps.InvalidateTracks()
+		view, err := mergedTracks(ctx, deps)
+		if err != nil || len(view) != 1 {
+			t.Fatalf("merged view = %v (%v)", view, err)
+		}
+		return view[0]["artVersion"]
+	}
+	was := token()
+	if err := deps.Albums.ReplaceLocalArt(ctx, "album", map[string]repo.LocalArt{
+		testAlbumID: {Path: filepath.Join("Art", "Alb", "cover.png"), Mtime: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if now := token(); now == was {
+		t.Errorf("artVersion stayed %v across a replaced folder cover", now)
+	}
+	was = token()
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(artSlotPath(dir, testAlbumID, "file"), later, later); err != nil {
+		t.Fatal(err)
+	}
+	if now := token(); now == was {
+		t.Errorf("artVersion stayed %v across re-extracted embedded art", now)
+	}
+
+	os.Remove(artSlotPath(dir, testAlbumID, "file"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("PATCH", "/api/albums/"+testAlbumID, strings.NewReader(`{"artSource":"file"}`)))
+	if rec.Code != 200 {
+		t.Fatalf("pick file with only a folder cover = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// peopleStub is the enricher's people map: an artist entry's face for Bach.
+type peopleStub struct{ stubEnricher }
+
+func (peopleStub) People(context.Context) (map[string]string, error) {
+	return map[string]string{"Bach": "https://cdn.deezer.com/bach.jpg"}, nil
+}
+func (peopleStub) Warm([]string) int { return 0 }
+
+// With nothing edited and nothing in the library, the composer hero still
+// shows the photo the avatars show: the artist entry's face, not the composer
+// cache's own portrait.
+func TestComposerPortraitFollowsAvatar(t *testing.T) {
+	deps, _ := artDeps(t)
+	deps.Enricher = &peopleStub{}
+	ctx := context.Background()
+	if err := deps.EnrichCache.Put(ctx, "composer", "Bach", json.RawMessage(`{"portrait":"https://assets.openopus.org/bach.jpg"}`), "now"); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	New(deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/composer/Bach", nil))
+	var c struct {
+		Portrait string `json:"portrait"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &c)
+	if rec.Code != 200 || c.Portrait != "https://cdn.deezer.com/bach.jpg" {
+		t.Errorf("composer portrait = %d %q, want the avatar's face", rec.Code, c.Portrait)
+	}
+
+	// a composer nothing knew of (a cached miss, or no entry) still gets a
+	// hero once the user gives them a photo, and none without one
+	if err := deps.EnrichCache.Put(ctx, "composer", "Minor", json.RawMessage(`null`), "now"); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"Minor", "Unheard"} {
+		rec = httptest.NewRecorder()
+		New(deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/composer/"+n, nil))
+		if rec.Code != 404 {
+			t.Errorf("composer %s without a photo = %d, want 404", n, rec.Code)
+		}
+		rec = httptest.NewRecorder()
+		New(deps).ServeHTTP(rec, httptest.NewRequest("PATCH", "/api/artists/"+n, strings.NewReader(`{"image":"https://example.com/m.jpg"}`)))
+		rec = httptest.NewRecorder()
+		New(deps).ServeHTTP(rec, httptest.NewRequest("GET", "/api/composer/"+n, nil))
+		c.Portrait = ""
+		json.Unmarshal(rec.Body.Bytes(), &c)
+		if rec.Code != 200 || c.Portrait != "https://example.com/m.jpg" {
+			t.Errorf("composer %s with an edited photo = %d %q, want a hero with it", n, rec.Code, c.Portrait)
+		}
+	}
+}
+
+// latinStub knows one artist under a Cyrillic tag and its Latin display name.
+type latinStub struct{ stubEnricher }
+
+func (latinStub) LatinNames(context.Context) (map[string]string, error) {
+	return map[string]string{"Арт": "Art"}, nil
+}
+func (latinStub) ResolveName(_ context.Context, name string) string {
+	if name == "Art" {
+		return "Арт"
+	}
+	return name
+}
+
+// An artist folder's image leads the fetched portrait everywhere the app looks
+// — the people map under both spellings, the proxy, the artist doc, the
+// editor's original, the composer hero — never reaches a classical lead
+// performer, gives way to an edited portrait at once, and follows an album
+// artist renamed in the editor.
+func TestPeopleLibraryPortrait(t *testing.T) {
+	deps, _ := artDeps(t)
+	deps.Cfg.MusicDir = t.TempDir()
+	deps.Enricher = &latinStub{}
+	ctx := context.Background()
+	if err := deps.Tracks.UpsertAll(ctx, []repo.Track{{
+		ID: "t1", AlbumID: testAlbumID, Album: "Alb", AlbumArtist: "Арт", AddedAt: "now",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deps.Cfg.MusicDir, "artist.jpg"), []byte("PORTRAIT"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := deps.Albums.ReplaceLocalArt(ctx, "artist", map[string]repo.LocalArt{
+		testAlbumID: {Path: "artist.jpg", Mtime: 7, Name: "Арт"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := deps.EnrichCache.Put(ctx, "composer", "Арт", json.RawMessage(`{"fullName":"Арт","portrait":"https://wiki/a.jpg"}`), "now"); err != nil {
+		t.Fatal(err)
+	}
+	// the classical display may show the album under its lead performer:
+	// another person, who must not get the composer's folder portrait
+	if err := deps.EnrichCache.Put(ctx, "album", testAlbumID, json.RawMessage(`{"displayArtist":"Esther Yoo"}`), "now"); err != nil {
+		t.Fatal(err)
+	}
+	h := New(deps)
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		return rec
+	}
+	people := func() map[string]string {
+		t.Helper()
+		var m map[string]string
+		if err := json.Unmarshal(do("GET", "/api/people", "").Body.Bytes(), &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+
+	m := people()
+	local := "/api/people/img/Art?v=7"
+	if m["Art"] != local || m["Арт"] != "/api/people/img/%D0%90%D1%80%D1%82?v=7" || m["Esther Yoo"] != "" {
+		t.Fatalf("people = %v, want the library image under both spellings and not the performer", m)
+	}
+	for _, p := range []string{local, "/api/people/img/Art", "/api/people/img/%D0%90%D1%80%D1%82"} {
+		if rec := do("GET", p, ""); rec.Code != 200 || rec.Body.String() != "PORTRAIT" {
+			t.Errorf("GET %s = %d %q, want the library image", p, rec.Code, rec.Body.String())
+		}
+	}
+	var doc, ed, comp struct {
+		Image    string `json:"image"`
+		Portrait string `json:"portrait"`
+		Original struct {
+			Image string `json:"image"`
+		} `json:"original"`
+	}
+	json.Unmarshal(do("GET", "/api/artist/Art", "").Body.Bytes(), &doc)
+	json.Unmarshal(do("GET", "/api/edits/artist/Art", "").Body.Bytes(), &ed)
+	json.Unmarshal(do("GET", "/api/composer/Art", "").Body.Bytes(), &comp)
+	if doc.Image != local || ed.Original.Image != local || comp.Portrait != local {
+		t.Errorf("artist image = %q, editor original = %q, composer portrait = %q, want %q",
+			doc.Image, ed.Original.Image, comp.Portrait, local)
+	}
+
+	if rec := do("PATCH", "/api/artists/Art", `{"image":"https://example.com/p.jpg"}`); rec.Code != 200 {
+		t.Fatalf("edit = %d: %s", rec.Code, rec.Body.String())
+	}
+	if m := people(); m["Арт"] != "https://example.com/p.jpg" || m["Art"] != "https://example.com/p.jpg" {
+		t.Errorf("people after edit = %v, want the edited portrait under both spellings", m)
+	}
+	comp.Portrait = ""
+	json.Unmarshal(do("GET", "/api/composer/Art", "").Body.Bytes(), &comp)
+	if comp.Portrait != "https://example.com/p.jpg" {
+		t.Errorf("composer portrait after edit = %q, want the edited one", comp.Portrait)
+	}
+
+	if rec := do("PATCH", "/api/albums/"+testAlbumID, `{"albumArtist":"The Art"}`); rec.Code != 200 {
+		t.Fatalf("album edit = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := people()["The Art"]; got != "/api/people/img/The%20Art?v=7" {
+		t.Errorf("people[The Art] = %q, want the library image under the edited name", got)
+	}
+	if rec := do("GET", "/api/people/img/The%20Art", ""); rec.Code != 200 || rec.Body.String() != "PORTRAIT" {
+		t.Errorf("GET portrait of the renamed artist = %d %q", rec.Code, rec.Body.String())
 	}
 }
