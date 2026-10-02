@@ -115,13 +115,15 @@ class PlaylistTile extends ConsumerWidget {
     // Distinct album arts, in playlist order, from the loaded library.
     final byId = ref.watch(trackByIdProvider);
     final api = ref.read(apiClientProvider);
-    final albumIds = <String>{};
+    final arts = <String, int>{}; // albumId -> artVersion
     for (final id in playlist.trackIds ?? const <String>[]) {
       final t = byId[id];
-      if (t != null) albumIds.add(t.albumId);
-      if (albumIds.length == 4) break;
+      if (t != null) arts.putIfAbsent(t.albumId, () => t.artVersion);
+      if (arts.length == 4) break;
     }
-    final urls = [for (final a in albumIds) api.artUrl(a)];
+    final urls = [
+      for (final a in arts.entries) api.artUrl(a.key, version: a.value),
+    ];
 
     final Widget art;
     if (urls.length >= 4) {

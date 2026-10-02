@@ -86,7 +86,7 @@ class Track {
   final double? albumGainDb;
 
   final bool hasArt;
-  final int artVersion; // art cache-bust token; bumped on any art edit/upload
+  final int artVersion; // art cache-bust token; moves on an art edit/upload or a changed cover file
   final bool favourite; // independent per-track flag (not a tag)
   final String? composer;
   final String? conductor;

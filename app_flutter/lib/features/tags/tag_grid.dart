@@ -9,6 +9,7 @@ import '../../core/toast.dart';
 import '../../core/library_providers.dart';
 import '../../core/theme.dart';
 import '../../widgets/art_image.dart';
+import '../library/library_providers.dart' show albumByIdProvider;
 import 'name_dialog.dart';
 import 'providers.dart';
 import 'tag_tree.dart';
@@ -57,17 +58,20 @@ class TagTile extends ConsumerWidget {
     // Up to four distinct album arts derived from the tag's items.
     final byId = ref.watch(trackByIdProvider);
     final api = ref.read(apiClientProvider);
-    final albumIds = <String>{};
+    final albumById = ref.watch(albumByIdProvider);
+    final arts = <String, int?>{}; // albumId -> artVersion
     for (final it in tag.items) {
       if (it.kind == 'album') {
-        albumIds.add(it.key);
+        arts.putIfAbsent(it.key, () => albumById[it.key]?.artVersion);
       } else if (it.kind == 'track') {
         final t = byId[it.key];
-        if (t != null) albumIds.add(t.albumId);
+        if (t != null) arts.putIfAbsent(t.albumId, () => t.artVersion);
       }
-      if (albumIds.length == 4) break;
+      if (arts.length == 4) break;
     }
-    final urls = [for (final a in albumIds) api.artUrl(a)];
+    final urls = [
+      for (final a in arts.entries) api.artUrl(a.key, version: a.value),
+    ];
 
     final Widget art;
     if (urls.length >= 4) {

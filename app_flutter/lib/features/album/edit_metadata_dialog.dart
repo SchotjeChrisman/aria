@@ -416,7 +416,7 @@ class MetadataEditorDialogState extends State<MetadataEditorDialog> {
           const SizedBox(height: AriaSpace.s1),
           Row(
             children: [
-              // File is disabled until the probe confirms embedded art exists.
+              // File is disabled until the probe confirms local art exists.
               _artThumb(context, 'File', 'file', enabled: _fileExists == true),
               const SizedBox(width: AriaSpace.s2),
               _artThumb(context, 'API', 'api'),

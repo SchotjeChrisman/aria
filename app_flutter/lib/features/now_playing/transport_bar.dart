@@ -13,7 +13,8 @@ import '../../core/player_providers.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../core/toast.dart';
-import '../../core/library_providers.dart' show enrichRefreshProvider;
+import '../../core/library_providers.dart'
+    show enrichRefreshProvider, trackByIdProvider;
 import '../../widgets/art_image.dart';
 import '../../widgets/format_badge.dart';
 import '../../widgets/track_actions.dart';
@@ -471,9 +472,10 @@ class _TransportBarState extends ConsumerState<TransportBar> {
         child: Text('Nothing playing', style: TextStyle(color: c.fgDim)),
       );
     }
-    final artUrl = ref
-        .watch(apiClientProvider)
-        .artUrl(track.albumId, version: track.artVersion);
+    // the queue holds a snapshot; the library row has the current artVersion
+    final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId,
+        version: ref.watch(trackByIdProvider)[track.id]?.artVersion ??
+            track.artVersion);
     return InkWell(
       onTap: () => toggleOverlay(context, '/now-playing'),
       borderRadius: BorderRadius.circular(AriaRadius.sm),

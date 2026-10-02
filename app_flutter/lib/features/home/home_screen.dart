@@ -827,7 +827,9 @@ class RanksCardState extends ConsumerState<RanksCard> {
       (k) {
         final a = albumById[k];
         return ArtImage(
-          url: a != null && a.hasArt ? api.artUrl(a.id) : null,
+          url: a != null && a.hasArt
+              ? api.artUrl(a.id, version: a.artVersion)
+              : null,
           fallbackText: a?.title,
           size: 28,
           borderRadius: AriaRadius.sm,

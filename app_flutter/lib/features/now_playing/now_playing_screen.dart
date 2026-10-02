@@ -9,6 +9,7 @@ import '../../core/phosphor_icons.dart';
 
 import '../../core/connection.dart';
 import '../../core/formats.dart';
+import '../../core/library_providers.dart' show trackByIdProvider;
 import '../../core/player_providers.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
@@ -85,9 +86,10 @@ class NowPlayingMeta extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = AriaColors.of(context);
-    final artUrl = ref
-        .watch(apiClientProvider)
-        .artUrl(track.albumId, version: track.artVersion);
+    // the queue holds a snapshot; the library row has the current artVersion
+    final artUrl = ref.watch(apiClientProvider).artUrl(track.albumId,
+        version: ref.watch(trackByIdProvider)[track.id]?.artVersion ??
+            track.artVersion);
     // "3 of 12" only when there is an actual queue to navigate.
     final queuePos = ref.watch(
       queueProvider.select(

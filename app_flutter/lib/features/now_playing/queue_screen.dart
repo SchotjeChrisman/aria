@@ -6,6 +6,7 @@ import '../../core/phosphor_icons.dart';
 import '../../core/connection.dart';
 import '../../core/toast.dart';
 import '../../core/formats.dart';
+import '../../core/library_providers.dart' show trackByIdProvider;
 import '../../core/player_providers.dart';
 import '../../core/playlists_providers.dart';
 import '../../core/router.dart';
@@ -202,9 +203,10 @@ class QueueRow extends ConsumerWidget {
           ),
         ),
         ArtImage(
-          url: ref
-              .read(apiClientProvider)
-              .artUrl(track.albumId, version: track.artVersion),
+          // the queue holds a snapshot; the library row has the current artVersion
+          url: ref.read(apiClientProvider).artUrl(track.albumId,
+              version: ref.watch(trackByIdProvider)[track.id]?.artVersion ??
+                  track.artVersion),
           fallbackText: track.album,
           size: 40,
           borderRadius: AriaRadius.sm,

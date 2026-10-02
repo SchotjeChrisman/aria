@@ -4,6 +4,7 @@ import 'package:audio_session/audio_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection.dart';
+import 'library_providers.dart' show trackByIdProvider;
 import 'player_providers.dart';
 
 // main() guards the single call site: Android, iOS and macOS only — the
@@ -143,6 +144,9 @@ class AriaAudioHandler extends BaseAudioHandler {
       _pushItem();
       _pushState(); // the control set changes with radio mode
     });
+    // a reloaded library may carry a new artVersion for what is playing: an
+    // art edit reaches the lock screen now, not at the next track
+    _c.listen(trackByIdProvider, (_, _) => _pushItem());
   }
 
   final ProviderContainer _c;
@@ -179,8 +183,10 @@ class AriaAudioHandler extends BaseAudioHandler {
         duration: t.duration == null
             ? null
             : Duration(milliseconds: (t.duration! * 1000).round()),
-        artUri: Uri.parse(
-            _c.read(apiClientProvider).artUrl(t.albumId, version: t.artVersion)),
+        // the queue holds a snapshot; the library row has the current artVersion
+        artUri: Uri.parse(_c.read(apiClientProvider).artUrl(t.albumId,
+            version:
+                _c.read(trackByIdProvider)[t.id]?.artVersion ?? t.artVersion)),
       ),
       _ => null,
     });
