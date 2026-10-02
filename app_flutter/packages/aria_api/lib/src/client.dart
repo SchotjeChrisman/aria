@@ -235,14 +235,27 @@ class AriaClient {
   /// LAN proxy first ([peopleImgUrl]) and fall back to the raw CDN URL here, so
   /// a proxy-less (old) server or a single un-cacheable portrait still shows a
   /// face instead of initials.
-  Future<Map<String, String>> people() async =>
-      asMap(await _get('/api/people')).map((k, v) => MapEntry(k, v as String));
+  Future<Map<String, String>> people() async => asMap(await _get('/api/people'))
+      .map((k, v) => MapEntry(k, _absUrl(v as String)));
 
   /// Server's caching portrait proxy for [name] — the raw CDN URLs drop under
   /// burst load, so avatars try this LAN-cached copy first. 404s (old server /
-  /// name not enriched) fall back to the raw URL client-side.
-  String peopleImgUrl(String name) =>
-      '$baseUrl/api/people/img/${Uri.encodeComponent(name)}';
+  /// name not enriched) fall back to the raw URL client-side. [version] is the
+  /// name's [people] value: it changes when the portrait does (an edit, a
+  /// replaced library image), so the ImageCache misses and refetches.
+  String peopleImgUrl(String name, {String? version}) =>
+      '$baseUrl/api/people/img/${Uri.encodeComponent(name)}'
+      '${version == null ? '' : '?v=${version.hashCode.toRadixString(36)}'}';
+
+  /// A portrait found in the library comes back server-relative
+  /// (`/api/people/img/…`); made absolute here so every caller can load it.
+  String _absUrl(String u) => u.startsWith('/') ? '$baseUrl$u' : u;
+
+  Map<String, dynamic> _absImage(Map<String, dynamic> m) {
+    final img = m['image'];
+    if (img is String) m['image'] = _absUrl(img);
+    return m;
+  }
 
   /// Warm faces/bios for names currently on screen; returns queued count.
   Future<int> warmPeople(List<String> names) async =>
@@ -259,13 +272,16 @@ class AriaClient {
   Future<ArtistInfo?> artist(String name) async {
     final j =
         await _get('/api/artist/${Uri.encodeComponent(name)}', nullOn404: true);
-    return j == null ? null : ArtistInfo.fromJson(asMap(j));
+    return j == null ? null : ArtistInfo.fromJson(_absImage(asMap(j)));
   }
 
   Future<ComposerInfo?> composer(String name) async {
     final j = await _get('/api/composer/${Uri.encodeComponent(name)}',
         nullOn404: true);
-    return j == null ? null : ComposerInfo.fromJson(asMap(j));
+    if (j == null) return null;
+    final m = asMap(j);
+    if (m['portrait'] is String) m['portrait'] = _absUrl(m['portrait']);
+    return ComposerInfo.fromJson(m);
   }
 
   Future<Lyrics?> lyrics(String trackId) async {
@@ -402,7 +418,10 @@ class AriaClient {
     final j = await _get(
         '/api/edits/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(key)}',
         nullOn404: true);
-    return j == null ? null : EditState.fromJson(asMap(j));
+    if (j == null) return null;
+    final m = asMap(j);
+    if (m['original'] is Map<String, dynamic>) _absImage(m['original']);
+    return EditState.fromJson(m);
   }
 
   // ---- profiles

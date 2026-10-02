@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/connection.dart';
+import '../core/library_providers.dart' show peopleProvider;
 import '../core/formats.dart';
 import '../core/theme.dart';
 
@@ -41,9 +42,12 @@ class ArtistAvatar extends ConsumerWidget {
     // people map regardless of whether the caller loaded a CDN url, so an
     // enriched artist shows a face on every screen (not just the ones that pass
     // imageUrl). Proxy 404 (un-enriched name) falls to the CDN url if known,
-    // then initials. Raw CDN url second.
+    // then initials. Raw CDN url second. Versioned by the people map, so an
+    // edited or replaced portrait reloads instead of the cached face staying.
     final urls = [
-      ref.watch(apiClientProvider).peopleImgUrl(name),
+      ref
+          .watch(apiClientProvider)
+          .peopleImgUrl(name, version: ref.watch(peopleProvider).value?[name]),
       ?imageUrl,
     ];
 

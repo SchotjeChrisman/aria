@@ -139,6 +139,37 @@ void main() {
       expect(await c.booklets('deadbeef'), isEmpty);
     });
 
+    test('library portraits come back server-relative and load absolute',
+        () async {
+      final c = AriaClient(
+        baseUrl: 'http://box:3000',
+        httpClient: MockClient((req) async => http.Response(
+            switch (req.url.path) {
+              '/api/people' => jsonEncode({
+                  'Art': '/api/people/img/Art?v=7',
+                  'Cdn': 'https://cdn/x.jpg',
+                }),
+              '/api/artist/Art' => jsonEncode({'image': '/api/people/img/Art?v=7'}),
+              '/api/composer/Art' =>
+                jsonEncode({'portrait': '/api/people/img/Art?v=7'}),
+              _ => jsonEncode({
+                  'original': {'image': '/api/people/img/Art?v=7'},
+                  'overrides': {},
+                }),
+            },
+            200)),
+      );
+      const local = 'http://box:3000/api/people/img/Art?v=7';
+      expect(await c.people(), {'Art': local, 'Cdn': 'https://cdn/x.jpg'});
+      expect((await c.artist('Art'))!.image, local);
+      expect((await c.composer('Art'))!.portrait, local);
+      expect((await c.edits('artist', 'Art'))!.original['image'], local);
+      // the proxy URL moves with the portrait, so a cached face is not reused
+      expect(c.peopleImgUrl('Art'), 'http://box:3000/api/people/img/Art');
+      expect(c.peopleImgUrl('Art', version: 'a'),
+          isNot(c.peopleImgUrl('Art', version: 'b')));
+    });
+
     test('404 lookups return null', () async {
       final c = AriaClient(
         baseUrl: 'http://box:3000',
