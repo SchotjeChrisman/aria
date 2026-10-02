@@ -53,13 +53,25 @@ final libraryArtistNamesProvider = Provider<Set<String>>((ref) {
 
 /// Enriched person/band info; unknown names are researched on demand
 /// server-side (a few seconds the first time). null = nothing found.
-final artistInfoProvider = FutureProvider.family<ArtistInfo?, String>(
-  (ref, name) => ref.watch(artistApiProvider).artist(name),
-);
+/// Refetched whenever the people map reloads — an edit on any device, a scan
+/// that found a new artist.jpg — so an open page's photo follows its avatars.
+final artistInfoProvider = FutureProvider.autoDispose
+    .family<ArtistInfo?, String>((ref, name) {
+      _followPeople(ref);
+      return ref.watch(artistApiProvider).artist(name);
+    });
 
-final composerInfoProvider = FutureProvider.family<ComposerInfo?, String>(
-  (ref, name) => ref.watch(artistApiProvider).composer(name),
-);
+final composerInfoProvider = FutureProvider.autoDispose
+    .family<ComposerInfo?, String>((ref, name) {
+      _followPeople(ref);
+      return ref.watch(artistApiProvider).composer(name);
+    });
+
+/// A refresh rather than a dependency: the page keeps showing the old data
+/// until the new lands instead of flashing "Researching…".
+void _followPeople(Ref ref) => ref.listen(peopleProvider, (_, next) {
+  if (next is AsyncData && !next.isLoading) ref.invalidateSelf();
+});
 
 /// name -> portrait URL for avatars.
 final artistPeopleProvider = peopleProvider;
